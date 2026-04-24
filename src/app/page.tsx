@@ -11,7 +11,8 @@ import {
   ChevronRight,
   Filter,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  Loader2
 } from "lucide-react";
 import { motion } from "motion/react";
 import { supabase } from "@/src/lib/supabase";
@@ -26,55 +27,87 @@ const MOCK_SEJOURS = [
 ];
 
 export default function DashboardPage() {
+  const [mounted, setMounted] = useState(false);
   const [sejours, setSejours] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    setMounted(true);
+    console.log('[Dashboard] Composant monté, début récupération des données...');
+    
     async function fetchSejours() {
       try {
         setLoading(true);
+        console.log('[Dashboard] Appel Supabase: table sejours_actifs...');
+        
         const { data, error } = await supabase
           .from('sejours_actifs')
           .select('*')
           .order('created_at', { ascending: false });
 
-        if (error) throw error;
+        if (error) {
+          console.warn('[Dashboard] Erreur Supabase capturée:', error.message);
+          throw error;
+        }
         
         if (data && data.length > 0) {
+          console.log('[Dashboard] Données réelles récupérées:', data.length, 'entrées');
           setSejours(data);
         } else {
-          // Si la table est vide ou n'existe pas encore chez l'utilisateur, utiliser le mock
+          console.log('[Dashboard] Table vide ou inexistante, chargement des données fictives (Mock)');
           setSejours(MOCK_SEJOURS);
         }
       } catch (err: any) {
-        console.error("Erreur Supabase:", err);
+        console.error("[Dashboard] Erreur fatale lors de la récupération:", err);
         setError("Erreur de connexion à la base de données.");
+        // Repli sur les données mock en cas d'erreur
         setSejours(MOCK_SEJOURS);
       } finally {
+        console.log('[Dashboard] Fin du chargement');
         setLoading(false);
       }
     }
 
     fetchSejours();
 
-    // Inscription aux changements en temps réel
-    const channel = supabase
-      .channel('schema-db-changes')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'sejours_actifs' },
-        (payload) => {
-          console.log('Changement en temps réel:', payload);
-          fetchSejours();
-        }
-      )
-      .subscribe();
+    // Inscription aux changements en temps réel - Sécurisé
+    let channel: any;
+    try {
+      console.log('[Dashboard] Inscription au temps réel Supabase...');
+      channel = supabase
+        .channel('schema-db-changes')
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'sejours_actifs' },
+          (payload) => {
+            console.log('[Dashboard] Alerte Temps Réel:', payload);
+            fetchSejours();
+          }
+        )
+        .subscribe((status) => {
+          console.log('[Dashboard] Statut Subscription:', status);
+        });
+    } catch (realtimeErr) {
+      console.warn('[Dashboard] Erreur lors de l\'activation du temps réel:', realtimeErr);
+    }
 
     return () => {
-      supabase.removeChannel(channel);
+      if (channel) {
+        console.log('[Dashboard] Nettoyage canal temps réel');
+        supabase.removeChannel(channel);
+      }
     };
   }, []);
+
+  if (loading && sejours.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-4">
+        <Loader2 className="w-12 h-12 text-riverside-red animate-spin" />
+        <p className="text-slate-500 font-medium animate-pulse italic">Chargement du Dashboard Riverside...</p>
+      </div>
+    );
+  }
 
   const stats = [
     { label: "En Attente", value: "12", change: "+22%", icon: Users, color: "text-orange-500", bg: "bg-orange-50" },
@@ -84,13 +117,13 @@ export default function DashboardPage() {
   ];
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-700">
+    <div className="space-y-8">
       {/* Header section */}
       <header className="h-20 bg-white/70 backdrop-blur-md border-b border-slate-200 -mx-4 md:-mx-8 -mt-4 md:-mt-8 mb-8 px-8 flex items-center justify-between sticky top-0 z-30">
         <div>
           <h1 className="text-xl font-bold text-slate-800">Tableau de Bord d'Accueil</h1>
           <p className="text-[10px] text-slate-500 uppercase tracking-widest font-semibold flex items-center gap-2">
-            Douala, Cameroun • {new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}
+            Douala, Cameroun • {mounted ? new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }) : '...'}
           </p>
         </div>
         <button className="px-6 py-2.5 bg-riverside-red hover:bg-riverside-red-hover text-white font-semibold rounded-xl text-sm shadow-lg shadow-red-200 transition-all active:scale-95">
