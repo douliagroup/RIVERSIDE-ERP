@@ -104,7 +104,7 @@ export default function PatronDashboard() {
               ) : (
                 <>
                   <Zap size={20} />
-                  Lancer l'Analyse
+                  Lancer l&apos;Analyse
                 </>
               )}
             </button>

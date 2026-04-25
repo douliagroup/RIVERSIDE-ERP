@@ -1,19 +1,36 @@
+"use client";
+
 import "./globals.css";
+import React, { useState } from "react";
 import Sidebar from "@/src/components/Sidebar";
+import { cn } from "@/src/lib/utils";
+import { AuthProvider } from "@/src/context/AuthContext";
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
+  const [isCollapsed, setIsCollapsed] = useState(false);
+
   return (
     <html lang="fr">
-      <body style={{ display: 'flex', height: '100vh', margin: 0, backgroundColor: '#f8fafc' }}>
-        {/* Menu latéral fixe */}
-        <aside style={{ width: '260px', height: '100%', borderRight: '1px solid #e2e8f0', backgroundColor: 'white', flexShrink: 0 }}>
-          <Sidebar />
-        </aside>
-        {/* Zone de contenu principale */}
-        <main style={{ flex: 1, height: '100%', overflowY: 'auto', padding: '2rem' }}>
-          {children}
-        </main>
-      </body>
+      <AuthProvider>
+        <body className="flex h-screen m-0 bg-slate-50 font-sans antialiased overflow-hidden">
+          {/* Menu latéral fixe avec état retractable */}
+          <aside 
+            className={cn(
+              "h-full border-r border-slate-200 bg-white flex-shrink-0 transition-all duration-300 ease-in-out z-50",
+              isCollapsed ? "w-20" : "w-[240px]"
+            )}
+          >
+            <Sidebar isCollapsed={isCollapsed} setIsCollapsed={setIsCollapsed} />
+          </aside>
+          
+          {/* Zone de contenu principale */}
+          <main className="flex-1 h-full overflow-y-auto overflow-x-hidden scroll-smooth bg-gradient-to-br from-slate-50 to-white">
+            <div className="p-6 md:p-10 max-w-7xl mx-auto min-h-screen">
+              {children}
+            </div>
+          </main>
+        </body>
+      </AuthProvider>
     </html>
   );
 }

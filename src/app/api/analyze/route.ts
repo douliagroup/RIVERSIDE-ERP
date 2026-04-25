@@ -37,12 +37,12 @@ export async function POST(req: Request) {
     const searchContext = externalData.results?.map((r: any) => r.content).join('\n') || "Pas de données externes trouvées.";
 
     // 3. Synthèse Gemini
-    const apiKey = process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY;
+    const apiKey = process.env.RIVERSIDE_GEMINI_API_KEY;
     
-    if (!apiKey || apiKey === 'your-gemini-api-key') {
+    if (!apiKey) {
       return NextResponse.json({ 
-        error: "Clé API Gemini manquante. Veuillez vous assurer que GEMINI_API_KEY est configuré." 
-      }, { status: 401 });
+        error: "500: Clé API IA (Gemini) non configurée" 
+      }, { status: 500 });
     }
 
     const genAI = new GoogleGenAI(apiKey);
