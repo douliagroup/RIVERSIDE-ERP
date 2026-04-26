@@ -232,12 +232,26 @@ export default function MedicalPage() {
       };
 
       // 2. Save Consultation with the ID of the current stay (sejours_actifs)
+      
+      // RÉSOLUTION DE L'ID DU MÉDECIN (Personnel)
+      // On cherche l'ID dans la table 'personnel' correspondant à l'email connecté
+      const { data: personnelData } = await supabase
+        .from('personnel')
+        .select('id')
+        .eq('email', user.email)
+        .single();
+      
+      const realMedecinId = personnelData?.id || null;
+      if (!realMedecinId) {
+        console.warn("PROFIL MÉDECIN NON LIÉ: Aucun personnel trouvé pour cet email.");
+      }
+
       const { data: consultData, error: consultError } = await supabase
         .from('consultations')
         .insert([{
           sejour_id: selectedPatient.id,
           patient_id: selectedPatient.patient_id, 
-          medecin_id: user.id,
+          medecin_id: realMedecinId,
           constantes: constantesObject,
           notes_cliniques: formData.notes_cliniques,
           diagnostic: formData.diagnostic,
