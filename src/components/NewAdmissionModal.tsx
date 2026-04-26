@@ -148,20 +148,20 @@ export default function NewAdmissionModal({ isOpen, onClose, onSuccess }: NewAdm
             animate={{ x: 0 }}
             exit={{ x: "100%" }}
             transition={{ type: "spring", damping: 25, stiffness: 200 }}
-            className="fixed right-0 top-0 h-screen w-full max-w-lg bg-white shadow-2xl z-[101] overflow-y-auto"
+            className="fixed right-0 top-0 h-screen w-full max-w-lg bg-white shadow-2xl z-[101] overflow-y-auto border-l border-slate-100"
           >
             <div className="p-8 h-full flex flex-col">
               {/* Header */}
-              <div className="flex items-center justify-between mb-8">
+              <div className="flex items-center justify-between mb-10 bg-slate-50 -m-8 p-8 border-b border-slate-100">
                 <div>
-                  <h2 className="text-2xl font-bold text-slate-800 tracking-tight">Nouvelle Admission</h2>
-                  <p className="text-sm text-slate-500">Enregistrement d&apos;un nouveau patient</p>
+                  <h2 className="text-xl font-black text-slate-900 tracking-tight uppercase">Admission Riverside</h2>
+                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-1">Enregistrement Patient et File d&apos;Attente</p>
                 </div>
                 <button 
                   onClick={handleClose}
-                  className="p-2 hover:bg-slate-100 rounded-full transition-colors"
+                  className="w-10 h-10 flex items-center justify-center hover:bg-white rounded-xl transition-all border border-transparent hover:border-slate-100 shadow-sm"
                 >
-                  <X size={24} className="text-slate-400" />
+                  <X size={20} className="text-slate-400" />
                 </button>
               </div>
 
@@ -170,80 +170,77 @@ export default function NewAdmissionModal({ isOpen, onClose, onSuccess }: NewAdm
                   <motion.div
                     initial={{ scale: 0 }}
                     animate={{ scale: 1 }}
-                    className="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center"
+                    className="w-20 h-20 bg-red-50 text-riverside-red rounded-2xl flex items-center justify-center shadow-lg shadow-red-100 border border-red-100"
                   >
                     <CheckCircle size={40} />
                   </motion.div>
                   <div>
-                    <h3 className="text-xl font-bold text-slate-800">Admission Réussie</h3>
-                    <p className="text-slate-500 mt-2">Le patient a été ajouté à la file d&apos;attente.</p>
+                    <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Admission Validée</h3>
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-2">{formData.nom_complet} est en file d&apos;attente</p>
                   </div>
                 </div>
               ) : (
-                <form onSubmit={handleSubmit} className="flex-1 space-y-8">
+                <form onSubmit={handleSubmit} className="flex-1 space-y-8 mt-10">
                   {/* Section 1: Infos Patient */}
-                  <div className="space-y-4">
-                    <div className="flex items-center gap-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest pb-2 border-b border-slate-100">
-                      <User size={12} />
-                      Informations Patient
+                  <div className="space-y-6">
+                    <div className="flex items-center gap-3 text-[9px] font-black text-slate-900 uppercase tracking-widest pb-3 border-b border-slate-100">
+                      <User size={14} className="text-riverside-red" />
+                      État Civil & Contact
                     </div>
                     
-                    <div className="space-y-4">
-                      <div className="group">
-                        <label className="text-xs font-bold text-slate-500 mb-1.5 block">Nom Complet</label>
-                        <div className="relative">
-                          <User className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                    <div className="space-y-5">
+                      <div className="space-y-2">
+                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Nom Complet du Patient</label>
+                        <div className="relative group">
+                          <User className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-riverside-red transition-colors" size={16} />
                           <input 
                             required
                             type="text"
                             name="nom_complet"
                             value={formData.nom_complet}
                             onChange={handleChange}
-                            placeholder="ex: Jean Dupont"
-                            className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-riverside-red/20 focus:border-riverside-red outline-none transition-all text-sm"
+                            placeholder="EX: JEAN DUPONT"
+                            className="w-full pl-12 pr-4 py-3.5 bg-slate-50 border border-slate-100 rounded-xl focus:border-riverside-red outline-none transition-all text-xs font-black uppercase tracking-tight"
                           />
                         </div>
                       </div>
 
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div className="group">
-                          <label className="text-xs font-bold text-slate-500 mb-1.5 block">Téléphone</label>
-                          <div className="relative">
-                            <Phone className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                        <div className="space-y-2">
+                          <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Téléphone</label>
+                          <div className="relative group">
+                            <Phone className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-riverside-red transition-colors" size={16} />
                             <input 
                               required
                               type="tel"
                               name="telephone"
                               value={formData.telephone}
                               onChange={handleChange}
-                              placeholder="ex: 699 00 00 00"
-                              className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-riverside-red/20 focus:border-riverside-red outline-none transition-all text-sm"
+                              placeholder="6XX XX XX XX"
+                              className="w-full pl-12 pr-4 py-3.5 bg-slate-50 border border-slate-100 rounded-xl focus:border-riverside-red outline-none transition-all text-xs font-black tracking-tight"
                             />
                           </div>
                         </div>
 
-                        <div className="group">
-                          <label className="text-xs font-bold text-slate-500 mb-1.5 block">Assurance</label>
-                          <div className="relative">
-                            <Shield className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                        <div className="space-y-2">
+                          <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Couverture</label>
+                          <div className="relative group">
+                            <Shield className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-riverside-red transition-colors" size={16} />
                             <select 
                               required
                               name="type_assurance"
                               value={formData.type_assurance}
                               onChange={handleChange}
-                              className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-riverside-red/20 focus:border-riverside-red outline-none transition-all text-sm appearance-none cursor-pointer font-bold"
+                              className="w-full pl-12 pr-4 py-3.5 bg-slate-50 border border-slate-100 rounded-xl focus:border-riverside-red outline-none transition-all text-xs font-black uppercase tracking-tight appearance-none cursor-pointer"
                             >
-                              <option value="Cash">CASH (Paiement Direct)</option>
+                              <option value="Cash">CASH / PRIVÉ</option>
                               {loadingAssurances ? (
-                                <option disabled>Chargement des assureurs...</option>
+                                <option disabled>SYNC PARTENAIRES...</option>
                               ) : (
                                 <>
                                   {assurances.map(a => (
                                     <option key={a.nom} value={a.nom}>{a.nom}</option>
                                   ))}
-                                  {assurances.length === 0 && (
-                                    <option disabled>Aucun partenaire trouvé</option>
-                                  )}
                                 </>
                               )}
                             </select>
@@ -251,29 +248,29 @@ export default function NewAdmissionModal({ isOpen, onClose, onSuccess }: NewAdm
                         </div>
                       </div>
 
-                      <div className="group">
-                        <label className="text-xs font-bold text-slate-500 mb-1.5 block">Numéro d&apos;Assurance (si applicable)</label>
+                      <div className="space-y-2">
+                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Matricule Assurance</label>
                         <input 
                           type="text"
                           name="numero_assurance"
                           value={formData.numero_assurance}
                           onChange={handleChange}
-                          placeholder="ex: POL-882299"
-                          className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-riverside-red/20 focus:border-riverside-red outline-none transition-all text-sm"
+                          placeholder="FACULTATIF"
+                          className="w-full px-4 py-3.5 bg-slate-50 border border-slate-100 rounded-xl focus:border-riverside-red outline-none transition-all text-xs font-black uppercase tracking-tight"
                         />
                       </div>
 
-                      <div className="group">
-                        <label className="text-xs font-bold text-slate-500 mb-1.5 block">Alertes / Allergies (Optionnel)</label>
-                        <div className="relative">
-                          <AlertTriangle className="absolute left-3 top-3 text-slate-400" size={18} />
+                      <div className="space-y-2">
+                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Alertes Médicales & Allergies</label>
+                        <div className="relative group">
+                          <AlertTriangle className="absolute left-4 top-4 text-slate-400 group-focus-within:text-riverside-red transition-colors" size={16} />
                           <textarea 
                             name="alertes_medicales"
                             value={formData.alertes_medicales}
                             onChange={handleChange}
                             rows={2}
-                            placeholder="ex: Allergie à la pénicilline..."
-                            className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-riverside-red/20 focus:border-riverside-red outline-none transition-all text-sm resize-none"
+                            placeholder="SIGNALER TOUTE ALLERGIE MAJEURE..."
+                            className="w-full pl-12 pr-4 py-3.5 bg-slate-50 border border-slate-100 rounded-xl focus:border-riverside-red outline-none transition-all text-xs font-black uppercase tracking-tight resize-none"
                           />
                         </div>
                       </div>
@@ -282,9 +279,9 @@ export default function NewAdmissionModal({ isOpen, onClose, onSuccess }: NewAdm
 
                   {/* Section 2: Infos Séjour */}
                   <div className="space-y-4">
-                    <div className="flex items-center gap-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest pb-2 border-b border-slate-100">
-                      <FileText size={12} />
-                      Motif de la Visite
+                    <div className="flex items-center gap-3 text-[9px] font-black text-slate-900 uppercase tracking-widest pb-3 border-b border-slate-100">
+                      <FileText size={14} className="text-riverside-red" />
+                      Signes & Motif Admission
                     </div>
 
                     <div className="group">
@@ -294,8 +291,8 @@ export default function NewAdmissionModal({ isOpen, onClose, onSuccess }: NewAdm
                         value={formData.motif_visite}
                         onChange={handleChange}
                         rows={3}
-                        placeholder="Quels sont les symptômes ou le motif de consultation ?"
-                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-riverside-red/20 focus:border-riverside-red outline-none transition-all text-sm resize-none"
+                        placeholder="DÉTAILLEZ LE MOTIF DE LA VISITE OU LES SYMPTÔMES..."
+                        className="w-full px-4 py-3.5 bg-slate-50 border border-slate-100 rounded-xl focus:border-riverside-red outline-none transition-all text-xs font-black uppercase tracking-tight resize-none"
                       />
                     </div>
                   </div>
@@ -304,9 +301,9 @@ export default function NewAdmissionModal({ isOpen, onClose, onSuccess }: NewAdm
                     <motion.div 
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
-                      className="p-4 bg-red-50 border border-red-100 rounded-xl text-red-600 text-xs flex items-start gap-3"
+                      className="p-4 bg-red-50 border border-red-100 rounded-xl text-red-600 text-[10px] font-black uppercase flex items-start gap-3"
                     >
-                      <AlertTriangle size={16} className="shrink-0 mt-0.5" />
+                      <AlertTriangle size={14} className="shrink-0 mt-0.5" />
                       <p>{error}</p>
                     </motion.div>
                   )}
@@ -316,24 +313,24 @@ export default function NewAdmissionModal({ isOpen, onClose, onSuccess }: NewAdm
                     <button 
                       type="button"
                       onClick={handleClose}
-                      className="flex-1 py-3.5 border border-slate-200 text-slate-600 font-bold rounded-xl hover:bg-slate-50 transition-all active:scale-95 text-sm"
+                      className="flex-1 py-3.5 border border-slate-100 text-slate-400 font-black text-[10px] uppercase tracking-widest rounded-lg hover:bg-slate-50 transition-all active:scale-95"
                     >
                       Annuler
                     </button>
                     <button 
                       disabled={loading}
                       type="submit"
-                      className="flex-[2] py-3.5 bg-riverside-red text-white font-bold rounded-xl shadow-lg shadow-red-200 hover:bg-riverside-red-hover transition-all active:scale-95 disabled:opacity-50 disabled:scale-100 flex items-center justify-center gap-2 text-sm"
+                      className="flex-[2] py-3.5 bg-riverside-red text-white font-black text-[10px] uppercase tracking-widest rounded-lg shadow-lg shadow-red-100 hover:scale-[1.02] transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-3"
                     >
                       {loading ? (
                         <>
-                          <Loader2 size={18} className="animate-spin" />
-                          Traitement...
+                          <Loader2 size={16} className="animate-spin" />
+                          SYNC...
                         </>
                       ) : (
                         <>
-                          <Plus size={18} />
-                          Confirmer l&apos;Admission
+                          <Plus size={16} />
+                          Lancer l&apos;Admission
                         </>
                       )}
                     </button>

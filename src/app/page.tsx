@@ -116,60 +116,69 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-8">
-      {/* Header section section */}
-      <header className="mb-10 flex flex-col md:flex-row md:items-end justify-between gap-6 relative">
-        <div className="flex items-center gap-6">
+      <header className="flex flex-col md:flex-row md:items-center justify-between gap-6 bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm relative overflow-hidden group">
+        <div className="absolute top-0 right-0 p-4 opacity-[0.03] group-hover:opacity-[0.05] transition-opacity">
+           <Image 
+             src="https://i.postimg.cc/jj9x2wr9/92953051_100850928268975_2573263542966812672_n.png" 
+             alt="Riverside Logo Watermark" 
+             width={120}
+             height={120}
+             referrerPolicy="no-referrer"
+             className="w-32 h-32 object-contain"
+           />
+        </div>
+
+        <div className="flex items-center gap-6 relative z-10">
           <motion.div
             initial={{ opacity: 0, scale: 0.8 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="w-20 h-20 bg-white rounded-3xl shadow-xl shadow-red-100 flex items-center justify-center border border-slate-50 overflow-hidden"
+            className="w-16 h-16 bg-white rounded-2xl shadow-xl shadow-red-50 flex items-center justify-center border border-slate-50 overflow-hidden"
           >
              <Image 
                src="https://i.postimg.cc/jj9x2wr9/92953051_100850928268975_2573263542966812672_n.png" 
                alt="Riverside Logo" 
-               width={64}
-               height={64}
+               width={48}
+               height={48}
                referrerPolicy="no-referrer"
-               className="w-16 h-16 object-contain"
+               className="w-12 h-12 object-contain"
              />
           </motion.div>
-          <div className="space-y-1">
+          <div>
             <motion.h1 
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              className="text-4xl font-black text-slate-900 tracking-tight"
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="text-2xl font-black text-slate-900 tracking-tight uppercase"
             >
-              Dashboard <span className="text-riverside-red">Global</span>
+              Tableau de <span className="text-riverside-red">Bord</span>
             </motion.h1>
             <motion.div 
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ delay: 0.2 }}
-              className="flex items-center gap-3"
+              className="flex items-center gap-3 mt-1"
             >
-              <p className="text-[11px] text-slate-400 uppercase tracking-[0.2em] font-black flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                Riverside Medical Center • Douala
+              <p className="text-[10px] text-slate-400 uppercase tracking-widest font-black flex items-center gap-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
+                RIVERSIDE MEDICAL • DOUALA
               </p>
-              <span className="h-4 w-[1px] bg-slate-200" />
-              <p className="text-[11px] text-slate-500 font-bold uppercase tracking-widest">
+              <span className="h-3 w-[1px] bg-slate-200" />
+              <p className="text-[10px] text-slate-500 font-bold uppercase tracking-[0.2em]">
                 {mounted ? new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }) : '...'}
               </p>
             </motion.div>
           </div>
         </div>
         <motion.button 
-          whileHover={{ scale: 1.02, translateY: -2 }}
-          whileTap={{ scale: 0.98 }}
+          whileTap={{ scale: 0.95 }}
           onClick={() => setIsModalOpen(true)}
-          className="px-6 py-3 bg-riverside-red text-white font-black rounded-xl text-xs shadow-xl shadow-red-200 transition-all flex items-center gap-2.5 group"
+          className="bg-riverside-red text-white px-8 py-3 rounded-lg shadow-lg shadow-red-100 font-black text-[10px] uppercase tracking-widest flex items-center gap-2 hover:scale-[1.02] transition-all relative z-10"
         >
-          <PlusCircle size={16} className="group-hover:rotate-90 transition-transform duration-300" />
-          <span>NOUVELLE ADMISSION</span>
+          <PlusCircle size={16} />
+          Nouvelle Admission
         </motion.button>
       </header>
 
-      {/* Stats Section */}
+      {/* Stats Section section */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         {stats.map((stat, idx) => (
           <motion.div
@@ -177,24 +186,14 @@ export default function DashboardPage() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: idx * 0.1 }}
-            whileHover={{ 
-              translateY: -8, 
-              boxShadow: "0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1)",
-              borderColor: "rgba(220, 38, 38, 0.2)"
-            }}
-            className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col group transition-all"
+            className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex flex-col group transition-all hover:shadow-xl hover:border-slate-200"
           >
-            <span className="text-slate-400 text-[10px] font-bold uppercase tracking-[0.15em] mb-4">{stat.label}</span>
+            <span className="text-slate-400 text-[9px] font-black uppercase tracking-[0.2em] mb-4">{stat.label}</span>
             <div className="flex items-end justify-between">
               <div className="flex items-end gap-2">
-                <span className="text-3xl font-bold text-slate-900 tracking-tighter">{stat.value}</span>
-                {stat.change && (
-                  <span className={cn("text-[10px] font-bold mb-1.5 px-1.5 py-0.5 rounded", stat.color, stat.bg)}>
-                    {stat.change}
-                  </span>
-                )}
+                <span className="text-3xl font-black text-slate-900 tracking-tighter tabular-nums leading-none">{stat.value}</span>
               </div>
-              <div className={cn("w-10 h-10 rounded-lg flex items-center justify-center transition-transform group-hover:scale-110", stat.bg, stat.color)}>
+              <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center transition-transform group-hover:scale-110 shadow-inner border border-transparent", stat.bg, stat.color)}>
                 <stat.icon size={20} />
               </div>
             </div>
@@ -202,29 +201,28 @@ export default function DashboardPage() {
         ))}
       </div>
 
-      {/* Main Content Area (Salle d'attente) */}
+      {/* Main Content Area (Salle d'attente) section */}
       <motion.div 
-        initial={{ opacity: 0, y: 30 }}
-        animate={{ opacity: 1, y: 0 }}
-        whileHover={{ boxShadow: "0 25px 50px -12px rgb(0 0 0 / 0.1)" }}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
         transition={{ delay: 0.4 }}
-        className="bg-white/80 backdrop-blur-xl rounded-[2.5rem] border border-slate-200 shadow-2xl shadow-slate-200/40 overflow-hidden flex flex-col transition-all duration-500"
+        className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden flex flex-col"
       >
-        <div className="px-10 py-8 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gradient-to-r from-slate-50/50 to-white">
+        <div className="px-8 py-6 border-b border-slate-50 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <h2 className="text-xl font-black text-slate-900 tracking-tight flex items-center gap-3">
+            <h2 className="text-lg font-black text-slate-900 tracking-tight flex items-center gap-3 uppercase">
               Salle d&apos;Attente Interactive
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-lg shadow-emerald-200" />
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
             </h2>
-            <p className="text-xs text-slate-400 font-bold mt-0.5">Flux en temps réel des patients admis</p>
+            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-1">Flux Patients en Temps Réel</p>
           </div>
           <div className="flex gap-3">
-            <div className="flex items-center gap-2 px-4 py-2 bg-slate-100 rounded-xl border border-slate-200">
-              <Search size={14} className="text-slate-400" />
-              <input type="text" placeholder="Filtrer..." className="bg-transparent border-none text-[10px] font-bold text-slate-600 focus:ring-0 placeholder:text-slate-400 w-24 md:w-40" />
+            <div className="flex items-center gap-3 px-4 py-2 bg-slate-50 rounded-xl border border-slate-100 group focus-within:border-riverside-red transition-colors">
+              <Search size={14} className="text-slate-400 group-focus-within:text-riverside-red" />
+              <input type="text" placeholder="RECHERCHER..." className="bg-transparent border-none text-[9px] font-black text-slate-900 focus:ring-0 placeholder:text-slate-300 w-32 uppercase" />
             </div>
-            <button className="p-2 bg-slate-100 text-slate-500 rounded-xl hover:bg-slate-200 transition-colors">
-              <Filter size={16} />
+            <button className="w-10 h-10 flex items-center justify-center bg-slate-50 text-slate-400 rounded-xl hover:text-slate-600 border border-slate-100 shadow-inner">
+              <Filter size={14} />
             </button>
           </div>
         </div>
@@ -232,28 +230,30 @@ export default function DashboardPage() {
         <div className="overflow-x-auto">
           <table className="w-full text-left">
             <thead>
-              <tr className="text-[10px] uppercase font-black tracking-[0.25em] text-slate-400 border-b border-slate-100">
-                <th className="px-10 py-6">Code ID</th>
-                <th className="px-10 py-6">Identité Patient</th>
-                <th className="px-10 py-6">Motif Médical</th>
-                <th className="px-10 py-6">Arrivée</th>
-                <th className="px-10 py-6">Statut Priorité</th>
-                <th className="px-10 py-6 text-center">Action</th>
+              <tr className="text-[9px] uppercase font-black tracking-widest text-slate-300 bg-slate-50/30 border-b border-slate-50">
+                <th className="px-8 py-4">Ref</th>
+                <th className="px-8 py-4">Nom Patient</th>
+                <th className="px-8 py-4">Visite</th>
+                <th className="px-8 py-4">Heure</th>
+                <th className="px-8 py-4 text-center">Priorité</th>
+                <th className="px-8 py-4 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
               {loading ? (
                 Array(4).fill(0).map((_, i) => (
                   <tr key={i} className="animate-pulse">
-                    <td colSpan={6} className="px-10 py-6 h-20 bg-slate-50/10" />
+                    <td colSpan={6} className="px-8 py-6 h-16 bg-slate-50/10" />
                   </tr>
                 ))
               ) : sejours.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-10 py-16 text-center text-slate-400 italic font-bold">
-                    <div className="flex flex-col items-center gap-3">
-                      <Clock size={40} className="text-slate-100 mb-2" />
-                      Aucun patient en attente actuellement.
+                  <td colSpan={6} className="px-8 py-20 text-center">
+                    <div className="flex flex-col items-center gap-4">
+                      <div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-100 border border-slate-100 shadow-inner">
+                        <Clock size={24} />
+                      </div>
+                      <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest italic">Aucun patient en file d&apos;attente</p>
                     </div>
                   </td>
                 </tr>
@@ -261,42 +261,40 @@ export default function DashboardPage() {
                 sejours.map((sejour, idx) => (
                   <motion.tr 
                     key={sejour.id}
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: idx * 0.05 + 0.5 }}
-                    className="hover:bg-slate-50/80 transition-all group cursor-pointer border-l-4 border-l-transparent hover:border-l-riverside-red"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: idx * 0.05 }}
+                    className="hover:bg-slate-50/50 transition-colors group cursor-pointer"
                   >
-                    <td className="px-10 py-6 text-slate-500 font-mono text-[10px] font-black">
-                      #{sejour.id.substring(0, 7).toUpperCase()}
+                    <td className="px-8 py-5 text-slate-400 font-black text-[10px] uppercase tracking-tighter">
+                      #{sejour.id.substring(0, 6).toUpperCase()}
                     </td>
-                    <td className="px-10 py-6">
-                      <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center text-[10px] font-black text-slate-500 border border-slate-200 group-hover:bg-white group-hover:scale-110 transition-all shadow-sm">
+                    <td className="px-8 py-5">
+                      <div className="flex items-center gap-4">
+                        <div className="w-8 h-8 rounded-lg bg-slate-50 border border-slate-100 flex items-center justify-center text-[9px] font-black text-slate-900 group-hover:bg-white group-hover:border-riverside-red transition-all shadow-inner">
                           {sejour.patients?.nom_complet?.charAt(0) || "P"}
                         </div>
                         <div className="flex flex-col">
-                          <span className="font-black text-slate-900 group-hover:text-riverside-red transition-colors">{sejour.patients?.nom_complet || "Inconnu"}</span>
-                          <span className="text-[9px] font-black tracking-widest text-slate-400 uppercase">{sejour.patients?.type_assurance || "Cash"}</span>
+                          <span className="text-[11px] font-black text-slate-900 uppercase tracking-tight leading-none">{sejour.patients?.nom_complet || "Inconnu"}</span>
+                          <span className="text-[8px] font-black tracking-widest text-slate-400 uppercase mt-1">{sejour.patients?.type_assurance || "Cash"}</span>
                         </div>
                       </div>
                     </td>
-                    <td className="px-10 py-6">
-                      <span className="text-[11px] font-bold text-slate-600 bg-slate-100/50 px-2 py-1 rounded-md">
+                    <td className="px-8 py-5">
+                      <span className="text-[10px] font-black text-slate-600 bg-slate-50 border border-slate-100 px-2 py-1 rounded-md uppercase tracking-tight">
                         {sejour.motif_visite}
                       </span>
                     </td>
-                    <td className="px-10 py-6 text-slate-500 text-[11px] font-bold font-mono">
+                    <td className="px-8 py-5 text-slate-400 text-[10px] font-black tracking-widest tabular-nums">
                       {new Date(sejour.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
                     </td>
-                    <td className="px-10 py-6">
+                    <td className="px-8 py-5 text-center">
                       <StatusBadge status={sejour.statut} />
                     </td>
-                    <td className="px-10 py-6">
-                      <div className="flex justify-center">
-                        <div className="p-2 text-slate-300 hover:text-riverside-red transition-colors hover:bg-red-50 rounded-lg">
-                          <MoreHorizontal size={16} />
-                        </div>
-                      </div>
+                    <td className="px-8 py-5 text-right">
+                      <button className="w-8 h-8 inline-flex items-center justify-center hover:bg-slate-50 rounded-lg transition-colors border border-transparent hover:border-slate-100">
+                        <MoreHorizontal size={14} className="text-slate-400" />
+                      </button>
                     </td>
                   </motion.tr>
                 ))
@@ -305,11 +303,12 @@ export default function DashboardPage() {
           </table>
         </div>
         
-        <div className="px-8 py-5 bg-slate-50/30 border-t border-slate-100 flex items-center justify-between">
-           <button className="text-[10px] font-bold text-slate-400 hover:text-riverside-red transition-colors flex items-center gap-1 uppercase tracking-[0.2em]">
-             Système Riverside v2.0
-           </button>
-           <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wider italic">Mise à jour en temps réel activée</p>
+        <div className="px-8 py-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
+           <div className="flex items-center gap-2">
+             <span className="w-1 h-1 bg-emerald-400 rounded-full animate-ping" />
+             <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Riverside Sync Active</span>
+           </div>
+           <p className="text-[9px] text-slate-300 font-black uppercase tracking-[0.2em]">Medical Intelligence Core</p>
         </div>
       </motion.div>
       <NewAdmissionModal 
@@ -323,19 +322,19 @@ export default function DashboardPage() {
 
 function StatusBadge({ status }: { status: string }) {
   const config: Record<string, { color: string }> = {
-    'Terminé': { color: 'bg-emerald-100 text-emerald-600' },
-    'En attente': { color: 'bg-orange-100 text-orange-600' },
-    'En cours': { color: 'bg-blue-100 text-blue-600' },
-    'Urgent': { color: 'bg-rose-100 text-rose-600 animate-pulse' },
-    'En Examen': { color: 'bg-blue-100 text-blue-600' },
-    'Admission': { color: 'bg-indigo-100 text-indigo-600' },
+    'Terminé': { color: 'bg-emerald-50 text-emerald-600 border-emerald-100' },
+    'En attente': { color: 'bg-orange-50 text-orange-600 border-orange-100' },
+    'En cours': { color: 'bg-blue-50 text-blue-600 border-blue-100' },
+    'Urgent': { color: 'bg-red-50 text-red-600 border-red-100 animate-pulse' },
+    'En Examen': { color: 'bg-indigo-50 text-indigo-600 border-indigo-100' },
+    'Admission': { color: 'bg-slate-50 text-slate-600 border-slate-100' },
   };
 
-  const style = config[status] || { color: 'bg-slate-100 text-slate-600' };
+  const style = config[status] || { color: 'bg-slate-50 text-slate-400 border-slate-100' };
 
   return (
     <span className={cn(
-      "px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider w-fit",
+      "px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border shadow-xs inline-block",
       style.color
     )}>
       {status}

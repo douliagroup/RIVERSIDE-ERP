@@ -166,12 +166,13 @@ export default function DouliaLovePage() {
             <button 
               onClick={() => triggerDouliaConnect()}
               disabled={globalLoading || patients.length === 0}
-              className="group bg-white text-pink-600 px-10 py-5 rounded-[2rem] font-black uppercase tracking-tighter text-sm shadow-xl hover:scale-105 transition-all active:scale-95 flex items-center gap-3 disabled:opacity-50"
+              className="group bg-white text-pink-600 px-6 py-2.5 rounded-lg font-black uppercase tracking-widest text-[10px] shadow-xl hover:scale-[1.02] transition-all active:scale-95 flex items-center gap-2 disabled:opacity-50"
             >
-               {globalLoading ? <Loader2 size={18} className="animate-spin" /> : <MessageCircle size={18} />}
-               Déclencher DOULIA Connect Global
-               <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform" />
+               {globalLoading ? <Loader2 size={16} className="animate-spin" /> : <MessageCircle size={16} />}
+               Doulia Connect Global
+               <ArrowRight size={12} className="group-hover:translate-x-1 transition-transform" />
             </button>
+
          </div>
       </div>
 

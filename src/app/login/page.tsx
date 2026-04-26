@@ -59,9 +59,8 @@ export default function LoginPage() {
             <h1 className="text-5xl font-black tracking-tighter leading-none">RIVERSIDE<br/>MEDICAL CENTER</h1>
             <p className="text-red-100 font-medium text-lg">Système de Gouvernance Hospitalière & Audit de Précision.</p>
           </div>
-          <div className="pt-10 flex gap-4">
-            <div className="px-4 py-2 bg-white/10 rounded-xl border border-white/20 text-[10px] font-black uppercase tracking-widest">Douala, Cameroun</div>
-            <div className="px-4 py-2 bg-white/10 rounded-xl border border-white/20 text-[10px] font-black uppercase tracking-widest">v3.0 Production</div>
+          <div className="pt-10">
+            {/* Version and location removed per user request */}
           </div>
         </div>
       </div>
@@ -115,9 +114,9 @@ export default function LoginPage() {
             <button 
               type="submit"
               disabled={loading}
-              className="w-full py-5 bg-riverside-red text-white rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-red-100 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-3 disabled:opacity-50"
+              className="w-full px-8 py-3.5 bg-riverside-red text-white rounded-xl font-black uppercase tracking-widest shadow-lg shadow-red-100 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-3 disabled:opacity-50 text-[11px]"
             >
-              {loading ? <Loader2 className="animate-spin" /> : <>Se Connecter <ArrowRight size={18} /></>}
+              {loading ? <Loader2 size={16} className="animate-spin" /> : <>Se Connecter <ArrowRight size={14} /></>}
             </button>
           </form>
 

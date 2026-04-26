@@ -281,45 +281,43 @@ export default function MedicalPage() {
 
   return (
     <div className="p-8 max-w-7xl mx-auto space-y-8 min-h-screen pb-20">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
         <div>
-          <h1 className="text-3xl font-black text-slate-900 tracking-tighter flex items-center gap-3 uppercase">
-            <Stethoscope className="text-riverside-red" size={28} />
+          <h1 className="text-2xl font-black text-slate-900 tracking-tight flex items-center gap-3 uppercase">
+            <Stethoscope className="text-riverside-red" size={24} />
             Espace Médical
           </h1>
-          <p className="text-slate-500 font-bold mt-1 uppercase text-[10px] tracking-widest">Dossiers & Consultations en temps réel</p>
+          <p className="text-slate-400 font-bold mt-1 uppercase text-[9px] tracking-[0.2em]">Dossiers & Consultations Stratégiques</p>
         </div>
         <div className="flex items-center gap-4">
-          <div className="bg-slate-50 border border-slate-100 px-4 py-2 rounded-2xl flex items-center gap-3">
-             <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
-             <span className="text-[10px] font-black text-slate-600 uppercase tracking-tighter">Médecin Connecté</span>
+          <div className="bg-slate-50 border border-slate-100 px-3 py-1.5 rounded-lg flex items-center gap-3">
+             <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
+             <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Opérationnel</span>
           </div>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-        {/* Left: Patient List */}
         <div className="lg:col-span-4 space-y-6">
-          <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden h-fit">
-            <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-              <h2 className="text-xs font-black text-slate-900 uppercase tracking-widest flex items-center gap-2">
-                <Users size={14} className="text-riverside-red" />
-                File d&apos;Attente
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden h-fit">
+            <div className="p-4 border-b border-slate-50 flex items-center justify-between bg-slate-50/30">
+              <h2 className="text-[10px] font-black text-slate-900 uppercase tracking-widest flex items-center gap-2">
+                <Users size={12} className="text-riverside-red" />
+                Liste d&apos;Attente
               </h2>
-              <span className="bg-red-50 text-riverside-red px-2 py-0.5 rounded-full text-[10px] font-black">{waitingPatients.length} Patients</span>
+              <span className="bg-red-50 text-riverside-red px-2 py-0.5 rounded text-[9px] font-black">{waitingPatients.length} PV</span>
             </div>
             
-            <div className="max-h-[600px] overflow-y-auto p-2 space-y-1">
+            <div className="max-h-[600px] overflow-y-auto p-3 space-y-2">
               {loading ? (
                 <div className="p-10 flex flex-col items-center justify-center gap-3 opacity-30">
-                  <Loader2 className="animate-spin" size={24} />
-                  <p className="text-[10px] font-black uppercase">Chargement...</p>
+                  <Loader2 className="animate-spin text-riverside-red" size={20} />
+                  <p className="text-[9px] font-black uppercase text-slate-400">Sync...</p>
                 </div>
               ) : waitingPatients.length === 0 ? (
-                <div className="p-10 text-center opacity-30">
-                   <Users className="mx-auto mb-3" size={32} />
-                   <p className="text-xs font-bold font-mono">AUCUN PATIENT EN ATTENTE</p>
+                <div className="p-10 text-center py-20">
+                   <Users className="mx-auto mb-3 text-slate-100" size={40} />
+                   <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest">File vide</p>
                 </div>
               ) : (
                 waitingPatients.map((p) => (
@@ -327,7 +325,7 @@ export default function MedicalPage() {
                     key={p.id}
                     onClick={() => setSelectedPatient(p)}
                     className={cn(
-                      "w-full text-left p-4 rounded-2xl transition-all border flex flex-col gap-2 group",
+                      "w-full text-left p-4 rounded-xl transition-all border flex flex-col gap-2 group active:scale-[0.98]",
                       selectedPatient?.id === p.id 
                         ? "bg-riverside-red border-riverside-red text-white shadow-lg shadow-red-100" 
                         : "bg-white border-transparent hover:bg-slate-50 text-slate-700"
@@ -342,7 +340,7 @@ export default function MedicalPage() {
                     </div>
                     <div className="flex items-center gap-2">
                        <span className={cn(
-                         "text-[9px] font-black px-1.5 py-0.5 rounded-full uppercase",
+                         "text-[9px] font-black px-1.5 py-0.5 rounded uppercase tracking-widest",
                          selectedPatient?.id === p.id ? "bg-white/20 text-white" : "bg-slate-100 text-slate-500"
                        )}>
                          {p.motif_visite}
@@ -375,50 +373,54 @@ export default function MedicalPage() {
               </motion.div>
             ) : (
               <motion.div
-                initial={{ opacity: 0, y: 20 }}
+                initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 key="form"
-                className="bg-white rounded-[2.5rem] border border-slate-100 shadow-xl shadow-slate-100 overflow-hidden"
+                className="bg-white rounded-2xl border border-slate-100 shadow-xl shadow-slate-200/20 overflow-hidden"
               >
-                {/* Board Header */}
-                <div className="p-8 bg-slate-950 text-white flex items-center justify-between relative overflow-hidden">
-                   <div className="absolute top-0 right-0 w-64 h-64 bg-riverside-red/10 rounded-full -mr-32 -mt-32 blur-3xl" />
-                   <div className="flex items-center gap-4 relative z-10">
-                      <div className="w-14 h-14 bg-white/10 rounded-2xl flex items-center justify-center">
-                         <User size={28} className="text-white" />
+                {/* Board Header section */}
+                <div className="p-10 bg-slate-900 text-white flex items-center justify-between relative overflow-hidden">
+                   <div className="absolute top-0 right-0 w-64 h-64 bg-riverside-red/5 rounded-full -mr-32 -mt-32 blur-3xl" />
+                   <div className="flex items-center gap-6 relative z-10">
+                      <div className="w-16 h-16 bg-white/5 rounded-2xl flex items-center justify-center border border-white/5 group-hover:scale-105 transition-transform">
+                         <User size={32} className="text-white" />
                       </div>
                       <div>
-                         <h3 className="text-xl font-black tracking-tighter uppercase">{selectedPatient.patients.nom_complet}</h3>
-                         <p className="text-white/50 text-[10px] font-black uppercase tracking-widest">{selectedPatient.patients.telephone}</p>
+                         <h3 className="text-2xl font-black tracking-tighter uppercase">{selectedPatient.patients.nom_complet}</h3>
+                         <div className="flex items-center gap-3 mt-1">
+                            <span className="text-white/40 text-[9px] font-black uppercase tracking-widest">{selectedPatient.patients.telephone}</span>
+                            <span className="w-1 h-1 bg-white/20 rounded-full" />
+                            <span className="text-riverside-red text-[9px] font-black uppercase tracking-widest">Dossier Actif</span>
+                         </div>
                       </div>
                    </div>
                    
-                   <div className="flex items-center gap-4 relative z-10">
-                      {/* AI Copilot Microphone */}
-                      <div className="flex flex-col items-end gap-2">
+                   <div className="flex items-center gap-6 relative z-10">
+                      {/* AI Copilot Microphone section */}
+                      <div className="flex flex-col items-center gap-2">
                         <button 
                           onClick={toggleListening}
                           className={cn(
-                            "w-14 h-14 rounded-full flex items-center justify-center transition-all relative group",
-                            isListening ? "bg-riverside-red" : "bg-white/10 hover:bg-white/20"
+                            "w-16 h-16 rounded-full flex items-center justify-center transition-all relative group shadow-2xl active:scale-90",
+                            isListening ? "bg-riverside-red shadow-red-500/50" : "bg-white/5 hover:bg-white/10 border border-white/5"
                           )}
                         >
                           {isListening && (
                             <motion.div 
-                              animate={{ scale: [1, 1.5, 1], opacity: [0.5, 0, 0.5] }}
-                              transition={{ repeat: Infinity, duration: 2 }}
+                              animate={{ scale: [1, 1.4, 1], opacity: [0.3, 0, 0.3] }}
+                              transition={{ repeat: Infinity, duration: 1.5 }}
                               className="absolute inset-0 bg-riverside-red rounded-full"
                             />
                           )}
-                          <Mic size={24} className={cn("relative z-10", isListening ? "text-white" : "text-white/70")} />
+                          <Mic size={24} className={cn("relative z-10", isListening ? "text-white" : "text-white/50 group-hover:text-white transition-colors")} />
                         </button>
-                        <span className="text-[8px] font-black uppercase tracking-widest text-white/50">Assistant Vocal</span>
+                        <span className="text-[8px] font-black uppercase tracking-[0.2em] text-white/30">Copilot AI</span>
                       </div>
 
                       {selectedPatient.patients.alertes_medicales && (
-                        <div className="bg-red-500/20 border border-red-500/30 px-4 py-2 rounded-2xl flex items-center gap-3">
-                           <Activity className="text-red-400" size={14} />
-                           <span className="text-[10px] font-black text-red-200 uppercase">{selectedPatient.patients.alertes_medicales}</span>
+                        <div className="bg-red-500/10 border border-red-500/20 px-4 py-2 rounded-xl flex items-center gap-3">
+                           <AlertCircle className="text-riverside-red animate-pulse" size={16} />
+                           <span className="text-[10px] font-black text-red-100 uppercase tracking-tighter">{selectedPatient.patients.alertes_medicales}</span>
                         </div>
                       )}
                    </div>
@@ -558,10 +560,10 @@ export default function MedicalPage() {
                       >
                         <div className="flex items-center justify-between">
                            <div className="flex items-center gap-3">
-                              <div className="w-10 h-10 bg-riverside-red/10 rounded-xl flex items-center justify-center">
+                              <div className="w-10 h-10 bg-riverside-red/10 rounded-xl flex items-center justify-center animate-pulse-border">
                                  <Brain size={20} className="text-riverside-red" />
                               </div>
-                              <h4 className="text-xs font-black text-slate-900 uppercase tracking-widest">Assistant IA</h4>
+                              <h4 className="text-[10px] font-black text-slate-900 uppercase tracking-widest">Riverside Copilot</h4>
                            </div>
                            {isAnalyzing && <Loader2 size={16} className="animate-spin text-riverside-red" />}
                         </div>
@@ -575,31 +577,31 @@ export default function MedicalPage() {
                              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Analyse clinique en cours...</p>
                           </div>
                         ) : (
-                          <div className="space-y-6">
-                             <div className="space-y-2">
-                                <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                                  <AlertCircle size={10} /> Diagnostic Suggéré
-                                </label>
-                                <div className="p-4 bg-white rounded-2xl border border-slate-200 shadow-sm">
-                                   <p className="text-xs font-bold text-slate-900 leading-relaxed italic">&quot;{aiAnalysis?.diagnostic_suggere}&quot;</p>
-                                </div>
-                             </div>
+                         <div className="space-y-4">
+                            <div className="space-y-2">
+                               <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                                 <AlertCircle size={11} className="text-riverside-red" /> Diagnostic Suggéré
+                               </label>
+                               <div className="p-4 bg-white rounded-xl border border-slate-200 shadow-sm">
+                                  <p className="text-xs font-bold text-slate-800 leading-relaxed italic">&quot;{aiAnalysis?.diagnostic_suggere}&quot;</p>
+                               </div>
+                            </div>
 
-                             <div className="space-y-2">
-                                <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                                  <Activity size={10} /> Examens Recommandés
-                                </label>
-                                <div className="p-4 bg-slate-900 rounded-2xl">
-                                   <p className="text-xs font-mono font-bold text-emerald-400 leading-relaxed uppercase">{aiAnalysis?.examens_recommandes}</p>
-                                </div>
-                             </div>
+                            <div className="space-y-2">
+                               <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                                 <Activity size={11} className="text-riverside-red" /> Examens Préconisés
+                               </label>
+                               <div className="p-4 bg-slate-900 rounded-xl">
+                                  <p className="text-[10px] font-mono font-bold text-emerald-400 leading-relaxed uppercase">{aiAnalysis?.examens_recommandes}</p>
+                               </div>
+                            </div>
 
-                             <div className="pt-4 border-t border-slate-200">
-                                <p className="text-[7px] font-black text-slate-400 uppercase leading-relaxed">
-                                   L&apos;IA a pré-rempli vos champs Notes et Ordonnance. Vérifiez ces informations avant de valider.
-                                </p>
-                             </div>
-                          </div>
+                            <div className="pt-6 border-t border-slate-200">
+                               <p className="text-[8px] font-black text-slate-400 uppercase leading-[1.6] tracking-tight">
+                                  L&apos;IA Copilot a analysé la transcription et pré-rempli vos champs Notes et Ordonnance. Vérifiez ces informations avant de valider pour garantir l&apos;exactitude médicale.
+                               </p>
+                            </div>
+                         </div>
                         )}
                       </motion.div>
                     )}

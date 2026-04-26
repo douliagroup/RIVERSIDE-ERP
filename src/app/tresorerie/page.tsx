@@ -285,36 +285,35 @@ export default function TresoreriePage() {
 
   return (
     <div className="w-full max-w-full overflow-x-hidden space-y-8 pb-20 px-4 md:px-8">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
         <div>
-          <h1 className="text-3xl font-black text-slate-900 tracking-tight flex items-center gap-4">
-            <div className="w-12 h-12 bg-slate-900 rounded-2xl flex items-center justify-center text-white shadow-lg">
-              <Receipt size={28} />
+          <h1 className="text-2xl font-black text-slate-900 tracking-tight flex items-center gap-4">
+            <div className="w-10 h-10 bg-slate-900 rounded-xl flex items-center justify-center text-white shadow-lg">
+              <Receipt size={22} />
             </div>
             Caisse & <span className="text-riverside-red">Facturation</span>
           </h1>
-          <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-2">Gestion des revenus et actes médicaux</p>
+          <p className="text-[9px] text-slate-400 font-bold uppercase tracking-[0.2em] mt-2">Gestion des Revenus & Flux Financiers</p>
         </div>
         
-        <div className="flex items-center gap-2 p-1 bg-white rounded-2xl border border-slate-100 shadow-sm">
+        <div className="flex items-center gap-2 p-1 bg-slate-50 rounded-xl border border-slate-100">
            <button 
             onClick={() => setActiveTab("caise")}
             className={cn(
-              "px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all",
-              activeTab === "caise" ? "bg-slate-900 text-white shadow-lg shadow-slate-200" : "text-slate-400 hover:text-slate-600"
+              "px-5 py-2 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all",
+              activeTab === "caise" ? "bg-white text-slate-900 shadow-sm border border-slate-100" : "text-slate-400 hover:text-slate-600"
             )}
            >
-             Terminal Caisse
+             Terminal
            </button>
            <button 
             onClick={() => setActiveTab("dettes")}
             className={cn(
-              "px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all",
-              activeTab === "dettes" ? "bg-riverside-red text-white shadow-lg shadow-red-200" : "text-slate-400 hover:text-slate-600"
+              "px-5 py-2 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all",
+              activeTab === "dettes" ? "bg-riverside-red text-white shadow-sm" : "text-slate-400 hover:text-slate-600"
             )}
            >
-             Recouvrement & Dettes
+             Recouvrement
            </button>
         </div>
       </div>
@@ -633,75 +632,77 @@ export default function TresoreriePage() {
               </div>
             </div>
 
-            <div className="space-y-6">
+            <div className="space-y-4">
               {groupedDettes.length === 0 ? (
-                <div className="py-20 text-center text-slate-300 italic text-sm">Aucun reste à payer détecté.</div>
+                <div className="py-20 text-center text-slate-300 italic text-xs font-black uppercase tracking-widest bg-slate-50 rounded-3xl">Aucun reste à payer</div>
               ) : (
                 groupedDettes.map((group, idx) => (
-                  <motion.div 
-                    layout
+                  <details 
                     key={group.name}
-                    className="bg-slate-50/50 rounded-3xl border border-slate-100 overflow-hidden"
+                    className="group bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden transition-all duration-300 open:shadow-md"
                   >
-                    <div className="p-6 flex items-center justify-between bg-white border-b border-slate-100">
+                    <summary className="p-6 flex items-center justify-between cursor-pointer hover:bg-slate-50/50 transition-colors list-none">
                       <div className="flex items-center gap-4">
                         <div className={cn(
                           "w-10 h-10 rounded-xl flex items-center justify-center text-white",
-                          group.type === 'ASSURANCE' ? "bg-red-600 shadow-[0_0_15px_rgba(220,38,38,0.3)]" : "bg-slate-900"
+                          group.type === 'ASSURANCE' ? "bg-riverside-red shadow-lg shadow-red-100" : "bg-slate-900"
                         )}>
                           {group.type === 'ASSURANCE' ? <ShieldCheck size={20} /> : <User size={20} />}
                         </div>
                         <div>
                           <div className="flex items-center gap-2">
-                            <h4 className="text-sm font-black text-slate-900 uppercase tracking-tight">{group.name}</h4>
-                            {group.type === 'ASSURANCE' && <span className="bg-red-50 text-red-600 text-[8px] font-black px-1.5 py-0.5 rounded uppercase">Corporate</span>}
+                             <h4 className="text-xs font-black text-slate-900 uppercase tracking-tight">{group.name}</h4>
+                             {group.type === 'ASSURANCE' && <span className="bg-red-50 text-riverside-red text-[8px] font-black px-1.5 py-0.5 rounded uppercase border border-red-100">Stratégique</span>}
                           </div>
-                          <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">{group.items.length} facture(s) en attente</p>
+                          <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">{group.items.length} facture(s)</p>
                         </div>
                       </div>
-                      <div className="flex flex-col items-end gap-3">
+                      <div className="flex items-center gap-6">
                         <div className="text-right">
-                          <p className="text-[10px] font-black text-slate-400 uppercase mb-1">Total à recouvrer</p>
-                          <p className="text-xl font-black text-riverside-red tabular-nums">{group.total.toLocaleString()} FCFA</p>
+                          <p className="text-[9px] font-black text-slate-400 uppercase mb-0.5">Solde</p>
+                          <p className="text-sm font-black text-riverside-red tabular-nums">{group.total.toLocaleString()} FCFA</p>
                         </div>
-                        <button 
-                          onClick={() => {
-                            const msg = `Bonjour, Riverside Medical Center vous informe d'un reste à payer de ${group.total.toLocaleString()} FCFA. Merci de régulariser rapidement.`;
-                            window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
-                          }}
-                          className="px-4 py-2 bg-emerald-500 text-white text-[9px] font-black uppercase rounded-xl hover:bg-emerald-600 transition-all flex items-center gap-2"
-                        >
-                          <CheckCircle size={14} /> Envoyer Rappel
-                        </button>
+                        <Plus className="text-slate-300 group-open:rotate-45 transition-transform" size={16} />
                       </div>
-                    </div>
+                    </summary>
                     
-                    <div className="divide-y divide-slate-100/50">
-                      {group.items.map((item) => (
-                        <div key={item.id} className="p-4 px-6 flex items-center justify-between hover:bg-white transition-colors">
-                          <div>
-                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter mb-1">
-                              {new Date(item.date_transaction).toLocaleDateString()} • Ref: {item.id.slice(0,6)}
-                            </p>
-                            <p className="text-xs font-medium text-slate-700">{item.description}</p>
-                          </div>
-                          <div className="flex items-center gap-6">
-                            <div className="text-right">
-                              <p className="text-[8px] font-black text-slate-300 uppercase">Facturé</p>
-                              <p className="text-xs font-bold text-slate-500 tabular-nums">{item.montant_total.toLocaleString()}</p>
-                            </div>
-                            <div className="text-right">
-                              <p className="text-[8px] font-black text-slate-300 uppercase">Perçu</p>
-                              <p className="text-xs font-bold text-emerald-500 tabular-nums">{item.montant_verse.toLocaleString()}</p>
-                            </div>
-                            <div className="w-24 text-right">
-                               <span className="text-[10px] font-black text-riverside-red italic">{item.reste_a_payer.toLocaleString()} FCFA</span>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
+                    <div className="p-6 pt-0 border-t border-slate-50 space-y-4 bg-slate-50/30">
+                       <div className="pt-4 space-y-3">
+                         {group.items.map((item) => (
+                           <div key={item.id} className="p-4 bg-white rounded-xl border border-slate-100 flex items-center justify-between hover:border-riverside-red/30 transition-colors">
+                             <div>
+                               <p className="text-[9px] font-bold text-slate-400 uppercase tracking-tight mb-1">
+                                 {new Date(item.date_transaction).toLocaleDateString()} • Ref: {item.id.slice(0,6)}
+                               </p>
+                               <p className="text-[11px] font-black text-slate-700 uppercase tracking-tight">{item.description}</p>
+                             </div>
+                             <div className="flex items-center gap-6">
+                               <div className="text-right">
+                                 <p className="text-[8px] font-black text-slate-300 uppercase">Perçu</p>
+                                 <p className="text-[10px] font-bold text-emerald-500 tabular-nums">{item.montant_verse.toLocaleString()}</p>
+                               </div>
+                               <div className="w-20 text-right">
+                                  <span className="text-[10px] font-black text-riverside-red">{item.reste_a_payer.toLocaleString()} FCFA</span>
+                               </div>
+                             </div>
+                           </div>
+                         ))}
+                       </div>
+
+                       <div className="flex justify-end pt-2">
+                         <button 
+                           onClick={(e) => {
+                             e.stopPropagation();
+                             const msg = `Bonjour, Riverside Medical Center vous informe d'un reste à payer de ${group.total.toLocaleString()} FCFA. Merci de régulariser rapidement.`;
+                             window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
+                           }}
+                           className="px-4 py-2 bg-emerald-500 text-white text-[9px] font-black uppercase rounded-lg hover:bg-emerald-600 transition-all flex items-center gap-2 shadow-lg shadow-emerald-100"
+                         >
+                           <CheckCircle size={14} /> Envoyer Rappel WhatsApp
+                         </button>
+                       </div>
                     </div>
-                  </motion.div>
+                  </details>
                 ))
               )}
             </div>
