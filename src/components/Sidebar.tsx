@@ -40,6 +40,11 @@ const menuItems = [
   { icon: MessageCircle, label: "DOULIA Love", href: "/doulia-love", roles: ['patron', 'communication'] },
 ];
 
+interface SidebarProps {
+  isCollapsed: boolean;
+  setIsCollapsed: (value: boolean) => void;
+}
+
 export default function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
   const pathname = usePathname();
   const { user, userRole, setUserRole, signOut } = useAuth();

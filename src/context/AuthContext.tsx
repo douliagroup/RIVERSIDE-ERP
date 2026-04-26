@@ -7,7 +7,7 @@ import { User } from '@supabase/supabase-js';
 
 import { useRouter } from 'next/navigation';
 
-type Role = 'patron' | 'comptable' | 'caissier' | 'major' | 'personnel';
+type Role = 'patron' | 'comptable' | 'caissier' | 'major' | 'personnel' | 'communication' | 'accueil';
 
 interface AuthContextType {
   user: User | null;
