@@ -269,163 +269,184 @@ export default function PatronInsight() {
       <div className="relative z-10 grid grid-cols-1 xl:grid-cols-12 gap-8">
         
         {/* Left Column: Analytics & Alerts */}
-        <div className="xl:col-span-8 space-y-8">
+        <div className="xl:col-span-12 space-y-8">
           
           {/* KPI Cards section */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="p-6 bg-white border border-slate-100 rounded-2xl shadow-sm hover:shadow-md transition-shadow group">
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Recettes Système (Jour)</p>
-              <h3 className="text-2xl font-black text-slate-900">{stats.ca_jour.toLocaleString()} <span className="text-[10px] text-slate-400 font-bold">FCFA</span></h3>
-              <div className="mt-4 flex items-center gap-2 text-[10px] font-black text-emerald-500">
-                <TrendingUp size={12} /> +12% vs hier
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="p-8 bg-white border border-slate-100 rounded-[2rem] shadow-[0_10px_0_0_rgba(15,23,42,0.05)] hover:shadow-[0_15px_0_0_rgba(15,23,42,0.1)] transition-all group">
+              <p className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-4">Recettes Système (Jour)</p>
+              <h3 className="text-3xl font-black text-slate-950">{stats.ca_jour.toLocaleString()} <span className="text-xs text-slate-400 font-bold">FCFA</span></h3>
+              <div className="mt-5 flex items-center gap-2 text-[11px] font-black text-emerald-500">
+                <TrendingUp size={14} /> +12% vs hier
               </div>
             </motion.div>
 
-            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="p-6 bg-white border border-slate-100 rounded-2xl shadow-sm hover:shadow-md transition-shadow group">
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Occupation</p>
-              <h3 className="text-2xl font-black text-slate-900">{stats.taux_occupation}%</h3>
-              <div className="mt-4 w-full bg-slate-100 h-1 rounded-full overflow-hidden">
+            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="p-8 bg-white border border-slate-100 rounded-[2rem] shadow-[0_10px_0_0_rgba(15,23,42,0.05)] hover:shadow-[0_15px_0_0_rgba(15,23,42,0.1)] transition-all group">
+              <p className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-4">Occupation</p>
+              <h3 className="text-3xl font-black text-slate-950">{stats.taux_occupation}%</h3>
+              <div className="mt-5 w-full bg-slate-100 h-2 rounded-full overflow-hidden">
                 <div className="bg-riverside-red h-full transition-all duration-1000" style={{ width: `${stats.taux_occupation}%` }} />
               </div>
             </motion.div>
 
-            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="p-6 bg-white border border-slate-100 rounded-2xl shadow-sm hover:shadow-md transition-shadow group">
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Dettes Total</p>
-              <h3 className="text-2xl font-black text-riverside-red">{stats.dettes_totales.toLocaleString()} <span className="text-[10px] text-slate-400 font-bold">FCFA</span></h3>
-              <div className="mt-4 text-[10px] font-black text-slate-400 uppercase tracking-tighter">Recouvrement nécessaire</div>
+            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="p-8 bg-white border border-slate-100 rounded-[2rem] shadow-[0_10px_0_0_rgba(15,23,42,0.05)] hover:shadow-[0_15px_0_0_rgba(15,23,42,0.1)] transition-all group">
+              <p className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-4">Dettes Total</p>
+              <h3 className="text-3xl font-black text-riverside-red">{stats.dettes_totales.toLocaleString()} <span className="text-xs text-slate-400 font-bold">FCFA</span></h3>
+              <div className="mt-5 text-[11px] font-black text-slate-400 uppercase tracking-tight">Recouvrement nécessaire</div>
             </motion.div>
 
-            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="p-6 bg-white border border-slate-100 rounded-2xl shadow-sm hover:shadow-md transition-shadow group">
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Stocks Alertes</p>
-              <h3 className="text-2xl font-black text-slate-900">{stats.articles_alerte} <span className="text-[10px] text-slate-400 font-bold">UNITÉS</span></h3>
-              <div className="mt-4 flex items-center gap-2 text-[10px] font-black text-riverside-red animate-pulse">
-                <AlertTriangle size={12} /> Seuil critique atteint
+            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="p-8 bg-white border border-slate-100 rounded-[2rem] shadow-[0_10px_0_0_rgba(15,23,42,0.05)] hover:shadow-[0_15px_0_0_rgba(15,23,42,0.1)] transition-all group">
+              <p className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-4">Stocks Alertes</p>
+              <h3 className="text-3xl font-black text-slate-950">{stats.articles_alerte} <span className="text-xs text-slate-400 font-bold">UNITÉS</span></h3>
+              <div className="mt-5 flex items-center gap-2 text-[11px] font-black text-riverside-red animate-pulse">
+                <AlertTriangle size={14} /> Seuil critique atteint
               </div>
             </motion.div>
           </div>
 
-          {/* Alerts Center section */}
-          <div className="bg-white border border-slate-100 p-8 rounded-[2.5rem] shadow-sm">
-            <h2 className="text-xs font-black text-slate-900 uppercase tracking-[0.3em] mb-8 flex items-center gap-3">
-              <Bell size={16} className="text-riverside-red" /> Notifications Stratégiques
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {alerts.length === 0 ? (
-                <div className="col-span-2 py-10 text-center text-slate-400 font-bold uppercase tracking-widest text-[10px]">Silence Ops • Aucune anomalie</div>
-              ) : (
-                alerts.map((alert, idx) => (
-                  <motion.div 
-                    initial={{ opacity: 0, x: -10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    key={idx} 
-                    className="p-5 bg-slate-50 border border-slate-100 rounded-2xl hover:border-riverside-red/20 transition-all flex gap-4"
-                  >
-                    <div className={cn(
-                      "w-12 h-12 rounded-xl flex items-center justify-center shrink-0",
-                      alert.type === 'CRITICAL' ? 'bg-riverside-red/10 text-riverside-red' : 
-                      alert.type === 'STOCK' ? 'bg-amber-500/10 text-amber-500' : 'bg-blue-500/10 text-blue-500'
-                    )}>
-                      <alert.icon size={20} />
-                    </div>
-                    <div>
-                      <h4 className="text-xs font-black text-slate-900 uppercase mb-1">{alert.title}</h4>
-                      <p className="text-[10px] text-slate-500 leading-relaxed font-bold uppercase tracking-tight">{alert.desc}</p>
-                    </div>
-                  </motion.div>
-                ))
-              )}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            {/* Alerts Center section */}
+            <div className="bg-white border border-slate-100 p-8 rounded-[3rem] shadow-[0_12px_0_0_rgba(15,23,42,0.05)]">
+              <h2 className="text-sm font-black text-slate-950 uppercase tracking-[0.3em] mb-8 flex items-center gap-3">
+                <Bell size={18} className="text-riverside-red" /> Notifications Stratégiques
+              </h2>
+              <div className="space-y-4">
+                {alerts.length === 0 ? (
+                  <div className="py-20 text-center text-slate-400 font-bold uppercase tracking-widest text-xs">Silence Ops • Aucune anomalie</div>
+                ) : (
+                  alerts.map((alert, idx) => (
+                    <motion.div 
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      key={idx} 
+                      className="p-6 bg-slate-50 border border-slate-100 rounded-[1.5rem] hover:border-riverside-red/30 transition-all flex gap-5"
+                    >
+                      <div className={cn(
+                        "w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 shadow-sm",
+                        alert.type === 'CRITICAL' ? 'bg-riverside-red/10 text-riverside-red' : 
+                        alert.type === 'STOCK' ? 'bg-amber-500/10 text-amber-500' : 'bg-blue-500/10 text-blue-500'
+                      )}>
+                        <alert.icon size={24} />
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-black text-slate-950 uppercase mb-2">{alert.title}</h4>
+                        <p className="text-xs text-slate-500 leading-relaxed font-bold uppercase tracking-tight">{alert.desc}</p>
+                      </div>
+                    </motion.div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            {/* Financial Gap section */}
+            <div className="bg-white border border-slate-100 p-8 rounded-[3rem] shadow-[0_12px_0_0_rgba(15,23,42,0.05)]">
+              <div className="flex items-center justify-between mb-8">
+                <div>
+                    <h3 className="text-sm font-black text-slate-950 uppercase tracking-widest mb-1">Audit Flux Financiers</h3>
+                    <p className="text-[11px] text-slate-400 font-bold uppercase tracking-widest">Contrôle quotidien Douala</p>
+                </div>
+                <button className="px-6 py-3 bg-slate-950 text-xs font-black text-white uppercase rounded-xl hover:bg-slate-800 transition-all active:scale-95 shadow-lg">Exporter</button>
+              </div>
+              <div className="space-y-4">
+                  {[1,2,3].map(i => (
+                    <details key={i} className="group overflow-hidden rounded-2xl border border-slate-100 transition-all bg-white hover:border-slate-300">
+                      <summary className="flex items-center justify-between p-5 cursor-pointer list-none">
+                        <div className="flex items-center gap-5">
+                          <span className="text-xs font-black text-slate-400 uppercase tracking-widest">2{i} AVRIL</span>
+                          <span className="text-sm font-black text-slate-950">Audit T0{i}</span>
+                        </div>
+                        <div className="flex items-center gap-10">
+                          <span className="text-[11px] font-black text-emerald-500 uppercase italic">Conforme</span>
+                          <Send size={14} className="text-slate-300 group-open:rotate-90 transition-transform" />
+                        </div>
+                      </summary>
+                      <div className="px-5 pb-5 pt-3 border-t border-slate-50 bg-slate-50/50 grid grid-cols-3 gap-8">
+                        <div>
+                            <p className="text-[10px] font-black text-slate-400 uppercase mb-1">Système</p>
+                            <p className="text-sm font-black text-slate-950">412.000 FCFA</p>
+                        </div>
+                        <div>
+                            <p className="text-[10px] font-black text-slate-400 uppercase mb-1">Manuel</p>
+                            <p className="text-sm font-black text-slate-950">412.000 FCFA</p>
+                        </div>
+                        <div>
+                            <p className="text-[10px] font-black text-slate-400 uppercase mb-1">Variance</p>
+                            <p className="text-sm font-black text-emerald-600">0 FCFA</p>
+                        </div>
+                      </div>
+                    </details>
+                  ))}
+              </div>
             </div>
           </div>
-
-          {/* Financial Gap section */}
-          <div className="bg-white border border-slate-100 p-8 rounded-[2.5rem] shadow-sm">
-             <div className="flex items-center justify-between mb-8">
-               <div>
-                  <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest mb-1">Audit Flux Financiers</h3>
-                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Contrôle quotidien</p>
-               </div>
-               <button className="px-5 py-2 bg-slate-900 text-[10px] font-black text-white uppercase rounded-lg hover:bg-slate-800 transition-all active:scale-95 shadow-sm">Exporter (.csv)</button>
-             </div>
-             <div className="space-y-3">
-                {[1,2,3].map(i => (
-                  <details key={i} className="group overflow-hidden rounded-2xl border border-slate-100 transition-all bg-white hover:border-slate-300">
-                    <summary className="flex items-center justify-between p-4 cursor-pointer list-none">
-                      <div className="flex items-center gap-4">
-                         <span className="text-[10px] font-black text-slate-400 uppercase">2{i} AVRIL</span>
-                         <span className="text-xs font-bold text-slate-900">Journal Audit T0{i}</span>
-                      </div>
-                      <div className="flex items-center gap-8">
-                         <span className="text-[10px] font-black text-emerald-500 uppercase italic">Conforme</span>
-                         <Send size={12} className="text-slate-300 group-open:rotate-90 transition-transform" />
-                      </div>
-                    </summary>
-                    <div className="px-4 pb-4 pt-2 border-t border-slate-50 bg-slate-50/50 grid grid-cols-3 gap-8">
-                       <div>
-                          <p className="text-[8px] font-black text-slate-400 uppercase mb-1">Système</p>
-                          <p className="text-xs font-black text-slate-900">412.000 FCFA</p>
-                       </div>
-                       <div>
-                          <p className="text-[8px] font-black text-slate-400 uppercase mb-1">Comptable</p>
-                          <p className="text-xs font-black text-slate-900">412.000 FCFA</p>
-                       </div>
-                       <div>
-                          <p className="text-[8px] font-black text-slate-400 uppercase mb-1">Variance</p>
-                          <p className="text-xs font-black text-emerald-600">0 FCFA</p>
-                       </div>
-                    </div>
-                  </details>
-                ))}
-             </div>
-          </div>
-
         </div>
 
         {/* Bottom Column: AI Strategic Chat - Google AI Studio Style */}
         <div className="xl:col-span-12">
-           <div className="bg-white border border-slate-100 rounded-[3rem] h-[800px] flex flex-col shadow-2xl shadow-slate-200/50 relative overflow-hidden transition-all duration-700">
+           <div className="bg-white border border-slate-100 rounded-[3.5rem] h-[850px] flex flex-col shadow-[0_20px_0_0_rgba(15,23,42,0.05)] relative overflow-hidden transition-all duration-700">
               {/* Header section */}
-              <div className="p-8 border-b border-slate-50 flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 bg-riverside-red rounded-2xl flex items-center justify-center text-white shadow-xl shadow-red-100 animate-pulse-border">
-                    <BrainCircuit size={24} />
+              <div className="p-10 border-b border-slate-50 flex items-center justify-between">
+                <div className="flex items-center gap-5">
+                  <div className="w-14 h-14 bg-riverside-red rounded-2xl flex items-center justify-center text-white shadow-2xl shadow-red-100 animate-pulse-border">
+                    <BrainCircuit size={28} />
                   </div>
                   <div>
-                    <h3 className="text-sm font-black text-slate-900 uppercase tracking-tighter">Riverside Intelligence</h3>
-                    <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">Analyste Prédictif (Gemini)</p>
+                    <h3 className="text-lg font-black text-slate-950 uppercase tracking-tighter">Riverside Intelligence</h3>
+                    <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">Assistant Stratégique Haut de Gamme</p>
                   </div>
                 </div>
-                <div className="flex items-center gap-3">
-                   <div className="px-3 py-1 bg-slate-50 rounded-full text-[8px] font-black text-slate-400 uppercase tracking-widest border border-slate-100">Live Context: ON</div>
+                <div className="flex items-center gap-4">
+                   <div className="px-4 py-2 bg-slate-50 rounded-xl text-[10px] font-black text-slate-500 uppercase tracking-widest border border-slate-100">AUDIT LIVE CONNECTÉ</div>
                 </div>
               </div>
 
               {/* Chat Viewport */}
-              <div ref={scrollRef} className="flex-1 overflow-y-auto p-12 space-y-12 scrollbar-hide max-w-4xl mx-auto w-full">
+              <div ref={scrollRef} className="flex-1 overflow-y-auto p-12 lg:p-16 space-y-12 scrollbar-hide max-w-5xl mx-auto w-full">
                 {chatMessages.map((msg, i) => (
                   <motion.div 
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     key={i} 
-                    className="flex flex-col gap-4"
+                    className="flex flex-col gap-6"
                   >
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-4">
                        <div className={cn(
-                         "text-[9px] font-black uppercase tracking-[0.2em] px-2 py-1 rounded",
-                         msg.role === 'user' ? "text-slate-400 bg-slate-50" : "text-riverside-red bg-red-50"
+                         "text-[10px] font-black uppercase tracking-[0.3em] px-3 py-1.5 rounded-lg border",
+                         msg.role === 'user' ? "text-slate-500 bg-slate-50 border-slate-100" : "text-riverside-red bg-red-50 border-red-100"
                        )}>
-                         {msg.role === 'user' ? 'Directeur' : 'Riverside IA'}
+                         {msg.role === 'user' ? 'DIRECTEUR GÉNÉRAL' : 'ANALYSTE RIVERSIDE'}
                        </div>
                     </div>
-                    <div className="text-[13px] leading-relaxed font-medium text-slate-700 max-w-none">
-                      <Markdown>{msg.text}</Markdown>
+                    <div className="text-lg leading-[1.8] font-medium text-slate-800 max-w-none">
+                      <div className="markdown-content">
+                        <Markdown
+                          components={{
+                            p: ({ children }) => <p className="mb-8 last:mb-0">{children}</p>,
+                            h1: ({ children }) => <h1 className="text-2xl font-black text-slate-950 mb-6 uppercase tracking-tight">{children}</h1>,
+                            h2: ({ children }) => <h2 className="text-xl font-black text-slate-950 mb-5 uppercase tracking-tight">{children}</h2>,
+                            h3: ({ children }) => <h3 className="text-lg font-black text-slate-950 mb-4 uppercase tracking-tight">{children}</h3>,
+                            strong: ({ children }) => <strong className="font-black text-slate-950">{children}</strong>,
+                            ul: ({ children }) => <ul className="space-y-4 mb-8">{children}</ul>,
+                            li: ({ children }) => (
+                              <li className="flex gap-4 items-start">
+                                <span className="w-1.5 h-1.5 rounded-full bg-riverside-red mt-[1em] shrink-0" />
+                                <span>{children}</span>
+                              </li>
+                            ),
+                          }}
+                        >
+                          {msg.text}
+                        </Markdown>
+                      </div>
                     </div>
                   </motion.div>
                 ))}
                 {chatLoading && (
-                  <div className="flex items-center gap-3">
-                    <div className="w-2 h-2 bg-riverside-red rounded-full animate-bounce" />
-                    <div className="w-2 h-2 bg-riverside-red rounded-full animate-bounce [animation-delay:0.2s]" />
-                    <div className="w-2 h-2 bg-riverside-red rounded-full animate-bounce [animation-delay:0.4s]" />
+                  <div className="flex items-center gap-4 p-8 bg-slate-50 rounded-[2rem] w-fit">
+                    <div className="w-2.5 h-2.5 bg-riverside-red rounded-full animate-bounce" />
+                    <div className="w-2.5 h-2.5 bg-riverside-red rounded-full animate-bounce [animation-delay:0.2s]" />
+                    <div className="w-2.5 h-2.5 bg-riverside-red rounded-full animate-bounce [animation-delay:0.4s]" />
+                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Analyse des flux en cours...</span>
                   </div>
                 )}
               </div>
