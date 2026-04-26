@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@google/genai": "^1.50.1",
+    "@google/generative-ai": "^0.24.1",
     "@supabase/supabase-js": "^2.45.0",
     "@tavily/core": "^0.7.2",
     "clsx": "latest",
