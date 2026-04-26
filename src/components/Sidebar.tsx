@@ -198,12 +198,12 @@ export default function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
         <button 
           onClick={signOut}
           className={cn(
-            "w-full flex items-center gap-3 p-3 rounded-xl transition-all text-slate-500 hover:bg-red-50 hover:text-riverside-red",
+            "w-full flex items-center gap-3 p-3 rounded-xl transition-all text-slate-400 hover:bg-red-50 hover:text-riverside-red border border-transparent hover:border-red-100 group",
             isCollapsed ? "justify-center" : ""
           )}
         >
-          <LogOut size={20} />
-          {!isCollapsed && <span className="text-xs font-bold">Se Déconnecter</span>}
+          <LogOut size={18} className="transition-transform group-hover:translate-x-0.5" />
+          {!isCollapsed && <span className="text-[10px] font-black uppercase tracking-widest">Déconnexion</span>}
         </button>
 
         {!isCollapsed && (

@@ -5,6 +5,8 @@ import Cookies from 'js-cookie';
 import { supabase } from '@/src/lib/supabase';
 import { User } from '@supabase/supabase-js';
 
+import { useRouter } from 'next/navigation';
+
 type Role = 'patron' | 'comptable' | 'caissier' | 'major' | 'personnel';
 
 interface AuthContextType {
@@ -21,6 +23,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [userRole, setUserRole] = useState<Role>('personnel');
   const [loading, setLoading] = useState(true);
+  const router = useRouter();
 
   const fetchUserRole = async (email: string) => {
     try {
@@ -47,8 +50,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(session.user);
         await fetchUserRole(session.user.email!);
       } else {
-        const savedRole = Cookies.get('riverside_role') as Role;
-        if (savedRole) setUserRole(savedRole);
+        setUser(null);
+        Cookies.remove('riverside_role');
+        if (window.location.pathname !== '/login') {
+          router.push('/login');
+        }
       }
       setLoading(false);
     };
@@ -61,12 +67,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         await fetchUserRole(session.user.email!);
       } else {
         setUser(null);
+        Cookies.remove('riverside_role');
+        if (window.location.pathname !== '/login') {
+          router.push('/login');
+        }
       }
       setLoading(false);
     });
 
     return () => subscription.unsubscribe();
-  }, []);
+  }, [router]);
 
   const handleSetRole = (role: Role) => {
     setUserRole(role);
@@ -78,6 +88,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     Cookies.remove('riverside_role');
     setUser(null);
     setUserRole('personnel');
+    router.push('/login');
   };
 
   return (

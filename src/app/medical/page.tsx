@@ -72,7 +72,7 @@ interface PatientWaiting {
 }
 
 export default function MedicalPage() {
-  const { userRole } = useAuth();
+  const { user, userRole } = useAuth();
   const [waitingPatients, setWaitingPatients] = useState<PatientWaiting[]>([]);
   const [selectedPatient, setSelectedPatient] = useState<PatientWaiting | null>(null);
   const [loading, setLoading] = useState(true);
@@ -214,16 +214,24 @@ export default function MedicalPage() {
     setSubmitting(true);
 
     try {
-      // 1. Save Consultation
+      if (!user) throw new Error("Vous devez être connecté pour valider une consultation.");
+
+      // 1. Constantes as JSON Object
+      const constantesObject = {
+        tension: formData.tension,
+        temperature: formData.temperature,
+        poids: formData.poids
+      };
+
+      // 2. Save Consultation with the EXACT schema requested
       const { data: consultData, error: consultError } = await supabase
         .from('consultations')
         .insert([{
           sejour_id: selectedPatient.id,
-          patient_id: selectedPatient.patient_id,
-          tension: formData.tension,
-          temperature: formData.temperature,
-          poids: formData.poids,
-          notes: formData.notes_cliniques,
+          patient_id: selectedPatient.patient_id, // We use the patient UUID for patient_id column
+          medecin_id: user.id,
+          constantes: constantesObject,
+          notes_cliniques: formData.notes_cliniques,
           diagnostic: formData.diagnostic,
           ordonnance: formData.ordonnance,
           created_at: new Date().toISOString()
@@ -231,7 +239,11 @@ export default function MedicalPage() {
         .select()
         .single();
 
-      if (consultError) throw consultError;
+      if (consultError) {
+        console.error("ERREUR CRITIQUE CONSULTATION:", consultError);
+        alert(`Erreur lors de l'enregistrement de la consultation: ${consultError.message}`);
+        throw consultError;
+      }
 
       // 1b. Générer la transaction en attente à la caisse
       const { error: caisseError } = await supabase
@@ -239,7 +251,7 @@ export default function MedicalPage() {
         .insert([{
           patient_id: selectedPatient.patient_id,
           type_flux: 'Revenu - Patient',
-          montant_total: 10000, // Prix standard consultation (à dynamiser plus tard)
+          montant_total: 10000, 
           montant_verse: 0,
           reste_a_payer: 10000,
           description: `Consultation: ${selectedPatient.motif_visite}. Patient: ${selectedPatient.patients.nom_complet}`,
@@ -247,15 +259,22 @@ export default function MedicalPage() {
           created_at: new Date().toISOString()
         }]);
 
-      if (caisseError) console.error("Erreur création transaction caisse:", caisseError);
+      if (caisseError) {
+        console.error("Erreur création transaction caisse:", caisseError);
+        // We don't block for caisse error but we log it
+      }
 
-      // 2. Update status to 'Terminé'
+      // 3. Update status to 'En caisse' as requested
       const { error: updateError } = await supabase
         .from('sejours_actifs')
-        .update({ statut: 'Terminé' })
+        .update({ statut: 'En caisse' }) 
         .eq('id', selectedPatient.id);
 
-      if (updateError) throw updateError;
+      if (updateError) {
+        console.error("Erreur mise à jour séjour:", updateError);
+        alert(`Erreur mise à jour statut séjour: ${updateError.message}`);
+        throw updateError;
+      }
 
       setSuccess(true);
       setTimeout(() => {
@@ -272,8 +291,12 @@ export default function MedicalPage() {
         fetchWaitingPatients();
       }, 2000);
 
-    } catch (err) {
-      console.error("Error saving consultation:", err);
+    } catch (err: any) {
+      console.error("Failed to process consultation:", err);
+      // Ensure the user sees the error if not already alerted
+      if (!err.message?.includes("Erreur lors de l'enregistrement")) {
+        alert(`Échec de la soumission: ${err.message || "Erreur inconnue"}`);
+      }
     } finally {
       setSubmitting(false);
     }

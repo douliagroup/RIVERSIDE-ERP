@@ -85,7 +85,10 @@ export default function NewAdmissionModal({ isOpen, onClose, onSuccess }: NewAdm
         .select()
         .single();
 
-      if (patientError) throw patientError;
+      if (patientError) {
+        alert(`Erreur lors de la création du dossier patient: ${patientError.message}`);
+        throw patientError;
+      }
       console.log("[Admission] Nouveau patient créé avec succès ID:", patientData.id);
 
       // ÉTAPE B : Création du séjour actif (File d'attente)
@@ -97,7 +100,10 @@ export default function NewAdmissionModal({ isOpen, onClose, onSuccess }: NewAdm
           motif_visite: formData.motif_visite
         }]);
 
-      if (sejourError) throw sejourError;
+      if (sejourError) {
+        alert(`Erreur lors de l'admission en file d'attente: ${sejourError.message}`);
+        throw sejourError;
+      }
       console.log("[Admission] Séjour actif créé pour patient ID:", patientData.id);
 
       // Succès

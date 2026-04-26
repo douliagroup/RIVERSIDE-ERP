@@ -80,7 +80,10 @@ export default function PlanningPage() {
           statut: "Planifié"
         }]);
 
-      if (error) throw error;
+      if (error) {
+        alert(`Erreur de planification: ${error.message}`);
+        throw error;
+      }
       setShowModal(false);
       setForm({
         patient_name: "",
@@ -99,10 +102,15 @@ export default function PlanningPage() {
 
   const updateStatus = async (id: string, newStatus: Appointment['statut']) => {
     try {
-      await supabase
+      const { error } = await supabase
         .from('rendez_vous')
         .update({ statut: newStatus })
         .eq('id', id);
+      
+      if (error) {
+        alert(`Erreur de mise à jour du statut: ${error.message}`);
+        throw error;
+      }
       fetchAppointments();
     } catch (err) {
       console.error("Error updating status:", err);
