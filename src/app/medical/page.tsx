@@ -267,22 +267,27 @@ export default function MedicalPage() {
         throw consultError;
       }
 
-      // 1b. Générer la transaction en attente à la caisse
+      // 1b. Génération AUTOMATIQUE de la facture en caisse
+      const montantConsultation = 10000; // Prix standard par défaut
       const { error: caisseError } = await supabase
         .from('transactions_caisse')
         .insert([{
           patient_id: selectedPatient.patient_id,
           type_flux: 'Revenu - Patient',
-          montant_total: 10000, 
+          montant_total: montantConsultation,
           montant_verse: 0,
-          reste_a_payer: 10000,
-          description: `Consultation: ${selectedPatient.motif_visite}. Patient: ${selectedPatient.patients.nom_complet}`,
+          reste_a_payer: montantConsultation,
+          description: `CONSULTATION MÉDICALE: ${selectedPatient.motif_visite}. Suivi par Dr. ${user.email?.split('@')[0]}`,
           statut_paiement: 'En attente',
-          date_transaction: new Date().toISOString()
+          date_transaction: new Date().toISOString(),
+          methode_paiement: 'Espèces'
         }]);
 
       if (caisseError) {
-        console.error("Erreur création transaction caisse:", caisseError);
+        console.error("ERREUR GÉNÉRATION FACTURE CAISSE:", caisseError);
+        alert("Consultation enregistrée avec succès, mais la facture n'a pas pu être envoyée à la caisse. Veuillez informer le comptable.");
+      } else {
+        console.log("Facture envoyée à la caisse avec succès.");
       }
 
       // 3. Update status to 'En caisse' as requested
