@@ -273,6 +273,7 @@ export default function MedicalPage() {
         .from('transactions_caisse')
         .insert([{
           patient_id: selectedPatient.patient_id,
+          sejour_id: selectedPatient.id, // Liaison avec le séjour actif
           type_flux: 'Revenu - Patient',
           montant_total: montantConsultation,
           montant_verse: 0,

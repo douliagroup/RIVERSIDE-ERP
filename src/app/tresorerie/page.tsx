@@ -13,7 +13,8 @@ import {
   AlertCircle,
   FileText,
   ShoppingBag,
-  ShieldCheck
+  ShieldCheck,
+  Activity
 } from "lucide-react";
 import { supabase } from "@/src/lib/supabase";
 import { cn } from "@/src/lib/utils";
@@ -151,6 +152,7 @@ export default function TresoreriePage() {
       const total = calculateTotal();
       const verse = montantVerse ? parseFloat(montantVerse) : total;
       const reste = Math.max(0, total - verse);
+      const isPaid = reste <= 0;
       const description = selectedTransaction 
         ? selectedTransaction.description 
         : cart.map(item => item.nom_acte).join(", ");
@@ -162,10 +164,18 @@ export default function TresoreriePage() {
           .update({
             montant_verse: verse,
             reste_a_payer: reste,
-            statut_paiement: reste > 0 ? 'Partiel' : 'Payé'
+            statut_paiement: isPaid ? 'Payé' : 'Partiel'
           })
           .eq('id', selectedTransaction.id);
         if (txUpdError) throw txUpdError;
+
+        // Si la transaction est liée à un séjour (via la colonne sejour_id qu'on vient d'ajouter dans le flux)
+        if (isPaid && selectedTransaction.sejour_id) {
+          await supabase
+            .from('sejours_actifs')
+            .update({ statut: 'Terminé' })
+            .eq('id', selectedTransaction.sejour_id);
+        }
       } else {
         const { error: txError } = await supabase
           .from('transactions_caisse')
@@ -175,14 +185,14 @@ export default function TresoreriePage() {
             montant_verse: verse,
             reste_a_payer: reste,
             description: `Facturation [${paymentMode}] patient: ${selectedSejour?.patients?.nom_complet}. Actes: ${description}`,
-            statut_paiement: reste > 0 ? 'Partiel' : 'Payé',
+            statut_paiement: isPaid ? 'Payé' : 'Partiel',
             patient_id: selectedSejour?.patient_id
           }]);
         if (txError) throw txError;
       }
 
-      // 2. Mettre à jour le statut du séjour si applicable
-      if (selectedSejour) {
+      // 2. Mettre à jour le statut du séjour si manuel
+      if (isPaid && selectedSejour) {
         await supabase
           .from('sejours_actifs')
           .update({ statut: 'Terminé' })
@@ -595,7 +605,7 @@ export default function TresoreriePage() {
                 </div>
 
                 <button 
-                  disabled={!selectedSejour || cart.length === 0 || submitting}
+                  disabled={submitting || (!selectedTransaction && (!selectedSejour || cart.length === 0))}
                   onClick={handleValidate}
                   className="w-full py-5 bg-slate-950 text-white rounded-3xl font-black text-xs uppercase tracking-[0.2em] hover:bg-black transition-all active:scale-95 disabled:opacity-30 shadow-2xl flex items-center justify-center gap-3 mt-6"
                 >
@@ -709,6 +719,69 @@ export default function TresoreriePage() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Riverside Total Connect: Interactive Flow Simulator */}
+      <motion.div 
+        initial={{ opacity: 0, y: 20 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true }}
+        className="bg-slate-950 rounded-[3rem] p-10 lg:p-16 text-white border border-white/5 relative overflow-hidden mt-12"
+      >
+        <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-riverside-red/5 rounded-full blur-[120px] -translate-y-1/2 translate-x-1/2" />
+        
+        <div className="relative z-10">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-8 mb-16">
+            <div>
+              <h2 className="text-3xl font-black tracking-tighter flex items-center gap-4">
+                <div className="w-12 h-12 bg-riverside-red rounded-2xl flex items-center justify-center shadow-2xl shadow-red-500/20">
+                  <Activity size={24} />
+                </div>
+                RIVERSIDE <span className="text-riverside-red">TOTAL CONNECT</span>
+              </h2>
+              <p className="text-slate-400 font-bold uppercase tracking-[0.3em] text-[10px] mt-4">Simulateur Interactif de Flux de Données</p>
+            </div>
+            <div className="bg-white/5 border border-white/10 px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest text-emerald-400 flex items-center gap-3">
+              <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
+              Système de Synchronisation Actif
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 relative">
+            {/* Step 1 */}
+            <div className="bg-white/5 p-8 rounded-[2rem] border border-white/10 relative group hover:bg-white/[0.08] transition-colors">
+              <div className="w-10 h-10 bg-riverside-red rounded-xl flex items-center justify-center mb-6 shadow-lg shadow-red-500/10 font-black text-xs">1</div>
+              <h4 className="text-sm font-black uppercase tracking-widest mb-3">Pôle Médical</h4>
+              <p className="text-xs text-slate-400 leading-relaxed">Le médecin valide la consultation. L&apos;IA génère l&apos;ordonnance et transmet instantanément l&apos;ordre de prélèvement à la caisse.</p>
+              <div className="mt-8 pt-8 border-t border-white/5 flex items-center justify-between text-[8px] font-black text-slate-500 uppercase tracking-widest">
+                <span>Data Out</span>
+                <span className="text-riverside-red">→ Caisse</span>
+              </div>
+            </div>
+
+            {/* Step 2 */}
+            <div className="bg-white/5 p-8 rounded-[2rem] border border-white/10 relative group hover:bg-white/[0.08] transition-colors">
+              <div className="w-10 h-10 bg-riverside-red rounded-xl flex items-center justify-center mb-6 shadow-lg shadow-red-500/10 font-black text-xs">2</div>
+              <h4 className="text-sm font-black uppercase tracking-widest mb-3">Pôle Trésorerie</h4>
+              <p className="text-xs text-slate-400 leading-relaxed">La caissière réceptionne la facture. Une fois le paiement validé, le système clôture le séjour du patient et déclenche la sortie de stock.</p>
+              <div className="mt-8 pt-8 border-t border-white/5 flex items-center justify-between text-[8px] font-black text-slate-500 uppercase tracking-widest">
+                <span>Action</span>
+                <span className="text-emerald-500">→ Validation</span>
+              </div>
+            </div>
+
+            {/* Step 3 */}
+            <div className="bg-white/5 p-8 rounded-[2rem] border border-white/10 relative group hover:bg-white/[0.08] transition-colors">
+              <div className="w-10 h-10 bg-riverside-red rounded-xl flex items-center justify-center mb-6 shadow-lg shadow-red-500/10 font-black text-xs">3</div>
+              <h4 className="text-sm font-black uppercase tracking-widest mb-3">Pôle Pharmacie</h4>
+              <p className="text-xs text-slate-400 leading-relaxed">La pharmacie reçoit l&apos;ordre de délivrance. Le stock est mis à jour automatiquement et les alertes sont envoyées au Patron.</p>
+              <div className="mt-8 pt-8 border-t border-white/5 flex items-center justify-between text-[8px] font-black text-slate-500 uppercase tracking-widest">
+                <span>Update</span>
+                <span className="text-blue-500">→ Stock Final</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </motion.div>
 
       <AnimatePresence>
         {success && (

@@ -1,352 +1,268 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { 
-  MessageCircle, 
-  Heart, 
-  Send, 
-  CheckCircle, 
-  AlertTriangle, 
-  Users, 
-  Clock, 
-  ShieldAlert,
-  Loader2,
-  Phone,
-  ArrowRight,
-  ExternalLink,
-  Sparkles
-} from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
+import { Heart, MessageCircle, Send, Loader2, Copy, Check, Search, Calendar, User } from "lucide-react";
 import { supabase } from "@/src/lib/supabase";
 import { cn } from "@/src/lib/utils";
 
-interface DouliaPatient {
+interface PatientConsultation {
   id: string;
-  nom_complet: string;
-  telephone: string;
-  statut: string;
-  dette: number;
-  last_comm?: string;
+  patient_id: string;
+  motif_visite: string;
+  diagnostic: string;
+  created_at: string;
+  patients: {
+    nom_complet: string;
+    telephone: string;
+  };
 }
 
 export default function DouliaLovePage() {
-  const [patients, setPatients] = useState<DouliaPatient[]>([]);
+  const [consultations, setConsultations] = useState<PatientConsultation[]>([]);
   const [loading, setLoading] = useState(true);
-  const [processing, setProcessing] = useState<string | null>(null);
-  const [globalLoading, setGlobalLoading] = useState(false);
-  const [selectedMessage, setSelectedMessage] = useState<{ patientId: string, message: string } | null>(null);
-  const [isGenerating, setIsGenerating] = useState(false);
-
-  const fetchDouliaPatients = React.useCallback(async () => {
-    setLoading(true);
-    try {
-      // Logic for patients out in last 24h + debt
-      // We simulate this by getting sejours_actifs with status 'Terminé' 
-      // And we mock some debt for demo purposes if not present
-      const { data, error } = await supabase
-        .from('sejours_actifs')
-        .select(`
-          id,
-          patients (
-            id,
-            nom_complet,
-            telephone
-          ),
-          statut,
-          created_at
-        `)
-        .eq('statut', 'Terminé')
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-
-      const formatted = data?.map((s: any) => ({
-        id: s.patients.id,
-        nom_complet: s.patients.nom_complet,
-        telephone: s.patients.telephone,
-        statut: s.statut,
-        dette: Math.floor(Math.random() * 50000), // MOCKED DEBT
-        last_comm: undefined
-      })) || [];
-
-      setPatients(formatted);
-    } catch (err) {
-      console.error("Error fetching Doulia patients:", err);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const [generatingId, setGeneratingId] = useState<string | null>(null);
+  const [selectedMessage, setSelectedMessage] = useState<{ id: string; text: string; patientName: string } | null>(null);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    fetchDouliaPatients();
-  }, [fetchDouliaPatients]);
+    fetchRecentConsultations();
+  }, []);
 
-  const triggerDouliaConnect = async (patientId?: string) => {
-    if (!patientId) {
-      setGlobalLoading(true);
-      // Logic for global connect could stay generic or use AI for each (too expensive for batch here?)
-      // Let's keep it simple for global
-      try {
-        await new Promise(r => setTimeout(r, 2000));
-        fetchDouliaPatients();
-      } finally {
-        setGlobalLoading(false);
-      }
-      return;
-    }
+  const fetchRecentConsultations = async () => {
+    setLoading(true);
+    const fortyEightHoursAgo = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
+    
+    const { data, error } = await supabase
+      .from('consultations')
+      .select(`
+        id,
+        patient_id,
+        motif_visite,
+        diagnostic,
+        created_at,
+        patients (nom_complet, telephone)
+      `)
+      .gte('created_at', fortyEightHoursAgo)
+      .order('created_at', { ascending: false });
 
-    setProcessing(patientId);
-    setIsGenerating(true);
+    if (data) setConsultations(data as any);
+    setLoading(false);
+  };
+
+  const handleGenerateMessage = async (consult: PatientConsultation) => {
+    setGeneratingId(consult.id);
     try {
-      const res = await fetch("/api/ai/doulia-message", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ patient_id: patientId }),
+      const response = await fetch('/api/ai/doulia-message', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          patientName: consult.patients.nom_complet,
+          motif: consult.motif_visite,
+          diagnostic: consult.diagnostic
+        })
       });
-      const data = await res.json();
-      if (data.error) throw new Error(data.error);
-
-      setSelectedMessage({ patientId, message: data.message });
-    } catch (err) {
-      console.error("AI Generation Failed", err);
-      alert("Impossible de générer le message personnalisé.");
+      const data = await response.json();
+      if (data.message) {
+        setSelectedMessage({
+          id: consult.id,
+          text: data.message,
+          patientName: consult.patients.nom_complet
+        });
+      }
+    } catch (error) {
+      console.error("Error generating message:", error);
     } finally {
-      setIsGenerating(false);
-      setProcessing(null);
+      setGeneratingId(null);
     }
   };
 
-  const confirmAndSend = async () => {
-    if (!selectedMessage) return;
-    const { patientId, message } = selectedMessage;
-    setProcessing(patientId);
-
-    try {
-      // Logic for WhatsApp (sharing URL)
-      const p = patients.find(p => p.id === patientId);
-      if (p) {
-        const whatsappUrl = `https://wa.me/${p.telephone.replace(/\s/g, '')}?text=${encodeURIComponent(message)}`;
-        window.open(whatsappUrl, '_blank');
-
-        // Log communication in DB
-        await supabase
-          .from('doulia_communications')
-          .insert([{
-            patient_id: patientId,
-            type: 'WhatsApp',
-            message: message,
-            statut: 'Envoyé'
-          }]);
-        
-        setPatients(prev => prev.map(pt => pt.id === patientId ? { ...pt, last_comm: new Date().toLocaleTimeString() } : pt));
-      }
-      setSelectedMessage(null);
-    } catch (err) {
-      console.error("Send Error:", err);
-    } finally {
-      setProcessing(null);
-    }
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
   return (
-    <div className="p-8 max-w-6xl mx-auto space-y-12 min-h-screen pb-20">
-      {/* Hero Banner */}
-      <div className="relative rounded-[3rem] overflow-hidden bg-gradient-to-br from-pink-500 to-pink-600 p-12 text-white shadow-2xl shadow-pink-200">
-         <div className="absolute top-0 right-0 w-96 h-96 bg-white/10 rounded-full -mr-48 -mt-48 blur-3xl opacity-50" />
-         <div className="relative z-10 flex flex-col md:flex-row justify-between items-center gap-8">
-            <div className="space-y-4 text-center md:text-left">
-               <div className="inline-flex items-center gap-2 bg-white/20 border border-white/30 px-4 py-1.5 rounded-full backdrop-blur-sm">
-                  <Sparkles size={14} className="text-pink-200" />
-                  <span className="text-[10px] font-black uppercase tracking-widest">Fidélisation Riverside</span>
-               </div>
-               <h1 className="text-5xl font-black tracking-tighter uppercase leading-none">DOULIA Love</h1>
-               <p className="text-pink-50 font-bold max-w-md uppercase text-[11px] tracking-wide opacity-80 leading-relaxed">Le pont entre Riverside et ses patients. Humanité, Soin et Suivi post-hospitalisation par WhatsApp.</p>
+    <div className="p-8 max-w-7xl mx-auto space-y-12 h-full overflow-y-auto pb-32 scrollbar-hide">
+      {/* Header section */}
+      <header className="flex flex-col md:flex-row md:items-center justify-between gap-8 mb-12">
+        <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}>
+          <div className="flex items-center gap-4 mb-4">
+            <div className="w-14 h-14 bg-red-500 rounded-3xl flex items-center justify-center text-white shadow-xl shadow-red-200">
+              <Heart size={28} />
             </div>
-            
-            <button 
-              onClick={() => triggerDouliaConnect()}
-              disabled={globalLoading || patients.length === 0}
-              className="group bg-white text-pink-600 px-6 py-2.5 rounded-lg font-black uppercase tracking-widest text-[10px] shadow-xl hover:scale-[1.02] transition-all active:scale-95 flex items-center gap-2 disabled:opacity-50"
-            >
-               {globalLoading ? <Loader2 size={16} className="animate-spin" /> : <MessageCircle size={16} />}
-               Doulia Connect Global
-               <ArrowRight size={12} className="group-hover:translate-x-1 transition-transform" />
-            </button>
+            <div>
+              <h1 className="text-4xl font-black text-slate-950 tracking-tighter">DOULIA <span className="text-red-500">Love</span></h1>
+              <p className="text-slate-400 font-bold uppercase tracking-[0.2em] text-[10px]">Programme de Fidélisation & Relation Patient</p>
+            </div>
+          </div>
+        </motion.div>
+        
+        <div className="bg-white border border-slate-100 p-2 rounded-2xl flex gap-1 shadow-sm">
+          <div className="px-5 py-3 bg-red-50 text-red-600 rounded-xl flex items-center gap-2">
+            <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+            <span className="text-[10px] font-black uppercase tracking-widest">Suivi Post-Consultation</span>
+          </div>
+        </div>
+      </header>
 
-         </div>
+      {/* Stats and Info */}
+      <div className="bg-slate-950 rounded-[3rem] p-10 text-white relative overflow-hidden border border-white/5">
+        <div className="absolute top-0 right-0 w-80 h-80 bg-red-500/10 rounded-full blur-[80px] -translate-y-1/2 translate-x-1/2" />
+        <div className="relative z-10 grid grid-cols-1 md:grid-cols-3 gap-12">
+          <div>
+            <h3 className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-4">Objectif Riverside</h3>
+            <p className="text-sm font-medium leading-relaxed italic">&quot;Prendre soin de nos patients même après qu&apos;ils aient quitté nos murs. C&apos;est ça l&apos;amour Riverside.&quot;</p>
+          </div>
+          <div>
+            <h3 className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-4">Méthode</h3>
+            <p className="text-sm font-medium">Un suivi personnalisé via l&apos;IA pour garantir une récupération optimale et renforcer le lien de confiance.</p>
+          </div>
+          <div className="flex items-center gap-6">
+            <div className="text-center">
+              <p className="text-4xl font-black text-white">{consultations.length}</p>
+              <p className="text-[9px] font-black text-slate-400 uppercase tracking-tight mt-1">Patients récents</p>
+            </div>
+            <div className="h-12 w-[1px] bg-white/10" />
+            <div className="text-center">
+              <p className="text-4xl font-black text-red-500">48h</p>
+              <p className="text-[9px] font-black text-slate-400 uppercase tracking-tight mt-1">Fenêtre de suivi</p>
+            </div>
+          </div>
+        </div>
       </div>
 
-      {/* AI Message Confirmation Modal */}
+      {/* Main List */}
+      <div className="bg-white border border-slate-100 rounded-[3rem] overflow-hidden shadow-xl shadow-slate-200/50">
+        <div className="p-10 border-b border-slate-50 flex items-center justify-between">
+          <h2 className="text-xs font-black text-slate-950 uppercase tracking-[0.3em] flex items-center gap-3">
+            <User size={16} className="text-red-500" /> Patients à contacter
+          </h2>
+          <div className="relative">
+            <Search size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input 
+              type="text"
+              placeholder="Rechercher..."
+              className="pl-12 pr-6 py-3 bg-slate-50 border border-transparent rounded-xl text-[11px] font-bold uppercase transition-all focus:bg-white focus:border-red-200 outline-none w-64"
+            />
+          </div>
+        </div>
+
+        <div className="divide-y divide-slate-50">
+          {loading ? (
+            <div className="p-20 text-center space-y-6">
+              <Loader2 size={40} className="text-red-500 animate-spin mx-auto opacity-20" />
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Chargement de la base patients...</p>
+            </div>
+          ) : consultations.length === 0 ? (
+            <div className="p-20 text-center">
+              <p className="text-[11px] font-black text-slate-400 uppercase tracking-widest italic">Aucun patient récent à suivre</p>
+            </div>
+          ) : (
+            consultations.map((consult, idx) => (
+              <motion.div 
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: idx * 0.05 }}
+                key={consult.id} 
+                className="p-8 flex items-center justify-between hover:bg-slate-50/80 transition-all group"
+              >
+                <div className="flex items-center gap-8">
+                  <div className="w-16 h-16 rounded-2xl bg-white border border-slate-100 flex items-center justify-center font-black text-slate-400 group-hover:scale-105 transition-all shadow-sm">
+                    {consult.patients.nom_complet.charAt(0)}
+                  </div>
+                  <div className="space-y-2">
+                    <h3 className="text-lg font-black text-slate-950 tracking-tighter">{consult.patients.nom_complet}</h3>
+                    <div className="flex items-center gap-4">
+                      <span className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase">
+                        <MessageCircle size={12} /> {consult.motif_visite}
+                      </span>
+                      <span className="w-1 h-1 rounded-full bg-slate-200" />
+                      <span className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase">
+                        <Calendar size={12} /> {new Date(consult.created_at).toLocaleDateString()}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-4">
+                  <button 
+                    onClick={() => handleGenerateMessage(consult)}
+                    disabled={generatingId !== null}
+                    className="px-8 py-4 bg-slate-950 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-800 transition-all active:scale-95 flex items-center gap-3 disabled:opacity-50 shadow-lg shadow-slate-200"
+                  >
+                    {generatingId === consult.id ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
+                    Générer DOULIA Love
+                  </button>
+                </div>
+              </motion.div>
+            ))
+          )}
+        </div>
+      </div>
+
+      {/* Message Modal */}
       <AnimatePresence>
         {selectedMessage && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-             <motion.div 
-               initial={{ opacity: 0 }}
-               animate={{ opacity: 1 }}
-               exit={{ opacity: 0 }}
-               onClick={() => setSelectedMessage(null)}
-               className="absolute inset-0 bg-slate-900/60 backdrop-blur-md"
-             />
-             <motion.div 
-               initial={{ opacity: 0, scale: 0.9, y: 20 }}
-               animate={{ opacity: 1, scale: 1, y: 0 }}
-               exit={{ opacity: 0, scale: 0.9, y: 20 }}
-               className="relative w-full max-w-lg bg-white rounded-[3rem] shadow-2xl overflow-hidden border border-pink-100"
-             >
-                <div className="p-10 space-y-8">
-                   <div className="flex items-center justify-between">
-                     <div className="flex items-center gap-3">
-                        <div className="w-12 h-12 bg-pink-50 rounded-2xl flex items-center justify-center text-pink-500">
-                           <Sparkles size={24} />
-                        </div>
-                        <div>
-                           <h2 className="text-xl font-black text-slate-900 uppercase tracking-tighter">Message IA Généré</h2>
-                           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Vérifiez avant l&apos;envoi</p>
-                        </div>
-                     </div>
-                   </div>
-
-                   <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100 relative">
-                      <MessageCircle className="absolute -top-3 -left-3 text-pink-200" size={32} />
-                      <textarea
-                        value={selectedMessage.message}
-                        onChange={(e) => setSelectedMessage({ ...selectedMessage, message: e.target.value })}
-                        className="w-full bg-transparent border-none outline-none text-sm font-bold text-slate-700 leading-relaxed resize-none h-32"
-                      />
-                   </div>
-
-                   <div className="flex gap-4">
-                      <button 
-                        onClick={() => setSelectedMessage(null)}
-                        className="flex-1 py-5 text-xs font-black uppercase text-slate-400 hover:text-slate-600 transition-colors"
-                      >
-                        Annuler
-                      </button>
-                      <button 
-                         onClick={confirmAndSend}
-                         disabled={processing === selectedMessage.patientId}
-                         className="flex-[2] bg-pink-600 text-white py-5 rounded-[2rem] font-black uppercase tracking-widest text-xs shadow-xl shadow-pink-100 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-3"
-                      >
-                         {processing === selectedMessage.patientId ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
-                         Envoyer WhatsApp
-                      </button>
-                   </div>
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-8 bg-slate-900/40 backdrop-blur-md">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="bg-white w-full max-w-2xl rounded-[3.5rem] shadow-2xl relative overflow-hidden flex flex-col"
+            >
+              {/* WhatsApp Style Header */}
+              <div className="bg-[#075E54] p-10 text-white flex items-center justify-between">
+                <div className="flex items-center gap-6">
+                  <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center font-black text-2xl">
+                    {selectedMessage.patientName.charAt(0)}
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-black tracking-tight">{selectedMessage.patientName}</h3>
+                    <p className="text-xs font-bold text-white/70 uppercase tracking-widest">Riverside Client Follow-up</p>
+                  </div>
                 </div>
-             </motion.div>
+                <button 
+                  onClick={() => setSelectedMessage(null)}
+                  className="w-12 h-12 bg-white/10 hover:bg-white/20 rounded-2xl flex items-center justify-center transition-all"
+                >
+                  <Search size={20} className="rotate-45" />
+                </button>
+              </div>
+
+              {/* Message Content */}
+              <div className="p-12 bg-[#E5DDD5] flex-1 overflow-y-auto">
+                <div className="flex flex-col gap-8">
+                  <div className="bg-white p-8 rounded-2xl rounded-tl-none shadow-sm relative max-w-[85%] self-start animate-in fade-in slide-in-from-left duration-500">
+                    <p className="text-base text-slate-800 leading-relaxed font-medium whitespace-pre-wrap">
+                      {selectedMessage.text}
+                    </p>
+                    <span className="text-[10px] font-black text-slate-400 mt-4 block text-right uppercase">Just Now • Riverside AI</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="p-10 border-t border-slate-100 bg-white flex items-center gap-6">
+                <button 
+                  onClick={() => copyToClipboard(selectedMessage.text)}
+                  className="flex-1 py-5 bg-slate-950 text-white rounded-3xl font-black text-sm uppercase tracking-widest hover:bg-slate-800 transition-all active:scale-95 flex items-center justify-center gap-4 shadow-xl"
+                >
+                  {copied ? <Check size={20} className="text-emerald-400" /> : <Copy size={20} />}
+                  {copied ? "Message Copié !" : "Copier le message"}
+                </button>
+                <button 
+                  onClick={() => setSelectedMessage(null)}
+                  className="px-10 py-5 bg-slate-50 text-slate-400 rounded-3xl font-black text-sm uppercase tracking-widest hover:bg-slate-100 transition-all"
+                >
+                  Fermer
+                </button>
+              </div>
+            </motion.div>
           </div>
         )}
       </AnimatePresence>
-
-      {/* Patients Feed */}
-      <div className="space-y-6">
-        <div className="flex items-center justify-between border-b border-slate-100 pb-6 px-4">
-           <h2 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2">
-             <Heart size={14} className="text-pink-500" />
-             Patients Cibles (Sorties & Recouvrement)
-           </h2>
-           <span className="text-[10px] font-black text-slate-400 uppercase italic">Mis à jour en temps réel</span>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-           {loading ? (
-             <div className="col-span-full p-20 flex flex-col items-center justify-center gap-4 text-slate-300">
-               <Loader2 className="animate-spin" size={32} />
-               <p className="text-[10px] font-black uppercase">Initialisation du flux Love...</p>
-             </div>
-           ) : patients.length === 0 ? (
-             <div className="col-span-full p-20 text-center opacity-30 italic font-bold uppercase text-slate-400 tracking-widest">
-                Aucun patient à contacter pour le moment
-             </div>
-           ) : (
-             patients.map((p) => (
-               <motion.div 
-                 layout
-                 key={p.id}
-                 className="bg-white p-6 rounded-3xl border border-slate-100 hover:border-pink-200 transition-all group flex items-center justify-between gap-4"
-               >
-                 <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 bg-pink-50 rounded-2xl flex items-center justify-center text-pink-500 overflow-hidden relative">
-                       <Users size={20} />
-                       <div className="absolute inset-0 bg-gradient-to-tr from-pink-500/10 to-transparent group-hover:rotate-12 transition-transform" />
-                    </div>
-                    <div>
-                       <h3 className="text-sm font-black text-slate-900 uppercase tracking-tighter">{p.nom_complet}</h3>
-                       <div className="flex items-center gap-2 mt-1">
-                          <Phone size={10} className="text-slate-300" />
-                          <span className="text-[10px] font-bold text-slate-400">{p.telephone}</span>
-                          {p.dette > 0 && (
-                            <>
-                              <span className="w-1 h-1 bg-slate-200 rounded-full" />
-                              <span className="text-[9px] font-black text-pink-600 bg-pink-50 px-2 py-0.5 rounded-full uppercase tracking-tighter flex items-center gap-1">
-                                <AlertTriangle size={8} /> Reste : {p.dette.toLocaleString()} F
-                              </span>
-                            </>
-                          )}
-                       </div>
-                    </div>
-                 </div>
-
-                 <div className="flex items-center gap-3">
-                    {p.last_comm && (
-                      <div className="flex flex-col items-end">
-                         <span className="text-[7px] font-black text-emerald-500 uppercase flex items-center gap-1">
-                           <CheckCircle size={8} /> Envoyé
-                         </span>
-                         <span className="text-[7px] font-bold text-slate-300 uppercase">{p.last_comm}</span>
-                      </div>
-                    )}
-                    <button 
-                      onClick={() => triggerDouliaConnect(p.id)}
-                      disabled={processing === p.id}
-                      className={cn(
-                        "w-10 h-10 rounded-xl flex items-center justify-center transition-all active:scale-90",
-                        p.last_comm 
-                          ? "bg-slate-50 text-slate-300 cursor-default" 
-                          : "bg-slate-900 text-white shadow-lg shadow-slate-200 hover:bg-pink-600 hover:shadow-pink-100"
-                      )}
-                    >
-                      {processing === p.id ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
-                    </button>
-                 </div>
-               </motion.div>
-             ))
-           )}
-        </div>
-      </div>
-
-      {/* Advanced Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-         <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 space-y-4">
-            <div className="w-12 h-12 bg-emerald-50 rounded-2xl flex items-center justify-center text-emerald-500">
-               <CheckCircle size={20} />
-            </div>
-            <div>
-               <p className="text-2xl font-black text-slate-900 tracking-tighter">94%</p>
-               <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Taux de Satisfaction</p>
-            </div>
-         </div>
-         <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 space-y-4">
-            <div className="w-12 h-12 bg-blue-50 rounded-2xl flex items-center justify-center text-blue-500">
-               <Clock size={20} />
-            </div>
-            <div>
-               <p className="text-2xl font-black text-slate-900 tracking-tighter">2.4h</p>
-               <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Temps de Réponse</p>
-            </div>
-         </div>
-         <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 space-y-4 overflow-hidden relative group">
-            <div className="w-12 h-12 bg-pink-50 rounded-2xl flex items-center justify-center text-pink-500 relative z-10">
-               <Heart size={20} />
-            </div>
-            <div className="relative z-10">
-               <p className="text-2xl font-black text-slate-900 tracking-tighter">Connecté</p>
-               <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1 flex items-center gap-1">
-                 DOULIA WhatsApp API <ExternalLink size={10} />
-               </p>
-            </div>
-            <div className="absolute -right-4 -bottom-4 w-24 h-24 bg-pink-50 rounded-full group-hover:scale-150 transition-transform duration-500 opacity-50" />
-         </div>
-      </div>
     </div>
   );
 }
