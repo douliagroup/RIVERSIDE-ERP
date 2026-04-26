@@ -15,6 +15,7 @@ import {
   Loader2
 } from "lucide-react";
 import { motion } from "motion/react";
+import Image from "next/image";
 import { supabase } from "@/src/lib/supabase";
 import { cn } from "@/src/lib/utils";
 import NewAdmissionModal from "@/src/components/NewAdmissionModal";
@@ -117,29 +118,45 @@ export default function DashboardPage() {
     <div className="space-y-8">
       {/* Header section section */}
       <header className="mb-10 flex flex-col md:flex-row md:items-end justify-between gap-6 relative">
-        <div className="space-y-1">
-          <motion.h1 
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            className="text-4xl font-black text-slate-900 tracking-tight"
+        <div className="flex items-center gap-6">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="w-20 h-20 bg-white rounded-3xl shadow-xl shadow-red-100 flex items-center justify-center border border-slate-50 overflow-hidden"
           >
-            Dashboard <span className="text-riverside-red">Global</span>
-          </motion.h1>
-          <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.2 }}
-            className="flex items-center gap-3"
-          >
-            <p className="text-[11px] text-slate-400 uppercase tracking-[0.2em] font-black flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              Riverside Medical Center • Douala
-            </p>
-            <span className="h-4 w-[1px] bg-slate-200" />
-            <p className="text-[11px] text-slate-500 font-bold uppercase tracking-widest">
-              {mounted ? new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }) : '...'}
-            </p>
+             <Image 
+               src="https://i.postimg.cc/jj9x2wr9/92953051_100850928268975_2573263542966812672_n.png" 
+               alt="Riverside Logo" 
+               width={64}
+               height={64}
+               referrerPolicy="no-referrer"
+               className="w-16 h-16 object-contain"
+             />
           </motion.div>
+          <div className="space-y-1">
+            <motion.h1 
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              className="text-4xl font-black text-slate-900 tracking-tight"
+            >
+              Dashboard <span className="text-riverside-red">Global</span>
+            </motion.h1>
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.2 }}
+              className="flex items-center gap-3"
+            >
+              <p className="text-[11px] text-slate-400 uppercase tracking-[0.2em] font-black flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                Riverside Medical Center • Douala
+              </p>
+              <span className="h-4 w-[1px] bg-slate-200" />
+              <p className="text-[11px] text-slate-500 font-bold uppercase tracking-widest">
+                {mounted ? new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }) : '...'}
+              </p>
+            </motion.div>
+          </div>
         </div>
         <motion.button 
           whileHover={{ scale: 1.02, translateY: -2 }}

@@ -57,8 +57,11 @@ export default function TresoreriePage() {
   const [stocks, setStocks] = useState<any[]>([]);
   const [selectedStockId, setSelectedStockId] = useState("");
   
+  const [pendingTransactions, setPendingTransactions] = useState<any[]>([]);
+  
   // Selection states
   const [selectedSejour, setSelectedSejour] = useState<Sejour | null>(null);
+  const [selectedTransaction, setSelectedTransaction] = useState<any | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [cart, setCart] = useState<Acte[]>([]);
 
@@ -79,6 +82,15 @@ export default function TresoreriePage() {
 
       if (sejoursError) throw sejoursError;
       setSejours(sejoursData || []);
+
+      // 1b. Récupérer les transactions en attente (Liaison Médicale)
+      const { data: pendingData } = await supabase
+        .from('transactions_caisse')
+        .select('*, patients(id, nom_complet, type_assurance)')
+        .eq('statut_paiement', 'En attente')
+        .order('created_at', { ascending: false });
+      
+      setPendingTransactions(pendingData || []);
 
       // 2. Récupérer le catalogue des actes
       const { data: catalogueData, error: catalogueError } = await supabase
@@ -121,6 +133,7 @@ export default function TresoreriePage() {
   };
 
   const calculateTotal = () => {
+    if (selectedTransaction) return selectedTransaction.montant_total;
     if (!selectedSejour) return 0;
     const isCashOnly = selectedSejour.patients?.type_assurance === "Cash";
     
@@ -130,39 +143,76 @@ export default function TresoreriePage() {
   };
 
   const handleValidate = async () => {
-    if (!selectedSejour || cart.length === 0) return;
+    if (!selectedSejour && !selectedTransaction) return;
+    if (!selectedTransaction && cart.length === 0) return;
 
     setSubmitting(true);
     try {
       const total = calculateTotal();
       const verse = montantVerse ? parseFloat(montantVerse) : total;
       const reste = Math.max(0, total - verse);
-      const description = cart.map(item => item.nom_acte).join(", ");
+      const description = selectedTransaction 
+        ? selectedTransaction.description 
+        : cart.map(item => item.nom_acte).join(", ");
 
-      // 1. Enregistrer la transaction
-      const { error: txError } = await supabase
-        .from('transactions_caisse')
-        .insert([{
-          type_flux: 'Revenu - Patient',
-          montant_total: total,
-          montant_verse: verse,
-          reste_a_payer: reste,
-          description: `Facturation [${paymentMode}] patient: ${selectedSejour.patients?.nom_complet}. Actes: ${description}`,
-          statut_paiement: reste > 0 ? 'Partiel' : 'Payé',
-          patient_id: selectedSejour.patient_id
-        }]);
+      // 1. Enregistrer ou Mettre à jour la transaction
+      if (selectedTransaction) {
+        const { error: txUpdError } = await supabase
+          .from('transactions_caisse')
+          .update({
+            montant_verse: verse,
+            reste_a_payer: reste,
+            statut_paiement: reste > 0 ? 'Partiel' : 'Payé'
+          })
+          .eq('id', selectedTransaction.id);
+        if (txUpdError) throw txUpdError;
+      } else {
+        const { error: txError } = await supabase
+          .from('transactions_caisse')
+          .insert([{
+            type_flux: 'Revenu - Patient',
+            montant_total: total,
+            montant_verse: verse,
+            reste_a_payer: reste,
+            description: `Facturation [${paymentMode}] patient: ${selectedSejour?.patients?.nom_complet}. Actes: ${description}`,
+            statut_paiement: reste > 0 ? 'Partiel' : 'Payé',
+            patient_id: selectedSejour?.patient_id
+          }]);
+        if (txError) throw txError;
+      }
 
-      if (txError) throw txError;
+      // 2. Mettre à jour le statut du séjour si applicable
+      if (selectedSejour) {
+        await supabase
+          .from('sejours_actifs')
+          .update({ statut: 'Terminé' })
+          .eq('id', selectedSejour.id);
+      }
 
-      // 2. Mettre à jour le statut du séjour
-      const { error: updError } = await supabase
-        .from('sejours_actifs')
-        .update({ statut: 'Terminé' })
-        .eq('id', selectedSejour.id);
+      // 3. Décrémentation AUTOMATIQUE des stocks
+      // On cherche les articles du panier dans la pharmacie et les stocks généraux
+      const itemsToDecrement = selectedTransaction ? [selectedTransaction.description] : cart.map(item => item.nom_acte);
+      
+      for (const itemName of itemsToDecrement) {
+        // Tentative de trouver le médicament correspondant (recherche floue simple)
+        const { data: pharmItems } = await supabase
+          .from('stocks_pharmacie')
+          .select('*')
+          .ilike('nom', `%${itemName}%`)
+          .limit(1);
+        
+        if (pharmItems && pharmItems.length > 0) {
+          const item = pharmItems[0];
+          if (item.quantite > 0) {
+            await supabase
+              .from('stocks_pharmacie')
+              .update({ quantite: item.quantite - 1 })
+              .eq('id', item.id);
+          }
+        }
+      }
 
-      if (updError) throw updError;
-
-      // 3. Décrémenter le stock si sélectionné
+      // 4. Décrémenter le stock manuel si sélectionné (legacy support)
       if (selectedStockId) {
         const itemToDec = stocks.find(s => s.id === selectedStockId);
         if (itemToDec && itemToDec.quantite_actuelle > 0) {
@@ -179,6 +229,7 @@ export default function TresoreriePage() {
         setCart([]);
         setMontantVerse("");
         setSelectedSejour(null);
+        setSelectedTransaction(null);
         setSelectedStockId("");
         fetchInitialData();
       }, 3000);
@@ -287,7 +338,40 @@ export default function TresoreriePage() {
               className="bg-white p-8 rounded-[2rem] border border-slate-200 shadow-xl shadow-slate-100 transition-all duration-500"
             >
               <div className="flex items-center justify-between mb-6">
-                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Sélectionner un Patient</label>
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">En attente de paiement (Médical)</label>
+                <div className="flex items-center gap-2">
+                   <div className="w-2 h-2 bg-riverside-red rounded-full animate-pulse" />
+                   <span className="text-[10px] text-riverside-red font-black uppercase">{pendingTransactions.length} FACTURES</span>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+                 {pendingTransactions.map(pt => (
+                   <button
+                    key={pt.id}
+                    onClick={() => {
+                      setSelectedTransaction(pt);
+                      setSelectedSejour(null);
+                      setCart([]);
+                    }}
+                    className={cn(
+                      "p-4 rounded-2xl border text-left transition-all",
+                      selectedTransaction?.id === pt.id 
+                        ? "bg-riverside-red border-riverside-red text-white shadow-lg" 
+                        : "bg-slate-50 border-slate-100 text-slate-600 hover:bg-white hover:border-slate-300"
+                    )}
+                   >
+                     <p className="text-xs font-black uppercase">{pt.patients?.nom_complet}</p>
+                     <p className="text-[8px] font-bold opacity-60 mt-1">{pt.description}</p>
+                     <p className="text-sm font-black mt-2">{pt.montant_total.toLocaleString()} FCFA</p>
+                   </button>
+                 ))}
+                 {pendingTransactions.length === 0 && (
+                   <p className="col-span-2 text-[10px] font-bold text-slate-300 uppercase py-4">Aucune facture médicale en attente</p>
+                 )}
+              </div>
+
+              <div className="flex items-center justify-between mb-6 pt-6 border-t border-slate-100">
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Saisie Manuelle (File d&apos;attente)</label>
                 <span className="text-[10px] bg-slate-100 px-2 py-1 rounded text-slate-400 font-black">{sejours.length} EN ATTENTE</span>
               </div>
               <select 
@@ -295,6 +379,7 @@ export default function TresoreriePage() {
                 onChange={(e) => {
                   const s = sejours.find(x => x.id === e.target.value);
                   setSelectedSejour(s || null);
+                  setSelectedTransaction(null);
                 }}
                 className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-riverside-red/20 focus:border-riverside-red outline-none transition-all text-sm font-bold appearance-none cursor-pointer"
               >
@@ -400,19 +485,21 @@ export default function TresoreriePage() {
                 </div>
               </div>
 
-              {selectedSejour ? (
+              {selectedTransaction || selectedSejour ? (
                 <div className="mb-8 p-6 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
                   <div className="flex items-center justify-between mb-4">
                     <p className="text-[10px] uppercase text-slate-400 font-black tracking-widest">Client</p>
                     <span className={cn(
                       "px-2 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-tighter",
-                      selectedSejour.patients?.type_assurance === "Cash" ? "bg-amber-100 text-amber-600" : "bg-blue-600 text-white"
+                      (selectedTransaction?.patients?.type_assurance || selectedSejour?.patients?.type_assurance) === "Cash" ? "bg-amber-100 text-amber-600" : "bg-blue-600 text-white"
                     )}>
-                      {selectedSejour.patients?.type_assurance || 'Privé'}
+                      {selectedTransaction?.patients?.type_assurance || selectedSejour?.patients?.type_assurance || 'Privé'}
                     </span>
                   </div>
-                  <p className="text-lg font-black text-slate-900 tracking-tight">{selectedSejour.patients?.nom_complet}</p>
-                  <p className="text-[10px] text-slate-400 font-bold mt-1">ID: {selectedSejour.id.slice(0, 8)}</p>
+                  <p className="text-lg font-black text-slate-900 tracking-tight">
+                    {selectedTransaction?.patients?.nom_complet || selectedSejour?.patients?.nom_complet}
+                  </p>
+                  <p className="text-[10px] text-slate-400 font-bold mt-1">Ref: {selectedTransaction?.id?.slice(0, 8) || selectedSejour?.id?.slice(0, 8)}</p>
                 </div>
               ) : (
                 <div className="mb-8 p-10 border-2 border-dashed border-slate-100 rounded-3xl flex flex-col items-center justify-center text-center bg-slate-50/50">

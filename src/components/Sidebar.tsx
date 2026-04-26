@@ -14,7 +14,11 @@ import {
   Menu,
   FileText,
   Megaphone,
-  Package
+  Package,
+  Stethoscope,
+  Calendar,
+  Pill,
+  MessageCircle
 } from "lucide-react";
 import Image from "next/image";
 import { cn } from "@/src/lib/utils";
@@ -22,14 +26,18 @@ import { motion, AnimatePresence } from "motion/react";
 import { useAuth } from "@/src/context/AuthContext";
 
 const menuItems = [
-  { icon: LayoutDashboard, label: "Dashboard", href: "/", roles: ['patron', 'comptable', 'major', 'caissier', 'personnel'] },
+  { icon: LayoutDashboard, label: "Dashboard", href: "/", roles: ['patron', 'comptable', 'major', 'caissier', 'personnel', 'communication', 'accueil'] },
+  { icon: Users, label: "Admission", href: "/patients", roles: ['patron', 'major', 'caissier', 'accueil'] },
+  { icon: Stethoscope, label: "Médical", href: "/medical", roles: ['patron', 'personnel', 'major'] },
+  { icon: Calendar, label: "Planning", href: "/planning", roles: ['patron', 'personnel', 'major', 'accueil'] },
+  { icon: Pill, label: "Pharmacie", href: "/pharmacie", roles: ['patron', 'personnel', 'major', 'comptable'] },
   { icon: Wallet, label: "Trésorerie", href: "/tresorerie", roles: ['patron', 'caissier'] },
-  { icon: Users, label: "Admission", href: "/patients", roles: ['patron', 'major', 'caissier'] },
   { icon: ShieldCheck, label: "Administration", href: "/administration", roles: ['patron', 'major'] },
   { icon: Package, label: "Inventaire", href: "/admin/stocks", roles: ['patron', 'major'] },
   { icon: Activity, label: "Patron (Insight)", href: "/patron", roles: ['patron'] },
   { icon: FileText, label: "Comptabilité", href: "/comptable", roles: ['patron', 'comptable'] },
   { icon: Megaphone, label: "Community", href: "/cm", roles: ['patron', 'comptable'] },
+  { icon: MessageCircle, label: "DOULIA Love", href: "/doulia-love", roles: ['patron', 'communication'] },
 ];
 
 export default function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
@@ -80,6 +88,18 @@ export default function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
               className={cn("px-1.5 py-0.5 rounded text-[7px] font-black uppercase transition-all whitespace-nowrap", userRole === 'personnel' ? "bg-slate-400 text-white" : "bg-slate-100 text-slate-400")}
             >
               Staff
+            </button>
+            <button 
+              onClick={() => setUserRole('communication')}
+              className={cn("px-1.5 py-0.5 rounded text-[7px] font-black uppercase transition-all whitespace-nowrap", userRole === 'communication' ? "bg-pink-600 text-white" : "bg-slate-100 text-slate-400")}
+            >
+              Com
+            </button>
+            <button 
+              onClick={() => setUserRole('accueil')}
+              className={cn("px-1.5 py-0.5 rounded text-[7px] font-black uppercase transition-all whitespace-nowrap", userRole === 'accueil' ? "bg-orange-600 text-white" : "bg-slate-100 text-slate-400")}
+            >
+              Accueil
             </button>
         </div>
       )}

@@ -1,6 +1,6 @@
 {
   "name": "Riverside ERP",
-  "description": "Système de Gestion Intégré (ERP) pour Riverside Medical Center - Modernité, Précision, Soin.",
+  "description": "ERP Médical Intelligent pour Riverside Medical Center. Inclut Clinical Copilot (IA Vocale), Liaison Totale Caisse/Stock et Community Manager IA.",
   "requestFramePermissions": [],
   "majorCapabilities": []
 }

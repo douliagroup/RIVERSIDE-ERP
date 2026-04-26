@@ -21,7 +21,11 @@ export function middleware(request: NextRequest) {
     '/cm': ['patron', 'comptable'],
     '/comptable': ['patron', 'comptable'],
     '/admin/stocks': ['patron', 'major'],
-    '/administration': ['patron', 'major']
+    '/administration': ['patron', 'major'],
+    '/medical': ['personnel', 'patron', 'major'],
+    '/planning': ['personnel', 'accueil', 'patron', 'major'],
+    '/pharmacie': ['personnel', 'comptable', 'patron', 'major'],
+    '/doulia-love': ['patron', 'communication', 'cm']
   };
 
   // Check if current path starts with any protected prefix
