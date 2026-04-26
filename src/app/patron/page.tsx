@@ -90,7 +90,7 @@ export default function PatronInsight() {
           .from('comptabilite_manuelle')
           .select('montant')
           .eq('date_operation', today)
-          .eq('type', 'Entrée');
+          .eq('flux', 'ENTREE');
         
         const caManual = manualData?.reduce((acc, curr) => acc + (curr.montant || 0), 0) || 0;
 

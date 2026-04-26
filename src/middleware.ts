@@ -2,10 +2,20 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
 export function middleware(request: NextRequest) {
-  const role = request.cookies.get('riverside_role')?.value || 'personnel';
+  const role = request.cookies.get('riverside_role')?.value;
   const path = request.nextUrl.pathname;
 
-  // Protected paths and their required roles
+  // 1. Allow public paths
+  if (path === '/login' || path.startsWith('/api/auth')) {
+    return NextResponse.next();
+  }
+
+  // 2. Redirect to login if not authenticated (no role cookie)
+  if (!role) {
+    return NextResponse.redirect(new URL('/login', request.url));
+  }
+
+  // 3. Protected paths and their required roles
   const protections: { [key: string]: string[] } = {
     '/patron': ['patron'],
     '/cm': ['patron', 'comptable'],
@@ -30,10 +40,6 @@ export function middleware(request: NextRequest) {
 // See "Matching Paths" below to learn more
 export const config = {
   matcher: [
-    '/patron/:path*',
-    '/cm/:path*',
-    '/comptable/:path*',
-    '/admin/stocks/:path*',
-    '/administration/:path*',
+    '/((?!_next/static|_next/image|favicon.ico).*)',
   ],
 };

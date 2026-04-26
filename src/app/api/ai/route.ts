@@ -8,11 +8,11 @@ export async function POST(req: Request) {
     // Initialisation Gemini
     const geminiKey = process.env.RIVERSIDE_GEMINI_API_KEY;
     if (!geminiKey) {
-      return NextResponse.json({ error: "500: Clé API IA (Gemini) non configurée" }, { status: 500 });
+      return NextResponse.json({ error: 'Clé manquante' }, { status: 500 });
     }
 
     const genAI = new GoogleGenerativeAI(geminiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
 
     // Simulation de recherche Tavily contextuelle (puisque nous n'avons pas la clé de l'utilisateur ici)
     // Dans une version de production, nous ferions un appel fetch à https://api.tavily.com/search

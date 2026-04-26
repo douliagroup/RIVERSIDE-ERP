@@ -46,8 +46,14 @@ export default function LoginPage() {
         <div className="absolute bottom-0 left-0 w-96 h-96 bg-black/10 rounded-full -ml-48 -mb-48 blur-3xl" />
         
         <div className="relative z-10 text-white space-y-8 max-w-md">
-          <div className="w-24 h-24 bg-white rounded-3xl flex items-center justify-center shadow-2xl">
-            <Heart className="text-riverside-red fill-riverside-red" size={48} />
+          <div className="w-24 h-24 bg-white rounded-3xl flex items-center justify-center shadow-2xl relative overflow-hidden p-2">
+            <Image 
+              src="https://i.postimg.cc/jj9x2wr9/92953051_100850928268975_2573263542966812672_n.png"
+              alt="Logo Riverside"
+              fill
+              className="object-cover"
+              referrerPolicy="no-referrer"
+            />
           </div>
           <div className="space-y-4">
             <h1 className="text-5xl font-black tracking-tighter leading-none">RIVERSIDE<br/>MEDICAL CENTER</h1>

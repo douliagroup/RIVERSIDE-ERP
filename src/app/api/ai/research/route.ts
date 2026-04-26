@@ -19,28 +19,26 @@ export async function POST(req: Request) {
     const geminiKey = process.env.RIVERSIDE_GEMINI_API_KEY;
     const tavilyKey = process.env.TAVILY_API_KEY;
 
-    if (!geminiKey) {
-      return NextResponse.json({ error: "500: Clé API IA (Gemini) non configurée" }, { status: 500 });
+    if (!geminiKey || !tavilyKey) {
+      return NextResponse.json({ error: 'Clé manquante' }, { status: 500 });
     }
 
     // 3. Recherche Tavily
     let searchResults = "Aucune donnée de recherche web disponible.";
-    if (tavilyKey) {
-      try {
-        const tvly = tavily({ apiKey: tavilyKey });
-        const searchResponse = await tvly.search(prompt, {
-          searchDepth: "advanced",
-          maxResults: 5,
-        });
-        searchResults = JSON.stringify(searchResponse.results);
-      } catch (tavErr) {
-        console.error("Tavily Search Error:", tavErr);
-      }
+    try {
+      const tvly = tavily({ apiKey: tavilyKey });
+      const searchResponse = await tvly.search(prompt, {
+        searchDepth: "advanced",
+        maxResults: 5,
+      });
+      searchResults = JSON.stringify(searchResponse.results);
+    } catch (tavErr) {
+      console.error("Tavily Search Error:", tavErr);
     }
 
     // 4. Synthèse Gemini
     const genAI = new GoogleGenerativeAI(geminiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
 
     const context = `
       Tu es "Riverside Intelligence V3", l'IA stratégique du Riverside Medical Center à Douala.

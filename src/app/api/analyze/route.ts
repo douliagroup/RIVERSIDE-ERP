@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/src/lib/supabaseAdmin';
-import { GoogleGenAI } from '@google/genai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 export async function POST(req: Request) {
   try {
@@ -40,13 +40,11 @@ export async function POST(req: Request) {
     const apiKey = process.env.RIVERSIDE_GEMINI_API_KEY;
     
     if (!apiKey) {
-      return NextResponse.json({ 
-        error: "500: Clé API IA (Gemini) non configurée" 
-      }, { status: 500 });
+      return NextResponse.json({ error: 'Clé manquante' }, { status: 500 });
     }
 
-    const genAI = new GoogleGenAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" }); // Utilisation de 1.5-flash pour une stabilité accrue
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
 
     const prompt = `
       Tu es un expert en stratégie hospitalière pour Riverside Medical Center à Douala.

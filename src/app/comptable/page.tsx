@@ -23,7 +23,7 @@ interface Entry {
   date_operation: string;
   libelle: string;
   montant: number;
-  type: "Entrée" | "Sortie";
+  flux: "ENTREE" | "SORTIE";
   created_at: string;
 }
 
@@ -62,11 +62,11 @@ export default function AccountingPage() {
     libelle: "",
     categorie: "Prestations Espèces",
     montant: "",
-    type: "Entrée" as "Entrée" | "Sortie"
+    flux: "ENTREE" as "ENTREE" | "SORTIE"
   });
 
   const summary = entries.reduce((acc, curr) => {
-    if (curr.type === "Entrée") acc.entrees += curr.montant;
+    if (curr.flux === "ENTREE") acc.entrees += curr.montant;
     else acc.sorties += curr.montant;
     acc.solde = acc.entrees - acc.sorties;
     return acc;
@@ -117,8 +117,9 @@ export default function AccountingPage() {
       setForm({
         date_operation: new Date().toISOString().split('T')[0],
         libelle: "",
+        categorie: "Prestations Espèces",
         montant: "",
-        type: "Entrée"
+        flux: "ENTREE"
       });
       fetchData();
     } catch (err) {
@@ -184,15 +185,15 @@ export default function AccountingPage() {
                   <div>
                     <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1.5 ml-1">Flux</label>
                     <select 
-                      value={form.type}
-                      onChange={e => setForm({...form, type: e.target.value as "Entrée" | "Sortie"})}
+                      value={form.flux}
+                      onChange={e => setForm({...form, flux: e.target.value as "ENTREE" | "SORTIE"})}
                       className={cn(
                         "w-full p-3 border rounded-xl text-xs font-black uppercase outline-none transition-all",
-                        form.type === "Entrée" ? "bg-emerald-50 border-emerald-100 text-emerald-600" : "bg-red-50 border-red-100 text-red-600"
+                        form.flux === "ENTREE" ? "bg-emerald-50 border-emerald-100 text-emerald-600" : "bg-red-50 border-red-100 text-red-600"
                       )}
                     >
-                      <option value="Entrée">ENTRÉE (+)</option>
-                      <option value="Sortie">SORTIE (-)</option>
+                      <option value="ENTREE">ENTRÉE (+)</option>
+                      <option value="SORTIE">SORTIE (-)</option>
                     </select>
                   </div>
                 </div>
@@ -279,9 +280,9 @@ export default function AccountingPage() {
                       <div className="flex items-center gap-4">
                         <div className={cn(
                           "w-9 h-9 rounded-xl flex items-center justify-center transition-transform group-hover:scale-110",
-                          item.type === "Entrée" ? "bg-emerald-50 text-emerald-600" : "bg-red-50 text-red-600"
+                          item.flux === "ENTREE" ? "bg-emerald-50 text-emerald-600" : "bg-red-50 text-red-600"
                         )}>
-                          {item.type === "Entrée" ? <Plus size={14} /> : <ArrowDownRight size={14} />}
+                          {item.flux === "ENTREE" ? <Plus size={14} /> : <ArrowDownRight size={14} />}
                         </div>
                         <div>
                           <div className="flex items-center gap-2 mb-0.5">
@@ -294,9 +295,9 @@ export default function AccountingPage() {
                       <div className="text-right">
                         <p className={cn(
                           "text-sm font-black",
-                          item.type === "Entrée" ? "text-emerald-600" : "text-red-600"
+                          item.flux === "ENTREE" ? "text-emerald-600" : "text-red-600"
                         )}>
-                          {item.type === "Entrée" ? "+" : "-"} {item.montant.toLocaleString()}
+                          {item.flux === "ENTREE" ? "+" : "-"} {item.montant.toLocaleString()}
                         </p>
                         <p className="text-[7px] font-black text-slate-300 uppercase italic">FCFA</p>
                       </div>
