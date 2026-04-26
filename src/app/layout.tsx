@@ -18,7 +18,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <AuthProvider>
         <body className="flex h-screen m-0 bg-slate-50 font-sans antialiased overflow-hidden selection:bg-riverside-red/10 selection:text-riverside-red">
           {/* Menu latéral fixe avec état retractable */}
-          {pathname !== '/login' && (
+          {pathname !== '/login' && pathname !== '/' && (
             <aside 
               className={cn(
                 "h-screen border-r border-slate-200 bg-white flex-shrink-0 transition-all duration-300 ease-in-out z-50",

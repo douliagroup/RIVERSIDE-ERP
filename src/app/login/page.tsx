@@ -114,7 +114,7 @@ export default function LoginPage() {
             <button 
               type="submit"
               disabled={loading}
-              className="w-full px-8 py-3.5 bg-riverside-red text-white rounded-xl font-black uppercase tracking-widest shadow-lg shadow-red-100 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-3 disabled:opacity-50 text-[11px]"
+              className="w-full px-6 py-2.5 bg-riverside-red text-white rounded-xl font-black uppercase tracking-widest shadow-lg shadow-red-100 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-3 disabled:opacity-50 text-[10px]"
             >
               {loading ? <Loader2 size={16} className="animate-spin" /> : <>Se Connecter <ArrowRight size={14} /></>}
             </button>

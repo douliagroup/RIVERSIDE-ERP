@@ -88,7 +88,7 @@ export default function TresoreriePage() {
         .from('transactions_caisse')
         .select('*, patients(id, nom_complet, type_assurance)')
         .eq('statut_paiement', 'En attente')
-        .order('created_at', { ascending: false });
+        .order('date_transaction', { ascending: false });
       
       setPendingTransactions(pendingData || []);
 

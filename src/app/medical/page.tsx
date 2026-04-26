@@ -211,6 +211,14 @@ export default function MedicalPage() {
   const handleConsultation = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedPatient) return;
+    
+    // CRITICAL: Ensure we have a valid stay ID
+    if (!selectedPatient.id) {
+      console.error("ERREUR FATALE: ID du séjour manquant.");
+      alert("Impossible de valider la consultation : le lien avec le séjour actif est rompu. Veuillez rafraîchir la liste.");
+      return;
+    }
+
     setSubmitting(true);
 
     try {
@@ -223,12 +231,12 @@ export default function MedicalPage() {
         poids: formData.poids
       };
 
-      // 2. Save Consultation with the EXACT schema requested
+      // 2. Save Consultation with the ID of the current stay (sejours_actifs)
       const { data: consultData, error: consultError } = await supabase
         .from('consultations')
         .insert([{
           sejour_id: selectedPatient.id,
-          patient_id: selectedPatient.patient_id, // We use the patient UUID for patient_id column
+          patient_id: selectedPatient.patient_id, 
           medecin_id: user.id,
           constantes: constantesObject,
           notes_cliniques: formData.notes_cliniques,
@@ -240,8 +248,8 @@ export default function MedicalPage() {
         .single();
 
       if (consultError) {
-        console.error("ERREUR CRITIQUE CONSULTATION:", consultError);
-        alert(`Erreur lors de l'enregistrement de la consultation: ${consultError.message}`);
+        console.error("ERREUR BASE DE DONNÉES CONSULTATION:", consultError);
+        alert(`Erreur technique [Consultation]: ${consultError.message}`);
         throw consultError;
       }
 
@@ -256,12 +264,11 @@ export default function MedicalPage() {
           reste_a_payer: 10000,
           description: `Consultation: ${selectedPatient.motif_visite}. Patient: ${selectedPatient.patients.nom_complet}`,
           statut_paiement: 'En attente',
-          created_at: new Date().toISOString()
+          date_transaction: new Date().toISOString()
         }]);
 
       if (caisseError) {
         console.error("Erreur création transaction caisse:", caisseError);
-        // We don't block for caisse error but we log it
       }
 
       // 3. Update status to 'En caisse' as requested
@@ -272,8 +279,7 @@ export default function MedicalPage() {
 
       if (updateError) {
         console.error("Erreur mise à jour séjour:", updateError);
-        alert(`Erreur mise à jour statut séjour: ${updateError.message}`);
-        throw updateError;
+        throw new Error(`Échec de la mise à jour du statut patient: ${updateError.message}`);
       }
 
       setSuccess(true);
@@ -292,10 +298,9 @@ export default function MedicalPage() {
       }, 2000);
 
     } catch (err: any) {
-      console.error("Failed to process consultation:", err);
-      // Ensure the user sees the error if not already alerted
-      if (!err.message?.includes("Erreur lors de l'enregistrement")) {
-        alert(`Échec de la soumission: ${err.message || "Erreur inconnue"}`);
+      console.error("Transaction failed:", err);
+      if (!err.message?.includes("technique")) {
+        alert(err.message || "Une erreur inattendue est survenue lors de la validation.");
       }
     } finally {
       setSubmitting(false);

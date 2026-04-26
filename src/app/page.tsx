@@ -159,7 +159,7 @@ export default function DashboardPage() {
             >
               <p className="text-[10px] text-slate-400 uppercase tracking-widest font-black flex items-center gap-2">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
-                RIVERSIDE MEDICAL • DOUALA
+                DASHBOARD OPÉRATIONNEL
               </p>
               <span className="h-3 w-[1px] bg-slate-200" />
               <p className="text-[10px] text-slate-500 font-bold uppercase tracking-[0.2em]">
