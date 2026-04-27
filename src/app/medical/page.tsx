@@ -215,26 +215,18 @@ export default function MedicalPage() {
     // CRITICAL: Ensure we have a valid stay ID
     if (!selectedPatient.id) {
       console.error("ERREUR FATALE: ID du séjour manquant.");
-      alert("Impossible de valider la consultation : le lien avec le séjour actif est rompu. Veuillez rafraîchir la liste.");
+      alert("Impossible de valider la consultation : le lien avec le séjour actif est rompu.");
       return;
     }
 
     setSubmitting(true);
 
     try {
-      if (!user) throw new Error("Vous devez être connecté pour valider une consultation.");
+      if (!user) throw new Error("Authentification requise pour cette opération.");
 
-      // 1. Constantes as JSON Object
-      const constantesObject = {
-        tension: formData.tension,
-        temperature: formData.temperature,
-        poids: formData.poids
-      };
-
-      // 2. Save Consultation with the ID of the current stay (sejours_actifs)
+      // 1. Sauvegarde de la Consultation
+      console.log("Flux Médical - 1. Enregistrement Consultation...");
       
-      // RÉSOLUTION DE L'ID DU MÉDECIN (Personnel)
-      // On cherche l'ID dans la table 'personnel' correspondant à l'email connecté
       const { data: personnelData } = await supabase
         .from('personnel')
         .select('id')
@@ -242,9 +234,6 @@ export default function MedicalPage() {
         .single();
       
       const realMedecinId = personnelData?.id || null;
-      if (!realMedecinId) {
-        console.warn("PROFIL MÉDECIN NON LIÉ: Aucun personnel trouvé pour cet email.");
-      }
 
       const { data: consultData, error: consultError } = await supabase
         .from('consultations')
@@ -252,56 +241,59 @@ export default function MedicalPage() {
           sejour_id: selectedPatient.id,
           patient_id: selectedPatient.patient_id, 
           medecin_id: realMedecinId,
-          constantes: constantesObject,
+          constantes: {
+            tension: formData.tension,
+            temperature: formData.temperature,
+            poids: formData.poids
+          },
           notes_cliniques: formData.notes_cliniques,
           diagnostic: formData.diagnostic,
-          ordonnance: formData.ordonnance,
-          created_at: new Date().toISOString()
+          ordonnance: formData.ordonnance
         }])
         .select()
         .single();
 
       if (consultError) {
-        console.error("ERREUR BASE DE DONNÉES CONSULTATION:", consultError);
-        alert(`Erreur technique [Consultation]: ${consultError.message}`);
-        throw consultError;
+        console.error("Erreur Médical (Consultation):", consultError.message, consultError.details);
+        throw new Error(`Échec enregistrement consultation: ${consultError.message}`);
       }
 
-      // 1b. Génération AUTOMATIQUE de la facture en caisse
-      const montantConsultation = 10000; // Prix standard par défaut
+      console.log("Flux Médical - 2. Consultation sauvegardée, création transaction...");
+
+      // 2. Création de la Transaction en Caisse
+      const montantConsultation = 10000; 
       const { error: caisseError } = await supabase
         .from('transactions_caisse')
         .insert([{
           patient_id: selectedPatient.patient_id,
-          sejour_id: selectedPatient.id, // Liaison avec le séjour actif
+          sejour_id: selectedPatient.id,
           type_flux: 'Revenu - Patient',
           montant_total: montantConsultation,
           montant_verse: 0,
           reste_a_payer: montantConsultation,
-          description: `CONSULTATION MÉDICALE: ${selectedPatient.motif_visite}. Suivi par Dr. ${user.email?.split('@')[0]}`,
+          description: `CONSULTATION: ${selectedPatient.motif_visite}. Dr ${user.email?.split('@')[0]}`,
           statut_paiement: 'En attente',
           date_transaction: new Date().toISOString(),
           methode_paiement: 'Espèces'
         }]);
 
       if (caisseError) {
-        console.error("ERREUR GÉNÉRATION FACTURE CAISSE:", caisseError);
-        alert("Consultation enregistrée avec succès, mais la facture n'a pas pu être envoyée à la caisse. Veuillez informer le comptable.");
-      } else {
-        console.log("Facture envoyée à la caisse avec succès.");
+        console.error("Erreur Médical (Caisse):", caisseError.message, caisseError.details);
+        // On ne bloque pas tout si la caisse échoue mais on alerte
+        alert("Attention : Consultation enregistrée, mais échec de transmission à la caisse.");
       }
 
-      // 3. Update status to 'En caisse' as requested
+      // 3. Mise à jour du statut du séjour
       const { error: updateError } = await supabase
         .from('sejours_actifs')
         .update({ statut: 'En caisse' }) 
         .eq('id', selectedPatient.id);
 
       if (updateError) {
-        console.error("Erreur mise à jour séjour:", updateError);
-        throw new Error(`Échec de la mise à jour du statut patient: ${updateError.message}`);
+        console.error("Erreur Médical (Statut Séjour):", updateError.message);
       }
 
+      console.log("Flux Médical - Opération terminée avec succès.");
       setSuccess(true);
       setTimeout(() => {
         setSuccess(false);
@@ -318,10 +310,8 @@ export default function MedicalPage() {
       }, 2000);
 
     } catch (err: any) {
-      console.error("Transaction failed:", err);
-      if (!err.message?.includes("technique")) {
-        alert(err.message || "Une erreur inattendue est survenue lors de la validation.");
-      }
+      console.error("Flux Médical - ERREUR GLOBALE:", err);
+      alert(err.message || "Une erreur est survenue.");
     } finally {
       setSubmitting(false);
     }

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { 
   Users, 
   Clock, 
@@ -12,7 +13,8 @@ import {
   Filter,
   CheckCircle2,
   AlertCircle,
-  Loader2
+  Loader2,
+  TrendingUp
 } from "lucide-react";
 import { motion } from "motion/react";
 import Image from "next/image";
@@ -21,29 +23,43 @@ import { cn } from "@/src/lib/utils";
 import NewAdmissionModal from "@/src/components/NewAdmissionModal";
 
 export default function DashboardPage() {
+  const router = useRouter();
   const [mounted, setMounted] = useState(false);
   const [sejours, setSejours] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [caDuJour, setCaDuJour] = useState(0);
 
-  const fetchSejours = async () => {
+  const fetchData = async () => {
     try {
       setLoading(true);
       
-      const { data, error } = await supabase
-        .from('sejours_actifs')
-        .select(`
-          *,
-          patients (
-            nom_complet,
-            type_assurance
-          )
-        `)
-        .order('created_at', { ascending: false });
+      const [sejoursRes, transactionsRes] = await Promise.all([
+        supabase
+          .from('sejours_actifs')
+          .select(`
+            *,
+            patients (
+              nom_complet,
+              type_assurance
+            )
+          `)
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('transactions_caisse')
+          .select('montant_verse, date_transaction')
+          .gte('date_transaction', new Date().toISOString().split('T')[0])
+      ]);
 
-      if (error) throw error;
-      setSejours(data || []);
+      if (sejoursRes.error) throw sejoursRes.error;
+      setSejours(sejoursRes.data || []);
+      
+      if (transactionsRes.data) {
+        const total = transactionsRes.data.reduce((acc, curr) => acc + (curr.montant_verse || 0), 0);
+        setCaDuJour(total);
+      }
+
     } catch (err: any) {
       console.error("[Dashboard] Erreur fatale lors de la récupération:", err);
       setError("Erreur de connexion à la base de données.");
@@ -54,14 +70,14 @@ export default function DashboardPage() {
 
   useEffect(() => {
     setMounted(true);
-    fetchSejours();
+    fetchData();
 
     const channel = supabase
       .channel('schema-db-changes')
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'sejours_actifs' },
-        () => fetchSejours()
+        () => fetchData()
       )
       .subscribe();
 
@@ -83,34 +99,34 @@ export default function DashboardPage() {
     { 
       label: "En Attente", 
       value: sejours.filter(s => s.statut === "En attente").length.toString(), 
-      change: null, 
       icon: Users, 
       color: "text-orange-500", 
-      bg: "bg-orange-50" 
+      bg: "bg-orange-50",
+      link: "/tresorerie"
     },
     { 
       label: "Consultations", 
-      value: sejours.filter(s => s.statut === "En consultation" || s.statut === "En cours").length.toString(), 
-      change: null, 
+      value: sejours.filter(s => s.statut === "En consultation" || s.statut === "En cours" || s.statut === "En Examen").length.toString(), 
       icon: Calendar, 
       color: "text-emerald-500", 
-      bg: "bg-emerald-50" 
+      bg: "bg-emerald-50",
+      link: "/medical"
+    },
+    { 
+      label: "CA du Jour", 
+      value: caDuJour.toLocaleString() + " F", 
+      icon: TrendingUp, 
+      color: "text-blue-600", 
+      bg: "bg-blue-50",
+      link: "/tresorerie"
     },
     { 
       label: "Urgences", 
       value: sejours.filter(s => s.priorite === "Urgence" || s.statut === "Urgent").length.toString().padStart(2, '0'), 
-      change: null, 
       icon: AlertCircle, 
       color: "text-riverside-red", 
-      bg: "bg-red-50" 
-    },
-    { 
-      label: "Taux d'Occupation", 
-      value: "85%", 
-      change: null, 
-      icon: Clock, 
-      color: "text-blue-600", 
-      bg: "bg-blue-50" 
+      bg: "bg-red-50",
+      link: "/medical"
     },
   ];
 
@@ -186,16 +202,21 @@ export default function DashboardPage() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: idx * 0.1 }}
-            className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex flex-col group transition-all hover:shadow-xl hover:border-slate-200"
+            onClick={() => router.push(stat.link)}
+            className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex flex-col group transition-all hover:shadow-xl hover:border-slate-200 cursor-pointer active:scale-95"
           >
             <span className="text-slate-400 text-[9px] font-black uppercase tracking-[0.2em] mb-4">{stat.label}</span>
             <div className="flex items-end justify-between">
               <div className="flex items-end gap-2">
-                <span className="text-3xl font-black text-slate-900 tracking-tighter tabular-nums leading-none">{stat.value}</span>
+                <span className="text-2xl font-black text-slate-900 tracking-tighter tabular-nums leading-none">{stat.value}</span>
               </div>
               <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center transition-transform group-hover:scale-110 shadow-inner border border-transparent", stat.bg, stat.color)}>
                 <stat.icon size={20} />
               </div>
+            </div>
+            <div className="mt-4 pt-4 border-t border-slate-50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-between text-[8px] font-black uppercase text-riverside-red tracking-widest">
+               Accéder au module
+               <ChevronRight size={10} />
             </div>
           </motion.div>
         ))}

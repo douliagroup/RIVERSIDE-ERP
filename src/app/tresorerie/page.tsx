@@ -144,8 +144,22 @@ export default function TresoreriePage() {
   };
 
   const handleValidate = async () => {
-    if (!selectedSejour && !selectedTransaction) return;
-    if (!selectedTransaction && cart.length === 0) return;
+    if (!selectedSejour && !selectedTransaction) {
+      alert("Veuillez sélectionner un séjour ou une transaction.");
+      return;
+    }
+    
+    if (!selectedTransaction && cart.length === 0) {
+      alert("Le panier est vide.");
+      return;
+    }
+
+    const transactionId = selectedTransaction?.id;
+    if (selectedTransaction && !transactionId) {
+      console.error("ERREUR FATALE : ID de transaction indéfini.");
+      alert("Erreur interne : ID de transaction manquant.");
+      return;
+    }
 
     setSubmitting(true);
     try {
@@ -157,6 +171,8 @@ export default function TresoreriePage() {
         ? selectedTransaction.description 
         : cart.map(item => item.nom_acte).join(", ");
 
+      console.log("Flux Trésorerie - 1. Validation Paiement...");
+
       // 1. Enregistrer ou Mettre à jour la transaction
       if (selectedTransaction) {
         const { error: txUpdError } = await supabase
@@ -166,7 +182,7 @@ export default function TresoreriePage() {
             reste_a_payer: reste,
             statut_paiement: isPaid ? 'Payé' : 'Partiel'
           })
-          .eq('id', selectedTransaction.id);
+          .eq('id', transactionId);
         if (txUpdError) throw txUpdError;
 
         // Si la transaction est liée à un séjour (via la colonne sejour_id qu'on vient d'ajouter dans le flux)
@@ -199,27 +215,31 @@ export default function TresoreriePage() {
           .eq('id', selectedSejour.id);
       }
 
-      // 3. Décrémentation AUTOMATIQUE des stocks
-      // On cherche les articles du panier dans la pharmacie et les stocks généraux
-      const itemsToDecrement = selectedTransaction ? [selectedTransaction.description] : cart.map(item => item.nom_acte);
-      
-      for (const itemName of itemsToDecrement) {
-        // Tentative de trouver le médicament correspondant (recherche floue simple)
-        const { data: pharmItems } = await supabase
-          .from('stocks_pharmacie')
-          .select('*')
-          .ilike('nom', `%${itemName}%`)
-          .limit(1);
+      // 2. Décrémentation des stocks (Isolée pour ne pas bloquer l'encaissement)
+      try {
+        const itemsToDecrement = selectedTransaction ? [selectedTransaction.description] : cart.map(item => item.nom_acte);
         
-        if (pharmItems && pharmItems.length > 0) {
-          const item = pharmItems[0];
-          if (item.quantite > 0) {
-            await supabase
-              .from('stocks_pharmacie')
-              .update({ quantite: item.quantite - 1 })
-              .eq('id', item.id);
+        for (const itemName of itemsToDecrement) {
+          if (!itemName) continue;
+          // Tentative de trouver le médicament avec une recherche robuste
+          const { data: pharmItems } = await supabase
+            .from('stocks_pharmacie')
+            .select('*')
+            .ilike('nom', `%${itemName.split(':')[0].trim()}%`)
+            .limit(1);
+          
+          if (pharmItems && pharmItems.length > 0) {
+            const item = pharmItems[0];
+            if (item.quantite > 0) {
+              await supabase
+                .from('stocks_pharmacie')
+                .update({ quantite: item.quantite - 1 })
+                .eq('id', item.id);
+            }
           }
         }
+      } catch (stockErr) {
+        console.warn("Erreur stock (non-bloquante):", stockErr);
       }
 
       // 4. Décrémenter le stock manuel si sélectionné (legacy support)
@@ -244,9 +264,9 @@ export default function TresoreriePage() {
         fetchInitialData();
       }, 3000);
 
-    } catch (err) {
-      console.error("Erreur validation:", err);
-      alert("Erreur lors de l'encaissement.");
+    } catch (err: any) {
+      console.error("Flux Trésorerie - ERREUR GLOBALE:", err);
+      alert(`Erreur d'encaissement : ${err.message || "Veuillez réessayer"}`);
     } finally {
       setSubmitting(false);
     }

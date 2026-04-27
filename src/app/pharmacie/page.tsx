@@ -73,18 +73,29 @@ export default function PharmaciePage() {
     e.preventDefault();
     setSubmitting(true);
     try {
-      const { error } = await supabase
-        .from('stocks_pharmacie')
-        .insert([{
-          nom: form.nom,
-          categorie: form.categorie,
-          quantite: parseInt(form.quantite),
-          seuil_alerte: parseInt(form.seuil_alerte),
-          unite: form.unite,
-          prix_unitaire: parseFloat(form.prix_unitaire) || 0
-        }]);
+      // Nettoyage et validation des données (Pattern Administration)
+      const insertData = {
+        nom: form.nom,
+        categorie: form.categorie,
+        quantite: parseInt(form.quantite) || 0,
+        seuil_alerte: parseInt(form.seuil_alerte) || 0,
+        unite: form.unite,
+        prix_unitaire: parseFloat(form.prix_unitaire) || 0
+      };
 
-      if (error) throw error;
+      console.log("Flux Pharmacie - Tentative d'insertion:", insertData);
+
+      const { data, error } = await supabase
+        .from('stocks_pharmacie')
+        .insert([insertData])
+        .select();
+
+      if (error) {
+        console.error("ERREUR CRITIQUE PHARMACIE:", error.message, "| Détails:", error.details, "| Hint:", error.hint);
+        throw error;
+      }
+
+      console.log("Flux Pharmacie - Succès:", data);
       setShowAddModal(false);
       setForm({
         nom: "",
@@ -95,8 +106,9 @@ export default function PharmaciePage() {
         prix_unitaire: ""
       });
       fetchStocks();
-    } catch (err) {
-      console.error("Error adding stock:", err);
+    } catch (err: any) {
+      console.error("Erreur globale lors de l'ajout stock pharmacie:", err);
+      alert(`Erreur d'enregistrement : ${err.message || "Vérifiez la console pour plus de détails"}`);
     } finally {
       setSubmitting(false);
     }
