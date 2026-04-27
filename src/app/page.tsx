@@ -335,7 +335,7 @@ export default function DashboardPage() {
       <NewAdmissionModal 
         isOpen={isModalOpen} 
         onClose={() => setIsModalOpen(false)} 
-        onSuccess={fetchSejours}
+        onSuccess={fetchData}
       />
     </div>
   );
