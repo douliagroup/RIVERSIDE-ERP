@@ -87,7 +87,13 @@ export default function TresoreriePage() {
       // 1b. Récupérer les transactions en attente (Liaison Médicale)
       const { data: pendingData } = await supabase
         .from('transactions_caisse')
-        .select('*, patients(id, nom_complet, type_assurance)')
+        .select(`
+          *,
+          patients (
+            id,
+            nom_complet
+          )
+        `)
         .eq('statut_paiement', 'En attente')
         .order('date_transaction', { ascending: false });
       
@@ -180,7 +186,7 @@ export default function TresoreriePage() {
           .update({
             montant_verse: verse,
             reste_a_payer: reste,
-            statut_paiement: isPaid ? 'Payé' : 'Partiel'
+            statut_paiement: verse >= total ? 'Payé' : 'Partiel'
           })
           .eq('id', transactionId);
         if (txUpdError) throw txUpdError;
@@ -196,13 +202,14 @@ export default function TresoreriePage() {
         const { error: txError } = await supabase
           .from('transactions_caisse')
           .insert([{
-            type_flux: 'Revenu - Patient',
+            type_flux: 'Entrée',
             montant_total: total,
             montant_verse: verse,
             reste_a_payer: reste,
             description: `Facturation [${paymentMode}] patient: ${selectedSejour?.patients?.nom_complet}. Actes: ${description}`,
-            statut_paiement: isPaid ? 'Payé' : 'Partiel',
-            patient_id: selectedSejour?.patient_id
+            statut_paiement: verse >= total ? 'Payé' : 'Partiel',
+            patient_id: selectedSejour?.patient_id,
+            date_transaction: new Date().toISOString()
           }]);
         if (txError) throw txError;
       }
@@ -225,15 +232,15 @@ export default function TresoreriePage() {
           const { data: pharmItems } = await supabase
             .from('stocks_pharmacie')
             .select('*')
-            .ilike('nom', `%${itemName.split(':')[0].trim()}%`)
+            .ilike('nom_article', `%${itemName.split(':')[0].trim()}%`)
             .limit(1);
           
           if (pharmItems && pharmItems.length > 0) {
             const item = pharmItems[0];
-            if (item.quantite > 0) {
+            if (item.quantite_stock > 0) {
               await supabase
                 .from('stocks_pharmacie')
-                .update({ quantite: item.quantite - 1 })
+                .update({ quantite_stock: item.quantite_stock - 1 })
                 .eq('id', item.id);
             }
           }

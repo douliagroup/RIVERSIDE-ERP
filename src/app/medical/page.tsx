@@ -267,14 +267,10 @@ export default function MedicalPage() {
         .insert([{
           patient_id: selectedPatient.patient_id,
           sejour_id: selectedPatient.id,
-          type_flux: 'Revenu - Patient',
+          type_flux: 'Entrée',
           montant_total: montantConsultation,
-          montant_verse: 0,
-          reste_a_payer: montantConsultation,
-          description: `CONSULTATION: ${selectedPatient.motif_visite}. Dr ${user.email?.split('@')[0]}`,
           statut_paiement: 'En attente',
-          date_transaction: new Date().toISOString(),
-          methode_paiement: 'Espèces'
+          date_transaction: new Date().toISOString()
         }]);
 
       if (caisseError) {

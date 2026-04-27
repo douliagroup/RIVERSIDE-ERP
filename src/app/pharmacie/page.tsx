@@ -22,12 +22,12 @@ import { cn } from "@/src/lib/utils";
 
 interface StockItem {
   id: string;
-  nom: string;
+  nom_article: string;
   categorie: 'médicament' | 'intrant';
-  quantite: number;
+  quantite_stock: number;
   seuil_alerte: number;
   unite: string;
-  prix_unitaire: number;
+  prix_unitaire_vente: number;
 }
 
 export default function PharmaciePage() {
@@ -54,7 +54,7 @@ export default function PharmaciePage() {
         .from('stocks_pharmacie')
         .select('*')
         .eq('categorie', activeTab)
-        .order('nom');
+        .order('nom_article');
 
       if (error) throw error;
       setStocks(data || []);
@@ -75,12 +75,12 @@ export default function PharmaciePage() {
     try {
       // Nettoyage et validation des données (Pattern Administration)
       const insertData = {
-        nom: form.nom,
+        nom_article: form.nom,
         categorie: form.categorie,
-        quantite: parseInt(form.quantite) || 0,
+        quantite_stock: parseInt(form.quantite) || 0,
         seuil_alerte: parseInt(form.seuil_alerte) || 0,
         unite: form.unite,
-        prix_unitaire: parseFloat(form.prix_unitaire) || 0
+        prix_unitaire_vente: parseFloat(form.prix_unitaire) || 0
       };
 
       console.log("Flux Pharmacie - Tentative d'insertion:", insertData);
@@ -118,7 +118,7 @@ export default function PharmaciePage() {
     try {
       await supabase
         .from('stocks_pharmacie')
-        .update({ quantite: current + delta })
+        .update({ quantite_stock: current + delta })
         .eq('id', id);
       fetchStocks();
     } catch (err) {
@@ -197,10 +197,10 @@ export default function PharmaciePage() {
                key={item.id}
                className={cn(
                  "bg-white p-6 rounded-2xl border transition-all hover:shadow-xl hover:border-slate-200 group relative overflow-hidden",
-                 item.quantite <= item.seuil_alerte ? "border-red-100 bg-red-50/5" : "border-slate-100"
+                 item.quantite_stock <= item.seuil_alerte ? "border-red-100 bg-red-50/5" : "border-slate-100"
                )}
              >
-               {item.quantite <= item.seuil_alerte && (
+               {item.quantite_stock <= item.seuil_alerte && (
                  <div className="absolute top-4 right-4 text-riverside-red">
                     <AlertTriangle size={14} className="animate-pulse" />
                  </div>
@@ -212,27 +212,27 @@ export default function PharmaciePage() {
                   </div>
                   
                   <div>
-                     <h3 className="text-sm font-black text-slate-900 tracking-tight uppercase truncate leading-none">{item.nom}</h3>
-                     <p className="text-[9px] font-bold text-slate-400 mt-2 uppercase tracking-widest">{item.unite} • {item.prix_unitaire.toLocaleString()} FCFA</p>
+                     <h3 className="text-sm font-black text-slate-900 tracking-tight uppercase truncate leading-none">{item.nom_article}</h3>
+                     <p className="text-[9px] font-bold text-slate-400 mt-2 uppercase tracking-widest">{item.unite} • {item.prix_unitaire_vente.toLocaleString()} FCFA</p>
                   </div>
 
                   <div className="flex items-end justify-between border-t border-slate-50 pt-4">
                      <div>
                         <p className={cn(
                           "text-xl font-black tracking-tighter tabular-nums",
-                          item.quantite <= item.seuil_alerte ? "text-riverside-red" : "text-slate-900"
-                        )}>{item.quantite}</p>
+                          item.quantite_stock <= item.seuil_alerte ? "text-riverside-red" : "text-slate-900"
+                        )}>{item.quantite_stock}</p>
                         <p className="text-[8px] font-black text-slate-300 uppercase tracking-widest">En Stock</p>
                      </div>
                      <div className="flex items-center gap-1.5 bg-slate-50 p-1 rounded-lg border border-slate-100 shadow-inner">
                         <button 
-                          onClick={() => updateQuantity(item.id, item.quantite, -1)}
+                          onClick={() => updateQuantity(item.id, item.quantite_stock, -1)}
                           className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-white hover:text-riverside-red transition-all shadow-sm border border-transparent hover:border-slate-100"
                         >
                           <ArrowDownRight size={12} />
                         </button>
                         <button 
-                          onClick={() => updateQuantity(item.id, item.quantite, 1)}
+                          onClick={() => updateQuantity(item.id, item.quantite_stock, 1)}
                           className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-white hover:text-emerald-500 transition-all shadow-sm border border-transparent hover:border-slate-100"
                         >
                           <Plus size={12} />
@@ -240,10 +240,10 @@ export default function PharmaciePage() {
                      </div>
                   </div>
 
-                 {item.quantite <= item.seuil_alerte && (
+                 {item.quantite_stock <= item.seuil_alerte && (
                    <div className="pt-2">
                       <div className="w-full bg-red-100 h-1 rounded-full overflow-hidden">
-                         <div className="bg-riverside-red h-full" style={{ width: `${(item.quantite / item.seuil_alerte) * 50}%` }} />
+                         <div className="bg-riverside-red h-full" style={{ width: `${(item.quantite_stock / item.seuil_alerte) * 50}%` }} />
                       </div>
                       <p className="text-[7px] font-black text-riverside-red uppercase mt-1 tracking-tighter italic">Stock Critique : Réapprovisionner Immédiatement</p>
                    </div>
