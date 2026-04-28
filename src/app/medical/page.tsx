@@ -448,17 +448,17 @@ export default function MedicalPage() {
                 className="bg-white rounded-2xl border border-slate-100 shadow-xl shadow-slate-200/20 overflow-hidden"
               >
                 {/* Board Header section */}
-                <div className="p-10 bg-slate-900 text-white flex items-center justify-between relative overflow-hidden">
+                <div className="p-10 bg-white border-b border-slate-100 text-slate-900 flex items-center justify-between relative overflow-hidden">
                    <div className="absolute top-0 right-0 w-64 h-64 bg-riverside-red/5 rounded-full -mr-32 -mt-32 blur-3xl" />
                    <div className="flex items-center gap-6 relative z-10">
-                      <div className="w-16 h-16 bg-white/5 rounded-2xl flex items-center justify-center border border-white/5 group-hover:scale-105 transition-transform">
-                         <User size={32} className="text-white" />
+                      <div className="w-16 h-16 bg-slate-50 rounded-2xl flex items-center justify-center border border-slate-100 group-hover:scale-105 transition-transform shadow-inner">
+                         <User size={32} className="text-slate-400" />
                       </div>
                       <div>
-                         <h3 className="text-2xl font-black tracking-tighter uppercase">{selectedPatient.patients.nom_complet}</h3>
+                         <h3 className="text-2xl font-black tracking-tighter uppercase text-slate-900">{selectedPatient.patients.nom_complet}</h3>
                          <div className="flex items-center gap-3 mt-1">
-                            <span className="text-white/40 text-[9px] font-black uppercase tracking-widest">{selectedPatient.patients.telephone}</span>
-                            <span className="w-1 h-1 bg-white/20 rounded-full" />
+                            <span className="text-slate-400 text-[9px] font-black uppercase tracking-widest">{selectedPatient.patients.telephone}</span>
+                            <span className="w-1 h-1 bg-slate-100 rounded-full" />
                             <span className="text-riverside-red text-[9px] font-black uppercase tracking-widest">Dossier Actif</span>
                          </div>
                       </div>
@@ -466,7 +466,7 @@ export default function MedicalPage() {
                    
                    <div className="flex items-center gap-4 relative z-10">
                       {/* Sub-tabs Navigation */}
-                      <div className="hidden xl:flex bg-white/5 p-1 rounded-xl border border-white/10 mr-4">
+                      <div className="hidden xl:flex bg-slate-50 p-1 rounded-xl border border-slate-200 mr-4">
                          {[
                            { id: 'consultation', label: 'Consul.', icon: Stethoscope },
                            { id: 'history', label: 'Hist.', icon: FileText },
@@ -479,8 +479,8 @@ export default function MedicalPage() {
                              className={cn(
                                "flex items-center gap-2 px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all",
                                activeSubTab === tab.id 
-                                 ? "bg-white text-slate-900 shadow-lg" 
-                                 : "text-white/40 hover:text-white"
+                                 ? "bg-white text-slate-900 shadow-md border border-slate-100" 
+                                 : "text-slate-400 hover:text-slate-900"
                              )}
                            >
                              <tab.icon size={11} />
@@ -496,7 +496,7 @@ export default function MedicalPage() {
                           onClick={toggleListening}
                           className={cn(
                             "w-16 h-16 rounded-full flex items-center justify-center transition-all relative group shadow-2xl active:scale-90",
-                            isListening ? "bg-riverside-red shadow-red-500/50" : "bg-white/5 hover:bg-white/10 border border-white/5"
+                            isListening ? "bg-riverside-red shadow-red-500/50" : "bg-slate-50 hover:bg-slate-100 border border-slate-200"
                           )}
                         >
                           {isListening && (
@@ -506,17 +506,18 @@ export default function MedicalPage() {
                               className="absolute inset-0 bg-riverside-red rounded-full"
                             />
                           )}
-                          <Mic size={24} className={cn("relative z-10", isListening ? "text-white" : "text-white/50 group-hover:text-white transition-colors")} />
+                          <Mic size={24} className={cn("relative z-10", isListening ? "text-white" : "text-slate-400 group-hover:text-slate-600 transition-colors")} />
                         </button>
-                        <span className="text-[8px] font-black uppercase tracking-[0.2em] text-white/30">Copilot AI</span>
+                        <span className="text-[8px] font-black uppercase tracking-[0.2em] text-slate-400">Copilot AI</span>
                       </div>
 
                       {selectedPatient.patients.alertes_medicales && (
-                        <div className="bg-red-500/10 border border-red-500/20 px-4 py-2 rounded-xl flex items-center gap-3">
+                        <div className="bg-red-50 border border-red-100 px-4 py-2 rounded-xl flex items-center gap-3">
                            <AlertCircle className="text-riverside-red animate-pulse" size={16} />
-                           <span className="text-[10px] font-black text-red-100 uppercase tracking-tighter">{selectedPatient.patients.alertes_medicales}</span>
+                           <span className="text-[10px] font-black text-red-600 uppercase tracking-tighter">{selectedPatient.patients.alertes_medicales}</span>
                         </div>
                       )}
+
                    </div>
                 </div>
 
@@ -527,14 +528,14 @@ export default function MedicalPage() {
                       initial={{ height: 0, opacity: 0 }}
                       animate={{ height: "auto", opacity: 1 }}
                       exit={{ height: 0, opacity: 0 }}
-                      className="bg-slate-900 border-t border-white/5 p-4"
+                      className="bg-slate-50 border-t border-slate-100 p-4 shadow-inner"
                     >
                       <div className="flex items-center gap-4">
                         <div className="flex items-center gap-2">
                            <div className="w-2 h-2 bg-riverside-red rounded-full animate-pulse" />
-                           <span className="text-[10px] font-black text-white uppercase tracking-widest">{isListening ? "Écoute en cours..." : "Transcription terminée"}</span>
+                           <span className="text-[10px] font-black text-slate-900 uppercase tracking-widest">{isListening ? "Écoute en cours..." : "Transcription terminée"}</span>
                         </div>
-                        <p className="text-white/40 text-[11px] font-medium flex-1 italic truncate">
+                        <p className="text-slate-400 text-[11px] font-medium flex-1 italic truncate">
                           &quot;{transcription || "Commencez à parler..."}&quot;
                         </p>
                       </div>
@@ -684,7 +685,7 @@ export default function MedicalPage() {
                                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
                                      <Activity size={11} className="text-riverside-red" /> Examens Préconisés
                                    </label>
-                                   <div className="p-4 bg-slate-900 rounded-xl">
+                                   <div className="p-4 bg-slate-50 border border-slate-100 rounded-xl">
                                       <p className="text-[10px] font-mono font-bold text-emerald-400 leading-relaxed uppercase">{aiAnalysis?.examens_recommandes}</p>
                                    </div>
                                 </div>
@@ -791,12 +792,12 @@ export default function MedicalPage() {
                           </div>
 
                           {bmiInput.weight && bmiInput.height && (
-                            <div className="p-6 bg-slate-900 rounded-3xl text-center space-y-2">
-                              <p className="text-[9px] font-black text-white/40 uppercase tracking-widest">Résultat IMC</p>
-                              <div className="text-3xl font-black text-white">
+                            <div className="p-6 bg-slate-50 border border-slate-100 rounded-3xl text-center space-y-2 shadow-inner">
+                              <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Résultat IMC</p>
+                              <div className="text-3xl font-black text-slate-900">
                                 {(Number(bmiInput.weight) / ((Number(bmiInput.height)/100) ** 2)).toFixed(1)}
                               </div>
-                              <p className="text-[10px] font-black text-blue-400 uppercase tracking-tighter">
+                              <p className="text-[10px] font-black text-blue-600 uppercase tracking-tighter">
                                 {(() => {
                                   const imc = Number(bmiInput.weight) / ((Number(bmiInput.height)/100) ** 2);
                                   if (imc < 18.5) return "Insuffisance pondérale";
@@ -832,12 +833,12 @@ export default function MedicalPage() {
                           </div>
 
                           {paraInput.weight && (
-                            <div className="p-6 bg-emerald-950 rounded-3xl text-center space-y-2">
-                              <p className="text-[9px] font-black text-emerald-400/40 uppercase tracking-widest">Dose par prise recommandée</p>
-                              <div className="text-3xl font-black text-emerald-400">
+                            <div className="p-6 bg-emerald-50 border border-emerald-100 rounded-3xl text-center space-y-2">
+                              <p className="text-[9px] font-black text-emerald-600/60 uppercase tracking-widest">Dose par prise recommandée</p>
+                              <div className="text-3xl font-black text-emerald-600">
                                 {Math.round(Number(paraInput.weight) * 15)} mg
                               </div>
-                              <p className="text-[10px] font-bold text-emerald-200/50 uppercase tracking-tighter">
+                              <p className="text-[10px] font-bold text-emerald-600/70 uppercase tracking-tighter">
                                 Ne pas dépasser 4 prises par 24h (intervalle de 6h)
                               </p>
                             </div>

@@ -8,6 +8,8 @@ import { AuthProvider } from "@/src/context/AuthContext";
 import { usePathname } from "next/navigation";
 import { Menu, ChevronLeft } from "lucide-react";
 
+import { Toaster, toast } from "sonner";
+
 import { motion, AnimatePresence } from "motion/react";
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -72,6 +74,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           
           {/* Zone de contenu principale */}
           <main className="flex-1 h-screen overflow-hidden bg-slate-50 relative flex flex-col">
+            <Toaster position="top-right" expand={true} richColors />
             <div className="flex-1 overflow-y-auto overflow-x-hidden scroll-smooth scrollbar-hide">
               <AnimatePresence mode="wait">
                 <motion.div

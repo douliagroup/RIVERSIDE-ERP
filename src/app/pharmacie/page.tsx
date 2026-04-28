@@ -20,6 +20,8 @@ import { motion, AnimatePresence } from "motion/react";
 import { supabase } from "@/src/lib/supabase";
 import { cn } from "@/src/lib/utils";
 
+import { toast } from "sonner";
+
 interface StockItem {
   id: string;
   nom_article: string;
@@ -91,10 +93,12 @@ export default function PharmaciePage() {
         .select();
 
       if (error) {
-        console.error("ERREUR CRITIQUE PHARMACIE:", error.message, "| Détails:", error.details, "| Hint:", error.hint);
+        toast.error(`Erreur d'enregistrement : ${error.message}`);
+        console.error("ERREUR CRITIQUE PHARMACIE:", error);
         throw error;
       }
 
+      toast.success("L'article a été ajouté au stock avec succès.");
       console.log("Flux Pharmacie - Succès:", data);
       setShowAddModal(false);
       setForm({
@@ -108,7 +112,10 @@ export default function PharmaciePage() {
       fetchStocks();
     } catch (err: any) {
       console.error("Erreur globale lors de l'ajout stock pharmacie:", err);
-      alert(`Erreur d'enregistrement : ${err.message || "Vérifiez la console pour plus de détails"}`);
+      // Le toast est déjà affiché dans le if(error) mais on en remet un au cas où c'est une exception js
+      if (!err.message?.includes("Erreur d'enregistrement")) {
+        toast.error(`Erreur critique : ${err.message || "Vérifiez la console"}`);
+      }
     } finally {
       setSubmitting(false);
     }

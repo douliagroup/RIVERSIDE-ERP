@@ -16,6 +16,8 @@ import { motion, AnimatePresence } from "motion/react";
 import { supabase } from "@/src/lib/supabase";
 import { cn } from "@/src/lib/utils";
 
+import { toast } from "sonner";
+
 interface NewAdmissionModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -72,7 +74,9 @@ export default function NewAdmissionModal({ isOpen, onClose, onSuccess }: NewAdm
     setError(null);
 
     try {
-      // ÉTAPE A : Création du patient selon le schéma réel
+      console.log("Admission Process - Starting for:", formData.nom_complet);
+      
+      // ÉTAPE A : Création du patient
       const { data: patientData, error: patientError } = await supabase
         .from("patients")
         .insert([{
@@ -86,10 +90,15 @@ export default function NewAdmissionModal({ isOpen, onClose, onSuccess }: NewAdm
         .single();
 
       if (patientError) {
-        alert(`Erreur lors de la création du dossier patient: ${patientError.message}`);
+        toast.error(`Erreur patient: ${patientError.message}`);
+        console.error("Patient insertion error:", patientError);
         throw patientError;
       }
-      console.log("[Admission] Nouveau patient créé avec succès ID:", patientData.id);
+
+      if (!patientData) {
+        toast.error("Le patient n'a pas été retourné après l'insertion.");
+        throw new Error("No patient data returned");
+      }
 
       // ÉTAPE B : Création du séjour actif (File d'attente)
       const { error: sejourError } = await supabase
@@ -101,21 +110,23 @@ export default function NewAdmissionModal({ isOpen, onClose, onSuccess }: NewAdm
         }]);
 
       if (sejourError) {
-        alert(`Erreur lors de l'admission en file d'attente: ${sejourError.message}`);
+        toast.error(`Erreur file d'attente: ${sejourError.message}`);
+        console.error("Sejour insertion error:", sejourError);
         throw sejourError;
       }
-      console.log("[Admission] Séjour actif créé pour patient ID:", patientData.id);
 
       // Succès
+      toast.success("Admission réussie ! Le patient est en file d'attente.");
       setSuccess(true);
       setTimeout(() => {
         onSuccess?.();
         handleClose();
-      }, 2000);
+      }, 1500);
 
     } catch (err: any) {
-      console.error("[Admission] Erreur lors de la soumission:", err);
+      console.error("[Admission] Critical failure:", err);
       setError(err.message || "Une erreur est survenue lors de l'admission.");
+      toast.error(err.message || "Erreur critique lors de l'admission");
     } finally {
       setLoading(false);
     }
