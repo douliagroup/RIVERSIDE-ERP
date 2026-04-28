@@ -111,8 +111,9 @@ export default function TresoreriePage() {
       // 3. Récupérer les dettes
       const { data: dettesData, error: dettesError } = await supabase
         .from('transactions_caisse')
-        .select('*, patients(nom_complet)')
+        .select('*, patients(nom_complet, type_assurance)')
         .gt('reste_a_payer', 0)
+        .in('statut_paiement', ['En attente', 'Partiel'])
         .order('date_transaction', { ascending: false });
       
       if (dettesError) console.error("Erreur dettes:", dettesError);

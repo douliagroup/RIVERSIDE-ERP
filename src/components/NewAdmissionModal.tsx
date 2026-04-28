@@ -33,6 +33,9 @@ export default function NewAdmissionModal({ isOpen, onClose, onSuccess }: NewAdm
   const [formData, setFormData] = useState({
     nom_complet: "",
     telephone: "",
+    sexe: "M",
+    age: "",
+    quartier: "",
     type_assurance: "Cash",
     numero_assurance: "",
     alertes_medicales: "",
@@ -82,6 +85,9 @@ export default function NewAdmissionModal({ isOpen, onClose, onSuccess }: NewAdm
         .insert([{
           nom_complet: formData.nom_complet,
           telephone: formData.telephone,
+          sexe: formData.sexe,
+          age: formData.age ? parseInt(formData.age) : null,
+          quartier: formData.quartier,
           type_assurance: formData.type_assurance,
           numero_assurance: formData.numero_assurance,
           alertes_medicales: formData.alertes_medicales
@@ -138,6 +144,9 @@ export default function NewAdmissionModal({ isOpen, onClose, onSuccess }: NewAdm
     setFormData({
       nom_complet: "",
       telephone: "",
+      sexe: "M",
+      age: "",
+      quartier: "",
       type_assurance: "Cash",
       numero_assurance: "",
       alertes_medicales: "",
@@ -165,25 +174,25 @@ export default function NewAdmissionModal({ isOpen, onClose, onSuccess }: NewAdm
             animate={{ x: 0 }}
             exit={{ x: "100%" }}
             transition={{ type: "spring", damping: 25, stiffness: 200 }}
-            className="fixed right-0 top-0 h-screen w-full max-w-lg bg-white shadow-2xl z-[101] overflow-y-auto border-l border-slate-100"
+            className="fixed right-0 top-0 h-screen w-full max-w-lg bg-white shadow-2xl z-[101] flex flex-col border-l border-slate-100"
           >
-            <div className="p-8 h-full flex flex-col">
-              {/* Header */}
-              <div className="flex items-center justify-between mb-10 bg-slate-50 -m-8 p-8 border-b border-slate-100">
-                <div>
-                  <h2 className="text-xl font-black text-slate-900 tracking-tight uppercase">Admission Riverside</h2>
-                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-1">Enregistrement Patient et File d&apos;Attente</p>
-                </div>
-                <button 
-                  onClick={handleClose}
-                  className="w-10 h-10 flex items-center justify-center hover:bg-white rounded-xl transition-all border border-transparent hover:border-slate-100 shadow-sm"
-                >
-                  <X size={20} className="text-slate-400" />
-                </button>
+            {/* Header - Fixed */}
+            <div className="p-8 border-b border-slate-100 bg-slate-50 flex items-center justify-between shrink-0">
+              <div>
+                <h2 className="text-xl font-black text-slate-900 tracking-tight uppercase">Admission Riverside</h2>
+                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-1">Enregistrement Patient et File d&apos;Attente</p>
               </div>
+              <button 
+                onClick={handleClose}
+                className="w-10 h-10 flex items-center justify-center hover:bg-white rounded-xl transition-all border border-transparent hover:border-slate-100 shadow-sm"
+              >
+                <X size={20} className="text-slate-400" />
+              </button>
+            </div>
 
+            <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
               {success ? (
-                <div className="flex-1 flex flex-col items-center justify-center space-y-6 text-center">
+                <div className="h-full flex flex-col items-center justify-center space-y-6 text-center">
                   <motion.div
                     initial={{ scale: 0 }}
                     animate={{ scale: 1 }}
@@ -197,7 +206,7 @@ export default function NewAdmissionModal({ isOpen, onClose, onSuccess }: NewAdm
                   </div>
                 </div>
               ) : (
-                <form onSubmit={handleSubmit} className="flex-1 space-y-8 mt-10">
+                <form id="admission-form" onSubmit={handleSubmit} className="space-y-8">
                   {/* Section 1: Infos Patient */}
                   <div className="space-y-6">
                     <div className="flex items-center gap-3 text-[9px] font-black text-slate-900 uppercase tracking-widest pb-3 border-b border-slate-100">
@@ -240,28 +249,69 @@ export default function NewAdmissionModal({ isOpen, onClose, onSuccess }: NewAdm
                         </div>
 
                         <div className="space-y-2">
-                          <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Couverture</label>
-                          <div className="relative group">
-                            <Shield className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-riverside-red transition-colors" size={16} />
-                            <select 
-                              required
-                              name="type_assurance"
-                              value={formData.type_assurance}
-                              onChange={handleChange}
-                              className="w-full pl-12 pr-4 py-3.5 bg-slate-50 border border-slate-100 rounded-xl focus:border-riverside-red outline-none transition-all text-xs font-black uppercase tracking-tight appearance-none cursor-pointer"
-                            >
-                              <option value="Cash">CASH / PRIVÉ</option>
-                              {loadingAssurances ? (
-                                <option disabled>SYNC PARTENAIRES...</option>
-                              ) : (
-                                <>
-                                  {assurances.map(a => (
-                                    <option key={a.nom} value={a.nom}>{a.nom}</option>
-                                  ))}
-                                </>
-                              )}
-                            </select>
-                          </div>
+                          <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Sexe</label>
+                          <select 
+                            required
+                            name="sexe"
+                            value={formData.sexe}
+                            onChange={handleChange}
+                            className="w-full px-4 py-3.5 bg-slate-50 border border-slate-100 rounded-xl focus:border-riverside-red outline-none transition-all text-xs font-black tracking-tight"
+                          >
+                            <option value="M">MASCULIN</option>
+                            <option value="F">FÉMININ</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Âge</label>
+                          <input 
+                            required
+                            type="number"
+                            name="age"
+                            value={formData.age}
+                            onChange={handleChange}
+                            placeholder="EX: 29"
+                            className="w-full px-4 py-3.5 bg-slate-50 border border-slate-100 rounded-xl focus:border-riverside-red outline-none transition-all text-xs font-black tracking-tight"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Quartier</label>
+                          <input 
+                            required
+                            type="text"
+                            name="quartier"
+                            value={formData.quartier}
+                            onChange={handleChange}
+                            placeholder="EX: BONAPRISO"
+                            className="w-full px-4 py-3.5 bg-slate-50 border border-slate-100 rounded-xl focus:border-riverside-red outline-none transition-all text-xs font-black uppercase tracking-tight"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Couverture</label>
+                        <div className="relative group">
+                          <Shield className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-riverside-red transition-colors" size={16} />
+                          <select 
+                            required
+                            name="type_assurance"
+                            value={formData.type_assurance}
+                            onChange={handleChange}
+                            className="w-full pl-12 pr-4 py-3.5 bg-slate-50 border border-slate-100 rounded-xl focus:border-riverside-red outline-none transition-all text-xs font-black uppercase tracking-tight appearance-none cursor-pointer"
+                          >
+                            <option value="Cash">CASH / PRIVÉ</option>
+                            {loadingAssurances ? (
+                              <option disabled>SYNC PARTENAIRES...</option>
+                            ) : (
+                              <>
+                                {assurances.map(a => (
+                                  <option key={a.nom} value={a.nom}>{a.nom}</option>
+                                ))}
+                              </>
+                            )}
+                          </select>
                         </div>
                       </div>
 
@@ -324,37 +374,40 @@ export default function NewAdmissionModal({ isOpen, onClose, onSuccess }: NewAdm
                       <p>{error}</p>
                     </motion.div>
                   )}
-
-                  {/* Action Buttons */}
-                  <div className="pt-8 mt-auto flex gap-3">
-                    <button 
-                      type="button"
-                      onClick={handleClose}
-                      className="flex-1 py-3.5 border border-slate-100 text-slate-400 font-black text-[10px] uppercase tracking-widest rounded-lg hover:bg-slate-50 transition-all active:scale-95"
-                    >
-                      Annuler
-                    </button>
-                    <button 
-                      disabled={loading}
-                      type="submit"
-                      className="flex-[2] py-3.5 bg-riverside-red text-white font-black text-[10px] uppercase tracking-widest rounded-lg shadow-lg shadow-red-100 hover:scale-[1.02] transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-3"
-                    >
-                      {loading ? (
-                        <>
-                          <Loader2 size={16} className="animate-spin" />
-                          SYNC...
-                        </>
-                      ) : (
-                        <>
-                          <Plus size={16} />
-                          Lancer l&apos;Admission
-                        </>
-                      )}
-                    </button>
-                  </div>
                 </form>
               )}
             </div>
+
+            {/* Footer - Fixed */}
+            {!success && (
+              <div className="p-8 border-t border-slate-100 bg-white flex gap-3 shrink-0 shadow-[0_-10px_30px_-15px_rgba(0,0,0,0.1)]">
+                <button 
+                  type="button"
+                  onClick={handleClose}
+                  className="flex-1 py-4 border border-slate-100 text-slate-400 font-black text-[10px] uppercase tracking-widest rounded-xl hover:bg-slate-50 transition-all active:scale-95"
+                >
+                  Annuler
+                </button>
+                <button 
+                  form="admission-form"
+                  disabled={loading}
+                  type="submit"
+                  className="flex-[2] py-4 bg-riverside-red text-white font-black text-[10px] uppercase tracking-widest rounded-xl shadow-xl shadow-red-100 hover:scale-[1.02] transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-3"
+                >
+                  {loading ? (
+                    <>
+                      <Loader2 size={16} className="animate-spin" />
+                      SYNC...
+                    </>
+                  ) : (
+                    <>
+                      <Plus size={16} />
+                      Lancer l&apos;Admission
+                    </>
+                  )}
+                </button>
+              </div>
+            )}
           </motion.div>
         </>
       )}

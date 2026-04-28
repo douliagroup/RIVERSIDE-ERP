@@ -17,7 +17,8 @@ import {
   Mic,
   Sparkles,
   Brain,
-  AlertCircle
+  AlertCircle,
+  Shield
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { supabase } from "@/src/lib/supabase";
@@ -67,6 +68,9 @@ interface PatientWaiting {
   patients: {
     nom_complet: string;
     telephone: string;
+    sexe: string;
+    age: number;
+    quartier: string;
     alertes_medicales: string;
   };
 }
@@ -222,6 +226,9 @@ export default function MedicalPage() {
           patients (
             nom_complet,
             telephone,
+            sexe,
+            age,
+            quartier,
             alertes_medicales
           )
         `)
@@ -445,199 +452,241 @@ export default function MedicalPage() {
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 key="form"
-                className="bg-white rounded-2xl border border-slate-100 shadow-xl shadow-slate-200/20 overflow-hidden"
+                className="bg-white rounded-2xl border border-slate-100 shadow-xl shadow-slate-200/20"
               >
                 {/* Board Header section */}
-                <div className="p-10 bg-white border-b border-slate-100 text-slate-900 flex items-center justify-between relative overflow-hidden">
+                <div className="p-8 bg-white border-b border-slate-100 text-slate-900 flex flex-col gap-6 relative overflow-hidden">
                    <div className="absolute top-0 right-0 w-64 h-64 bg-riverside-red/5 rounded-full -mr-32 -mt-32 blur-3xl" />
-                   <div className="flex items-center gap-6 relative z-10">
-                      <div className="w-16 h-16 bg-slate-50 rounded-2xl flex items-center justify-center border border-slate-100 group-hover:scale-105 transition-transform shadow-inner">
-                         <User size={32} className="text-slate-400" />
+                   
+                   <div className="flex items-center justify-between relative z-10 w-full">
+                      <div className="flex items-center gap-6">
+                        <div className="w-16 h-16 bg-slate-50 rounded-2xl flex items-center justify-center border border-slate-100 shadow-inner">
+                           <User size={32} className="text-slate-400" />
+                        </div>
+                        <div>
+                           <h3 className="text-2xl font-black tracking-tighter uppercase text-slate-900">{selectedPatient.patients.nom_complet}</h3>
+                           <div className="flex items-center gap-4 mt-1.5">
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-[10px] font-black text-slate-400 uppercase">Tél:</span>
+                                <span className="text-slate-900 text-[10px] font-black tracking-tight">{selectedPatient.patients.telephone}</span>
+                              </div>
+                              <span className="w-1 h-1 bg-slate-200 rounded-full" />
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-[10px] font-black text-slate-400 uppercase">Sexe:</span>
+                                <span className="text-slate-900 text-[10px] font-black tracking-tight">{selectedPatient.patients.sexe === 'M' ? 'Homme' : 'Femme'}</span>
+                              </div>
+                              <span className="w-1 h-1 bg-slate-200 rounded-full" />
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-[10px] font-black text-slate-400 uppercase">Âge:</span>
+                                <span className="text-slate-900 text-[10px] font-black tracking-tight">{selectedPatient.patients.age} ans</span>
+                              </div>
+                              <span className="w-1 h-1 bg-slate-200 rounded-full" />
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-[10px] font-black text-slate-400 uppercase">Quartier:</span>
+                                <span className="text-slate-900 text-[10px] font-black tracking-tight uppercase">{selectedPatient.patients.quartier}</span>
+                              </div>
+                           </div>
+                        </div>
                       </div>
-                      <div>
-                         <h3 className="text-2xl font-black tracking-tighter uppercase text-slate-900">{selectedPatient.patients.nom_complet}</h3>
-                         <div className="flex items-center gap-3 mt-1">
-                            <span className="text-slate-400 text-[9px] font-black uppercase tracking-widest">{selectedPatient.patients.telephone}</span>
-                            <span className="w-1 h-1 bg-slate-100 rounded-full" />
-                            <span className="text-riverside-red text-[9px] font-black uppercase tracking-widest">Dossier Actif</span>
-                         </div>
+
+                      <div className="flex items-center gap-4">
+                        {/* Sub-tabs Navigation */}
+                        <div className="bg-slate-50 p-1.5 rounded-2xl border border-slate-100 flex gap-1">
+                          {[
+                            { id: 'consultation', label: 'CONSUL.', icon: Stethoscope },
+                            { id: 'history', label: 'HIST.', icon: FileText },
+                            { id: 'tools', label: 'OUTILS', icon: Activity }
+                          ].map(tab => (
+                            <button
+                              key={tab.id}
+                              type="button"
+                              onClick={() => setActiveSubTab(tab.id as any)}
+                              className={cn(
+                                "flex items-center gap-2 px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all",
+                                activeSubTab === tab.id 
+                                  ? "bg-white text-riverside-red shadow-lg shadow-slate-200/50 border border-slate-100" 
+                                  : "text-slate-400 hover:text-slate-600 hover:bg-slate-100/50"
+                              )}
+                            >
+                              <tab.icon size={13} />
+                              {tab.label}
+                            </button>
+                          ))}
+                        </div>
                       </div>
                    </div>
-                   
-                   <div className="flex items-center gap-4 relative z-10">
-                      {/* Sub-tabs Navigation */}
-                      <div className="hidden xl:flex bg-slate-50 p-1 rounded-xl border border-slate-200 mr-4">
-                         {[
-                           { id: 'consultation', label: 'Consul.', icon: Stethoscope },
-                           { id: 'history', label: 'Hist.', icon: FileText },
-                           { id: 'tools', label: 'Outils', icon: Activity }
-                         ].map(tab => (
-                           <button
-                             key={tab.id}
-                             type="button"
-                             onClick={() => setActiveSubTab(tab.id as any)}
-                             className={cn(
-                               "flex items-center gap-2 px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all",
-                               activeSubTab === tab.id 
-                                 ? "bg-white text-slate-900 shadow-md border border-slate-100" 
-                                 : "text-slate-400 hover:text-slate-900"
-                             )}
-                           >
-                             <tab.icon size={11} />
-                             {tab.label}
-                           </button>
-                         ))}
-                      </div>
 
-                      <div className="flex items-center gap-6">
-                         {/* AI Copilot Microphone section */}
-                      <div className="flex flex-col items-center gap-2">
-                        <button 
-                          onClick={toggleListening}
-                          className={cn(
-                            "w-16 h-16 rounded-full flex items-center justify-center transition-all relative group shadow-2xl active:scale-90",
-                            isListening ? "bg-riverside-red shadow-red-500/50" : "bg-slate-50 hover:bg-slate-100 border border-slate-200"
-                          )}
-                        >
-                          {isListening && (
-                            <motion.div 
-                              animate={{ scale: [1, 1.4, 1], opacity: [0.3, 0, 0.3] }}
-                              transition={{ repeat: Infinity, duration: 1.5 }}
-                              className="absolute inset-0 bg-riverside-red rounded-full"
-                            />
-                          )}
-                          <Mic size={24} className={cn("relative z-10", isListening ? "text-white" : "text-slate-400 group-hover:text-slate-600 transition-colors")} />
-                        </button>
-                        <span className="text-[8px] font-black uppercase tracking-[0.2em] text-slate-400">Copilot AI</span>
-                      </div>
+                   {/* Alerts and Motif row */}
+                   <div className="flex flex-wrap items-center gap-4 relative z-10 pt-2 border-t border-slate-50">
+                     <div className="bg-slate-50 border border-slate-100 px-4 py-2 rounded-xl flex items-center gap-3">
+                        <Clock className="text-slate-400" size={14} />
+                        <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">En attente depuis: {new Date(selectedPatient.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</span>
+                     </div>
 
-                      {selectedPatient.patients.alertes_medicales && (
+                     {selectedPatient.patients.alertes_medicales && (
                         <div className="bg-red-50 border border-red-100 px-4 py-2 rounded-xl flex items-center gap-3">
                            <AlertCircle className="text-riverside-red animate-pulse" size={16} />
-                           <span className="text-[10px] font-black text-red-600 uppercase tracking-tighter">{selectedPatient.patients.alertes_medicales}</span>
+                           <span className="text-[10px] font-black text-red-600 uppercase tracking-tighter">ALERTE: {selectedPatient.patients.alertes_medicales}</span>
                         </div>
-                      )}
-
+                     )}
                    </div>
                 </div>
 
-                {/* Transcription Status */}
+                {/* Transcription Status (moved below header) */}
                 <AnimatePresence>
                   {(isListening || transcription) && !aiAnalysis && (
                     <motion.div 
                       initial={{ height: 0, opacity: 0 }}
                       animate={{ height: "auto", opacity: 1 }}
                       exit={{ height: 0, opacity: 0 }}
-                      className="bg-slate-50 border-t border-slate-100 p-4 shadow-inner"
+                      className="bg-slate-900 p-4 shadow-inner"
                     >
                       <div className="flex items-center gap-4">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 shrink-0">
                            <div className="w-2 h-2 bg-riverside-red rounded-full animate-pulse" />
-                           <span className="text-[10px] font-black text-slate-900 uppercase tracking-widest">{isListening ? "Écoute en cours..." : "Transcription terminée"}</span>
+                           <span className="text-[10px] font-black text-white uppercase tracking-widest">{isListening ? "Transcription Directe" : "Texte Capturé"}</span>
                         </div>
-                        <p className="text-slate-400 text-[11px] font-medium flex-1 italic truncate">
-                          &quot;{transcription || "Commencez à parler..."}&quot;
+                        <p className="text-emerald-400 text-[11px] font-mono font-bold flex-1 italic truncate">
+                          &quot;{transcription || "Captation vocale active..."}&quot;
                         </p>
                       </div>
                     </motion.div>
-                  )}                <div className="grid grid-cols-1 xl:grid-cols-12 min-h-[600px]">
+                  )} 
+                </AnimatePresence>
+
+                <div className="grid grid-cols-1 xl:grid-cols-12 min-h-[600px]">
                   {activeSubTab === 'consultation' ? (
                     <>
                       <div className={cn(
-                        "p-8 space-y-8 transition-all duration-500",
+                        "p-8 space-y-10 transition-all duration-500",
                         aiAnalysis ? "xl:col-span-8 border-r border-slate-50" : "xl:col-span-12"
                       )}>
-                        <form onSubmit={handleConsultation} className="space-y-8">
-                          {/* Vitals */}
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                            <div className="space-y-2">
-                               <label className="text-[10px] font-black text-slate-400 uppercase ml-1 flex items-center gap-2">
-                                  <Activity size={10} /> Tension (mmHg)
+                        <form onSubmit={handleConsultation} className="space-y-10">
+                          <div className="flex items-center justify-between">
+                            <h4 className="text-lg font-black text-slate-900 uppercase tracking-tight flex items-center gap-3">
+                              <div className="w-2 h-8 bg-riverside-red rounded-full" />
+                              Nouvelle Consultation
+                            </h4>
+                            
+                            <button 
+                              type="button"
+                              onClick={toggleListening}
+                              className={cn(
+                                "flex items-center gap-3 px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all active:scale-95",
+                                isListening ? "bg-riverside-red text-white shadow-xl shadow-red-200" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                              )}
+                            >
+                              {isListening ? <Mic size={14} className="animate-pulse" /> : <Mic size={14} />}
+                              {isListening ? "ARRÊTER L'ÉCOUTE" : "SAISIE IA VOCALE"}
+                            </button>
+                          </div>
+
+                          {/* 1. Motif de Consultation */}
+                          <div className="space-y-3">
+                            <div className="flex items-center justify-between">
+                               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-2">
+                                  <FileText size={14} className="text-riverside-red" /> Motif de Consultation (Saisie IA ou Micro)
                                </label>
-                               <input 
-                                 required
-                                 type="text"
-                                 value={formData.tension}
-                                 onChange={e => setFormData({...formData, tension: e.target.value})}
-                                 placeholder="ex: 12/8"
-                                 className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl focus:border-riverside-red outline-none font-bold text-sm"
-                               />
                             </div>
-                            <div className="space-y-2">
-                               <label className="text-[10px] font-black text-slate-400 uppercase ml-1 flex items-center gap-2">
-                                  <Thermometer size={10} /> Température (°C)
-                               </label>
-                               <input 
-                                 required
-                                 type="text"
-                                 value={formData.temperature}
-                                 onChange={e => setFormData({...formData, temperature: e.target.value})}
-                                 placeholder="ex: 37"
-                                 className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl focus:border-riverside-red outline-none font-bold text-sm"
-                               />
-                            </div>
-                            <div className="space-y-2">
-                               <label className="text-[10px] font-black text-slate-400 uppercase ml-1 flex items-center gap-2">
-                                  <Weight size={10} /> Poids (kg)
-                               </label>
-                               <input 
-                                 required
-                                 type="text"
-                                 value={formData.poids}
-                                 onChange={e => setFormData({...formData, poids: e.target.value})}
-                                 placeholder="ex: 75"
-                                 className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl focus:border-riverside-red outline-none font-bold text-sm"
-                               />
+                            <textarea 
+                              required
+                              rows={3}
+                              value={formData.notes_cliniques}
+                              onChange={e => setFormData({...formData, notes_cliniques: e.target.value})}
+                              placeholder="Détaillez le motif de la visite et les premières observations..."
+                              className="w-full p-6 bg-slate-50 border border-slate-100 rounded-[2rem] focus:border-riverside-red outline-none font-bold text-sm resize-none transition-all shadow-inner placeholder:text-slate-300"
+                            />
+                          </div>
+
+                          {/* 2. Constantes */}
+                          <div className="space-y-4 bg-slate-50/50 p-8 rounded-[2rem] border border-slate-100">
+                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-2 mb-2">
+                                <Activity size={14} className="text-riverside-red" /> Constantes Vitales
+                             </label>
+                             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                              <div className="space-y-2">
+                                 <p className="text-[9px] font-black text-slate-400 uppercase ml-1">Tension (mmHg)</p>
+                                 <input 
+                                   required
+                                   type="text"
+                                   value={formData.tension}
+                                   onChange={e => setFormData({...formData, tension: e.target.value})}
+                                   placeholder="ex: 12/8"
+                                   className="w-full p-4 bg-white border border-slate-100 rounded-xl focus:border-riverside-red outline-none font-black text-sm shadow-sm"
+                                 />
+                              </div>
+                              <div className="space-y-2">
+                                 <p className="text-[9px] font-black text-slate-400 uppercase ml-1">Température (°C)</p>
+                                 <input 
+                                   required
+                                   type="text"
+                                   value={formData.temperature}
+                                   onChange={e => setFormData({...formData, temperature: e.target.value})}
+                                   placeholder="ex: 37"
+                                   className="w-full p-4 bg-white border border-slate-100 rounded-xl focus:border-riverside-red outline-none font-black text-sm shadow-sm"
+                                 />
+                              </div>
+                              <div className="space-y-2">
+                                 <p className="text-[9px] font-black text-slate-400 uppercase ml-1">Poids (kg)</p>
+                                 <input 
+                                   required
+                                   type="text"
+                                   value={formData.poids}
+                                   onChange={e => setFormData({...formData, poids: e.target.value})}
+                                   placeholder="ex: 75"
+                                   className="w-full p-4 bg-white border border-slate-100 rounded-xl focus:border-riverside-red outline-none font-black text-sm shadow-sm"
+                                 />
+                              </div>
                             </div>
                           </div>
 
-                          {/* Clinical Data */}
-                          <div className="space-y-6">
-                            <div className="space-y-2">
-                               <label className="text-[10px] font-black text-slate-400 uppercase ml-1 flex items-center gap-2">
-                                  <FileText size={10} /> Notes Cliniques & Diagnostic
+                          {/* 3. Diagnostic & Ordonnance */}
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                            <div className="space-y-3">
+                               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-2">
+                                  <Sparkles size={14} className="text-amber-500" /> Diagnostic Établi
                                </label>
                                <textarea 
                                  required
                                  rows={4}
-                                 value={formData.notes_cliniques}
-                                 onChange={e => setFormData({...formData, notes_cliniques: e.target.value})}
-                                 placeholder="Saisissez les observations cliniques..."
+                                 value={formData.diagnostic}
+                                 onChange={e => setFormData({...formData, diagnostic: e.target.value})}
+                                 placeholder="Saisissez le diagnostic final..."
                                  className="w-full p-6 bg-slate-50 border border-slate-100 rounded-3xl focus:border-riverside-red outline-none font-bold text-sm resize-none transition-all"
                                />
                             </div>
 
-                            <div className="space-y-2">
-                               <label className="text-[10px] font-black text-slate-400 uppercase ml-1 flex items-center gap-2">
-                                  <Pill size={10} /> Ordonnance Numérique
+                            <div className="space-y-3">
+                               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-2">
+                                  <Pill size={14} className="text-emerald-500" /> Ordonnance Riverside
                                </label>
                                <textarea 
                                  required
                                  rows={4}
                                  value={formData.ordonnance}
                                  onChange={e => setFormData({...formData, ordonnance: e.target.value})}
-                                 placeholder="Médicaments, posologie..."
-                                 className="w-full p-6 bg-emerald-50/30 border border-emerald-100 rounded-3xl focus:border-emerald-500 outline-none font-bold text-sm font-mono resize-none text-emerald-800 transition-all"
+                                 placeholder="Prescription médicamenteuse..."
+                                 className="w-full p-6 bg-emerald-50/30 border border-emerald-100 rounded-3xl focus:border-emerald-500 outline-none font-bold text-sm font-mono resize-none text-emerald-800 transition-all shadow-sm"
                                />
                             </div>
                           </div>
 
                           {/* Action */}
-                          <div className="pt-6 border-t border-slate-50 flex items-center justify-between">
+                          <div className="pt-10 border-t border-slate-100 flex items-center justify-between">
                              <button 
                                type="button"
                                onClick={() => setSelectedPatient(null)}
-                               className="text-xs font-black text-slate-400 uppercase hover:text-slate-600 transition-colors"
+                               className="text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-slate-600 transition-colors"
                              >
-                               Annuler la session
+                               Abandonner la session
                              </button>
                              
                              <button 
                                disabled={submitting}
-                               className="px-10 py-5 bg-riverside-red text-white rounded-2xl font-black uppercase tracking-tighter text-sm shadow-xl shadow-red-200 hover:scale-105 transition-all active:scale-95 disabled:opacity-50 flex items-center gap-3"
+                               className="px-12 py-5 bg-riverside-red text-white rounded-2xl font-black uppercase tracking-tighter text-sm shadow-2xl shadow-red-200 hover:scale-[1.02] transition-all active:scale-95 disabled:opacity-50 flex items-center gap-4"
                              >
-                                {submitting ? <Loader2 size={18} className="animate-spin" /> : success ? <CheckCircle size={18} /> : <FileText size={18} />}
-                                {success ? "ENREGISTRÉ !" : "VALIDER LA CONSULTATION"}
+                                {submitting ? <Loader2 size={20} className="animate-spin" /> : success ? <CheckCircle size={20} /> : <FileText size={20} />}
+                                {success ? "ENREGISTRÉ AVEC SUCCÈS" : "Valider la Consultation"}
                              </button>
                           </div>
                         </form>
@@ -756,93 +805,124 @@ export default function MedicalPage() {
                       )}
                     </div>
                   ) : (
-                    <div className="xl:col-span-12 p-8 space-y-8">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                        {/* Calculateur IMC */}
-                        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm space-y-6">
-                          <div className="flex items-center gap-4">
-                            <div className="w-12 h-12 bg-blue-50 rounded-2xl flex items-center justify-center">
-                              <Activity className="text-blue-500" size={20} />
+                    <div className="xl:col-span-12 p-8 space-y-10">
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                        {/* BMI Calculator */}
+                        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm space-y-6 flex flex-col justify-between">
+                          <div className="space-y-6">
+                            <div className="flex items-center gap-4">
+                              <div className="w-12 h-12 bg-blue-50 rounded-2xl flex items-center justify-center">
+                                <Activity className="text-blue-500" size={20} />
+                              </div>
+                              <div>
+                                 <h4 className="text-[11px] font-black text-slate-900 uppercase tracking-widest">Calculateur d&apos;IMC</h4>
+                                 <p className="text-[9px] font-bold text-slate-400 uppercase">INDICE DE MASSE CORPORELLE</p>
+                              </div>
                             </div>
-                            <div>
-                               <h4 className="text-sm font-black text-slate-900 uppercase tracking-widest">Calculateur d&apos;IMC</h4>
-                               <p className="text-[10px] font-bold text-slate-400">Indice de Masse Corporelle</p>
-                            </div>
-                          </div>
-                          
-                          <div className="grid grid-cols-2 gap-4">
-                            <div className="space-y-2">
-                              <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Poids (kg)</label>
-                              <input 
-                                type="number" 
-                                value={bmiInput.weight}
-                                onChange={(e) => setBmiInput({ ...bmiInput, weight: e.target.value })}
-                                className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl font-black text-sm outline-none focus:border-blue-500"
-                              />
-                            </div>
-                            <div className="space-y-2">
-                              <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Taille (cm)</label>
-                              <input 
-                                type="number" 
-                                value={bmiInput.height}
-                                onChange={(e) => setBmiInput({ ...bmiInput, height: e.target.value })}
-                                className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl font-black text-sm outline-none focus:border-blue-500"
-                              />
+                            
+                            <div className="grid grid-cols-2 gap-4">
+                              <div className="space-y-2">
+                                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Poids (kg)</label>
+                                <input 
+                                  type="number" 
+                                  value={bmiInput.weight}
+                                  onChange={(e) => setBmiInput({ ...bmiInput, weight: e.target.value })}
+                                  className="w-full p-3.5 bg-slate-50 border border-slate-100 rounded-xl font-black text-xs outline-none focus:border-blue-500 shadow-inner"
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Taille (cm)</label>
+                                <input 
+                                  type="number" 
+                                  value={bmiInput.height}
+                                  onChange={(e) => setBmiInput({ ...bmiInput, height: e.target.value })}
+                                  className="w-full p-3.5 bg-slate-50 border border-slate-100 rounded-xl font-black text-xs outline-none focus:border-blue-500 shadow-inner"
+                                />
+                              </div>
                             </div>
                           </div>
 
-                          {bmiInput.weight && bmiInput.height && (
-                            <div className="p-6 bg-slate-50 border border-slate-100 rounded-3xl text-center space-y-2 shadow-inner">
-                              <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Résultat IMC</p>
-                              <div className="text-3xl font-black text-slate-900">
+                          {bmiInput.weight && bmiInput.height ? (
+                            <div className="p-6 bg-slate-900 rounded-3xl text-center space-y-2 shadow-xl">
+                              <p className="text-[8px] font-black text-slate-500 uppercase tracking-[0.2em]">Résultat Brut</p>
+                              <div className="text-3xl font-black text-white tracking-tighter">
                                 {(Number(bmiInput.weight) / ((Number(bmiInput.height)/100) ** 2)).toFixed(1)}
                               </div>
-                              <p className="text-[10px] font-black text-blue-600 uppercase tracking-tighter">
+                              <p className={cn(
+                                "text-[9px] font-black uppercase tracking-widest",
+                                (Number(bmiInput.weight) / ((Number(bmiInput.height)/100) ** 2)) < 18.5 ? "text-amber-400" :
+                                (Number(bmiInput.weight) / ((Number(bmiInput.height)/100) ** 2)) < 25 ? "text-emerald-400" : "text-red-400"
+                              )}>
                                 {(() => {
                                   const imc = Number(bmiInput.weight) / ((Number(bmiInput.height)/100) ** 2);
-                                  if (imc < 18.5) return "Insuffisance pondérale";
-                                  if (imc < 25) return "Poids normal";
+                                  if (imc < 18.5) return "Insuffisance Pondérale";
+                                  if (imc < 25) return "Poids Normal";
                                   if (imc < 30) return "Surpoids";
                                   return "Obésité";
                                 })()}
                               </p>
                             </div>
+                          ) : (
+                            <div className="p-8 border-2 border-dashed border-slate-100 rounded-3xl text-center">
+                               <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest">En attente de valeurs</p>
+                            </div>
                           )}
                         </div>
 
-                        {/* Calculateur Paracétamol Enfant */}
-                        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm space-y-6">
-                          <div className="flex items-center gap-4">
-                            <div className="w-12 h-12 bg-emerald-50 rounded-2xl flex items-center justify-center">
-                              <Pill className="text-emerald-500" size={20} />
+                        {/* Paracetamol Calculator */}
+                        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm space-y-6 flex flex-col justify-between">
+                          <div className="space-y-6">
+                            <div className="flex items-center gap-4">
+                              <div className="w-12 h-12 bg-emerald-50 rounded-2xl flex items-center justify-center">
+                                <Pill className="text-emerald-500" size={20} />
+                              </div>
+                              <div>
+                                 <h4 className="text-[11px] font-black text-slate-900 uppercase tracking-widest">Dose Pédiatrique</h4>
+                                 <p className="text-[9px] font-bold text-slate-400 uppercase">PARACÉTAMOL SIROP (2.4%)</p>
+                              </div>
                             </div>
-                            <div>
-                               <h4 className="text-sm font-black text-slate-900 uppercase tracking-widest">Dose Pédiatrique</h4>
-                               <p className="text-[10px] font-bold text-slate-400">Paracétamol (15mg/kg)</p>
+                            
+                            <div className="space-y-2">
+                              <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Poids de l&apos;enfant (kg)</label>
+                              <div className="relative group">
+                                <Weight className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-emerald-500 transition-colors" size={14} />
+                                <input 
+                                  type="number" 
+                                  value={paraInput.weight}
+                                  onChange={(e) => setParaInput({ weight: e.target.value })}
+                                  placeholder="EX: 12"
+                                  className="w-full pl-12 pr-4 py-3.5 bg-slate-50 border border-slate-100 rounded-xl font-black text-xs outline-none focus:border-emerald-500 shadow-inner"
+                                />
+                              </div>
                             </div>
-                          </div>
-                          
-                          <div className="space-y-2">
-                            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Poids de l&apos;enfant (kg)</label>
-                            <input 
-                              type="number" 
-                              value={paraInput.weight}
-                              onChange={(e) => setParaInput({ weight: e.target.value })}
-                              className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl font-black text-sm outline-none focus:border-emerald-500"
-                            />
                           </div>
 
-                          {paraInput.weight && (
-                            <div className="p-6 bg-emerald-50 border border-emerald-100 rounded-3xl text-center space-y-2">
-                              <p className="text-[9px] font-black text-emerald-600/60 uppercase tracking-widest">Dose par prise recommandée</p>
-                              <div className="text-3xl font-black text-emerald-600">
-                                {Math.round(Number(paraInput.weight) * 15)} mg
+                          {paraInput.weight ? (
+                            <div className="p-6 bg-emerald-950 rounded-3xl text-center space-y-2 shadow-xl border-b-4 border-emerald-800">
+                              <p className="text-[8px] font-black text-emerald-500/50 uppercase tracking-[0.2em]">Dose par Prise (8h/prise)</p>
+                              <div className="text-3xl font-black text-emerald-400 tracking-tighter">
+                                {(Number(paraInput.weight) / 2).toFixed(1)} <span className="text-sm">ML</span>
                               </div>
-                              <p className="text-[10px] font-bold text-emerald-600/70 uppercase tracking-tighter">
-                                Ne pas dépasser 4 prises par 24h (intervalle de 6h)
+                              <p className="text-[8px] font-black text-emerald-200 uppercase tracking-widest opacity-60">
+                                Max: 60mg/kg/jour répartis en 3 ou 4 prises
                               </p>
                             </div>
+                          ) : (
+                            <div className="p-8 border-2 border-dashed border-slate-100 rounded-3xl text-center">
+                               <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest">Entrez le poids</p>
+                            </div>
                           )}
+                        </div>
+
+                        {/* Protocol Guide */}
+                        <div className="bg-slate-900 p-8 rounded-[2.5rem] border border-slate-800 shadow-2xl space-y-6 flex flex-col justify-between relative overflow-hidden group">
+                           <div className="absolute -bottom-10 -right-10 w-40 h-40 bg-riverside-red/10 rounded-full blur-3xl group-hover:scale-150 transition-transform" />
+                           <div className="space-y-4 relative z-10">
+                              <Shield size={24} className="text-riverside-red" />
+                              <h4 className="text-sm font-black text-white uppercase tracking-tighter">Protocole Riverside</h4>
+                              <p className="text-[10px] font-medium text-slate-400 leading-relaxed uppercase tracking-tight">Vérifiez toujours le stock de médicaments dans la section Pharmacie avant de valider une prescription complexe.</p>
+                           </div>
+                           <button type="button" className="relative z-10 w-full py-3 bg-white/5 border border-white/10 rounded-xl text-[9px] font-black text-slate-300 uppercase tracking-widest hover:bg-white hover:text-slate-900 transition-all">Consulter les Guides</button>
                         </div>
                       </div>
 
@@ -857,8 +937,6 @@ export default function MedicalPage() {
                       </div>
                     </div>
                   )}
-                </div>
-        </AnimatePresence>
                 </div>
               </motion.div>
             )}

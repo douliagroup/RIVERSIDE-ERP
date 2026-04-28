@@ -12,12 +12,24 @@ import { Toaster, toast } from "sonner";
 
 import { motion, AnimatePresence } from "motion/react";
 
+import { Inter, Space_Grotesk } from 'next/font/google';
+
+const inter = Inter({
+  subsets: ['latin'],
+  variable: '--font-sans',
+});
+
+const spaceGrotesk = Space_Grotesk({
+  subsets: ['latin'],
+  variable: '--font-display',
+});
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   const [isCollapsed, setIsCollapsed] = useState(true);
   const pathname = usePathname();
 
   return (
-    <html lang="fr" className="h-full">
+    <html lang="fr" className={cn("h-full", inter.variable, spaceGrotesk.variable)}>
       <AuthProvider>
         <body className="flex h-screen m-0 bg-slate-50 font-sans antialiased overflow-hidden selection:bg-riverside-red/10 selection:text-riverside-red">
           {/* Bouton Menu Hamburger Flottant (Toujours visible si Sidebar rétractée ou mobile) */}

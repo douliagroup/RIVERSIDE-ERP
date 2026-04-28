@@ -143,8 +143,8 @@ export default function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
                 exit={{ opacity: 0, x: -10 }}
                 className="flex flex-col"
               >
-                <span className="text-[26px] font-black text-slate-950 leading-none tracking-tighter italic">RIVERSIDE</span>
-                <span className="text-[10px] font-black text-riverside-red uppercase tracking-[0.4em] mt-1 pr-1 border-t border-slate-100 pt-1">Medical Center</span>
+                <span className="text-xl font-display font-black text-slate-900 leading-none tracking-tighter">RIVERSIDE</span>
+                <span className="text-[9px] font-display font-black text-slate-700 uppercase tracking-[0.2em] mt-1">Medical Center</span>
               </motion.div>
             )}
           </AnimatePresence>
