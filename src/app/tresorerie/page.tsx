@@ -726,16 +726,30 @@ export default function TresoreriePage() {
                          ))}
                        </div>
 
-                       <div className="flex justify-end pt-2">
+                       <div className="flex justify-end pt-2 gap-3">
                          <button 
                            onClick={(e) => {
                              e.stopPropagation();
                              const msg = `Bonjour, Riverside Medical Center vous informe d'un reste à payer de ${group.total.toLocaleString()} FCFA. Merci de régulariser rapidement.`;
                              window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
                            }}
-                           className="px-4 py-2 bg-emerald-500 text-white text-[9px] font-black uppercase rounded-lg hover:bg-emerald-600 transition-all flex items-center gap-2 shadow-lg shadow-emerald-100"
+                           className="px-4 py-2 bg-slate-100 text-slate-500 text-[9px] font-black uppercase rounded-lg hover:bg-slate-200 transition-all flex items-center gap-2"
                          >
-                           <CheckCircle size={14} /> Envoyer Rappel WhatsApp
+                           Rappel WhatsApp
+                         </button>
+
+                         <button 
+                           onClick={(e) => {
+                             e.stopPropagation();
+                             // Load the first pending transaction of this group into the terminal
+                             const firstItem = group.items[0];
+                             setSelectedTransaction(firstItem);
+                             setActiveTab("caise");
+                             setMontantVerse(firstItem.reste_a_payer.toString());
+                           }}
+                           className="px-6 py-2 bg-riverside-red text-white text-[9px] font-black uppercase rounded-lg hover:bg-red-600 transition-all flex items-center gap-2 shadow-lg shadow-red-100"
+                         >
+                           <CreditCard size={14} /> Solder la dette
                          </button>
                        </div>
                     </div>

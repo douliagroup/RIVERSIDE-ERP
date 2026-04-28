@@ -78,6 +78,39 @@ export default function MedicalPage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [activeSubTab, setActiveSubTab] = useState<'consultation' | 'history' | 'tools'>('consultation');
+  const [history, setHistory] = useState<any[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+
+  // Tools State
+  const [bmiInput, setBmiInput] = useState({ weight: "", height: "" });
+  const [paraInput, setParaInput] = useState({ weight: "" });
+
+  const fetchPatientHistory = async (patientId: string) => {
+    setLoadingHistory(true);
+    try {
+      const { data, error } = await supabase
+        .from('consultations')
+        .select(`
+          *,
+          personnel (nom_complet)
+        `)
+        .eq('patient_id', patientId)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      setHistory(data || []);
+    } catch (err) {
+      console.error("Error fetching history:", err);
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
+
+  useEffect(() => {
+    if (selectedPatient && activeSubTab === 'history') {
+      fetchPatientHistory(selectedPatient.patient_id);
+    }
+  }, [selectedPatient, activeSubTab]);
 
   // AI & Voice State
   const [isListening, setIsListening] = useState(false);
@@ -259,16 +292,20 @@ export default function MedicalPage() {
       }
 
       console.log("Flux Médical - 2. Consultation sauvegardée, création transaction...");
-
+      
       // 2. Création de la Transaction en Caisse
+      // Amélioration de la description pour la Trésorerie
+      const detailDescription = `CONSULTATION MÉDICALE (${selectedPatient.motif_visite}) + ÉTABLISSEMENT ORDONNANCE`;
       const montantConsultation = 10000; 
+
       const { error: caisseError } = await supabase
         .from('transactions_caisse')
         .insert([{
           patient_id: selectedPatient.patient_id,
           montant_total: montantConsultation,
           statut_paiement: 'En attente',
-          type_flux: 'Entrée'
+          type_flux: 'Entrée',
+          description: detailDescription
         }]);
 
       if (caisseError) {
@@ -427,8 +464,33 @@ export default function MedicalPage() {
                       </div>
                    </div>
                    
-                   <div className="flex items-center gap-6 relative z-10">
-                      {/* AI Copilot Microphone section */}
+                   <div className="flex items-center gap-4 relative z-10">
+                      {/* Sub-tabs Navigation */}
+                      <div className="hidden xl:flex bg-white/5 p-1 rounded-xl border border-white/10 mr-4">
+                         {[
+                           { id: 'consultation', label: 'Consul.', icon: Stethoscope },
+                           { id: 'history', label: 'Hist.', icon: FileText },
+                           { id: 'tools', label: 'Outils', icon: Activity }
+                         ].map(tab => (
+                           <button
+                             key={tab.id}
+                             type="button"
+                             onClick={() => setActiveSubTab(tab.id as any)}
+                             className={cn(
+                               "flex items-center gap-2 px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all",
+                               activeSubTab === tab.id 
+                                 ? "bg-white text-slate-900 shadow-lg" 
+                                 : "text-white/40 hover:text-white"
+                             )}
+                           >
+                             <tab.icon size={11} />
+                             {tab.label}
+                           </button>
+                         ))}
+                      </div>
+
+                      <div className="flex items-center gap-6">
+                         {/* AI Copilot Microphone section */}
                       <div className="flex flex-col items-center gap-2">
                         <button 
                           onClick={toggleListening}
@@ -477,167 +539,325 @@ export default function MedicalPage() {
                         </p>
                       </div>
                     </motion.div>
-                  )}
-                </AnimatePresence>
-
-                <div className="grid grid-cols-1 xl:grid-cols-12">
-                  <div className={cn(
-                    "p-8 space-y-8 transition-all duration-500",
-                    aiAnalysis ? "xl:col-span-8 border-r border-slate-50" : "xl:col-span-12"
-                  )}>
-                    <form onSubmit={handleConsultation} className="space-y-8">
-                      {/* Vitals */}
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        <div className="space-y-2">
-                           <label className="text-[10px] font-black text-slate-400 uppercase ml-1 flex items-center gap-2">
-                              <Activity size={10} /> Tension (mmHg)
-                           </label>
-                           <input 
-                             required
-                             type="text"
-                             value={formData.tension}
-                             onChange={e => setFormData({...formData, tension: e.target.value})}
-                             placeholder="ex: 12/8"
-                             className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl focus:border-riverside-red outline-none font-bold text-sm"
-                           />
-                        </div>
-                        <div className="space-y-2">
-                           <label className="text-[10px] font-black text-slate-400 uppercase ml-1 flex items-center gap-2">
-                              <Thermometer size={10} /> Température (°C)
-                           </label>
-                           <input 
-                             required
-                             type="text"
-                             value={formData.temperature}
-                             onChange={e => setFormData({...formData, temperature: e.target.value})}
-                             placeholder="ex: 37"
-                             className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl focus:border-riverside-red outline-none font-bold text-sm"
-                           />
-                        </div>
-                        <div className="space-y-2">
-                           <label className="text-[10px] font-black text-slate-400 uppercase ml-1 flex items-center gap-2">
-                              <Weight size={10} /> Poids (kg)
-                           </label>
-                           <input 
-                             required
-                             type="text"
-                             value={formData.poids}
-                             onChange={e => setFormData({...formData, poids: e.target.value})}
-                             placeholder="ex: 75"
-                             className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl focus:border-riverside-red outline-none font-bold text-sm"
-                           />
-                        </div>
-                      </div>
-
-                      {/* Clinical Data */}
-                      <div className="space-y-6">
-                        <div className="space-y-2">
-                           <label className="text-[10px] font-black text-slate-400 uppercase ml-1 flex items-center gap-2">
-                              <FileText size={10} /> Notes Cliniques & Diagnostic
-                           </label>
-                           <textarea 
-                             required
-                             rows={4}
-                             value={formData.notes_cliniques}
-                             onChange={e => setFormData({...formData, notes_cliniques: e.target.value})}
-                             placeholder="Saisissez les observations cliniques..."
-                             className="w-full p-6 bg-slate-50 border border-slate-100 rounded-3xl focus:border-riverside-red outline-none font-bold text-sm resize-none transition-all"
-                           />
-                        </div>
-
-                        <div className="space-y-2">
-                           <label className="text-[10px] font-black text-slate-400 uppercase ml-1 flex items-center gap-2">
-                              <Pill size={10} /> Ordonnance Numérique
-                           </label>
-                           <textarea 
-                             required
-                             rows={4}
-                             value={formData.ordonnance}
-                             onChange={e => setFormData({...formData, ordonnance: e.target.value})}
-                             placeholder="Médicaments, posologie..."
-                             className="w-full p-6 bg-emerald-50/30 border border-emerald-100 rounded-3xl focus:border-emerald-500 outline-none font-bold text-sm font-mono resize-none text-emerald-800 transition-all"
-                           />
-                        </div>
-                      </div>
-
-                      {/* Action */}
-                      <div className="pt-6 border-t border-slate-50 flex items-center justify-between">
-                         <button 
-                           type="button"
-                           onClick={() => setSelectedPatient(null)}
-                           className="text-xs font-black text-slate-400 uppercase hover:text-slate-600 transition-colors"
-                         >
-                           Annuler la session
-                         </button>
-                         
-                         <button 
-                           disabled={submitting}
-                           className="px-10 py-5 bg-riverside-red text-white rounded-2xl font-black uppercase tracking-tighter text-sm shadow-xl shadow-red-200 hover:scale-105 transition-all active:scale-95 disabled:opacity-50 flex items-center gap-3"
-                         >
-                            {submitting ? <Loader2 size={18} className="animate-spin" /> : success ? <CheckCircle size={18} /> : <FileText size={18} />}
-                            {success ? "ENREGISTRÉ !" : "VALIDER LA CONSULTATION"}
-                         </button>
-                      </div>
-                    </form>
-                  </div>
-
-                  {/* AI Copilot Panel */}
-                  <AnimatePresence>
-                    {(aiAnalysis || isAnalyzing) && (
-                      <motion.div 
-                        initial={{ x: 100, opacity: 0 }}
-                        animate={{ x: 0, opacity: 1 }}
-                        exit={{ x: 100, opacity: 0 }}
-                        className="xl:col-span-4 bg-slate-50 p-8 border-l border-slate-100 space-y-8"
-                      >
-                        <div className="flex items-center justify-between">
-                           <div className="flex items-center gap-3">
-                              <div className="w-10 h-10 bg-riverside-red/10 rounded-xl flex items-center justify-center animate-pulse-border">
-                                 <Brain size={20} className="text-riverside-red" />
-                              </div>
-                              <h4 className="text-[10px] font-black text-slate-900 uppercase tracking-widest">Riverside Copilot</h4>
-                           </div>
-                           {isAnalyzing && <Loader2 size={16} className="animate-spin text-riverside-red" />}
-                        </div>
-
-                        {isAnalyzing ? (
-                          <div className="space-y-4 py-10 text-center">
-                             <div className="relative inline-block">
-                                <Sparkles className="text-riverside-red animate-bounce" size={32} />
-                                <div className="absolute inset-0 bg-riverside-red/20 blur-xl rounded-full" />
-                             </div>
-                             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Analyse clinique en cours...</p>
+                  )}                <div className="grid grid-cols-1 xl:grid-cols-12 min-h-[600px]">
+                  {activeSubTab === 'consultation' ? (
+                    <>
+                      <div className={cn(
+                        "p-8 space-y-8 transition-all duration-500",
+                        aiAnalysis ? "xl:col-span-8 border-r border-slate-50" : "xl:col-span-12"
+                      )}>
+                        <form onSubmit={handleConsultation} className="space-y-8">
+                          {/* Vitals */}
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            <div className="space-y-2">
+                               <label className="text-[10px] font-black text-slate-400 uppercase ml-1 flex items-center gap-2">
+                                  <Activity size={10} /> Tension (mmHg)
+                               </label>
+                               <input 
+                                 required
+                                 type="text"
+                                 value={formData.tension}
+                                 onChange={e => setFormData({...formData, tension: e.target.value})}
+                                 placeholder="ex: 12/8"
+                                 className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl focus:border-riverside-red outline-none font-bold text-sm"
+                               />
+                            </div>
+                            <div className="space-y-2">
+                               <label className="text-[10px] font-black text-slate-400 uppercase ml-1 flex items-center gap-2">
+                                  <Thermometer size={10} /> Température (°C)
+                               </label>
+                               <input 
+                                 required
+                                 type="text"
+                                 value={formData.temperature}
+                                 onChange={e => setFormData({...formData, temperature: e.target.value})}
+                                 placeholder="ex: 37"
+                                 className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl focus:border-riverside-red outline-none font-bold text-sm"
+                               />
+                            </div>
+                            <div className="space-y-2">
+                               <label className="text-[10px] font-black text-slate-400 uppercase ml-1 flex items-center gap-2">
+                                  <Weight size={10} /> Poids (kg)
+                               </label>
+                               <input 
+                                 required
+                                 type="text"
+                                 value={formData.poids}
+                                 onChange={e => setFormData({...formData, poids: e.target.value})}
+                                 placeholder="ex: 75"
+                                 className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl focus:border-riverside-red outline-none font-bold text-sm"
+                               />
+                            </div>
                           </div>
-                        ) : (
-                         <div className="space-y-4">
+
+                          {/* Clinical Data */}
+                          <div className="space-y-6">
                             <div className="space-y-2">
-                               <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                                 <AlertCircle size={11} className="text-riverside-red" /> Diagnostic Suggéré
+                               <label className="text-[10px] font-black text-slate-400 uppercase ml-1 flex items-center gap-2">
+                                  <FileText size={10} /> Notes Cliniques & Diagnostic
                                </label>
-                               <div className="p-4 bg-white rounded-xl border border-slate-200 shadow-sm">
-                                  <p className="text-xs font-bold text-slate-800 leading-relaxed italic">&quot;{aiAnalysis?.diagnostic_suggere}&quot;</p>
-                               </div>
+                               <textarea 
+                                 required
+                                 rows={4}
+                                 value={formData.notes_cliniques}
+                                 onChange={e => setFormData({...formData, notes_cliniques: e.target.value})}
+                                 placeholder="Saisissez les observations cliniques..."
+                                 className="w-full p-6 bg-slate-50 border border-slate-100 rounded-3xl focus:border-riverside-red outline-none font-bold text-sm resize-none transition-all"
+                               />
                             </div>
 
                             <div className="space-y-2">
-                               <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                                 <Activity size={11} className="text-riverside-red" /> Examens Préconisés
+                               <label className="text-[10px] font-black text-slate-400 uppercase ml-1 flex items-center gap-2">
+                                  <Pill size={10} /> Ordonnance Numérique
                                </label>
-                               <div className="p-4 bg-slate-900 rounded-xl">
-                                  <p className="text-[10px] font-mono font-bold text-emerald-400 leading-relaxed uppercase">{aiAnalysis?.examens_recommandes}</p>
+                               <textarea 
+                                 required
+                                 rows={4}
+                                 value={formData.ordonnance}
+                                 onChange={e => setFormData({...formData, ordonnance: e.target.value})}
+                                 placeholder="Médicaments, posologie..."
+                                 className="w-full p-6 bg-emerald-50/30 border border-emerald-100 rounded-3xl focus:border-emerald-500 outline-none font-bold text-sm font-mono resize-none text-emerald-800 transition-all"
+                               />
+                            </div>
+                          </div>
+
+                          {/* Action */}
+                          <div className="pt-6 border-t border-slate-50 flex items-center justify-between">
+                             <button 
+                               type="button"
+                               onClick={() => setSelectedPatient(null)}
+                               className="text-xs font-black text-slate-400 uppercase hover:text-slate-600 transition-colors"
+                             >
+                               Annuler la session
+                             </button>
+                             
+                             <button 
+                               disabled={submitting}
+                               className="px-10 py-5 bg-riverside-red text-white rounded-2xl font-black uppercase tracking-tighter text-sm shadow-xl shadow-red-200 hover:scale-105 transition-all active:scale-95 disabled:opacity-50 flex items-center gap-3"
+                             >
+                                {submitting ? <Loader2 size={18} className="animate-spin" /> : success ? <CheckCircle size={18} /> : <FileText size={18} />}
+                                {success ? "ENREGISTRÉ !" : "VALIDER LA CONSULTATION"}
+                             </button>
+                          </div>
+                        </form>
+                      </div>
+
+                      {/* AI Copilot Panel */}
+                      <AnimatePresence>
+                        {(aiAnalysis || isAnalyzing) && (
+                          <motion.div 
+                            initial={{ x: 100, opacity: 0 }}
+                            animate={{ x: 0, opacity: 1 }}
+                            exit={{ x: 100, opacity: 0 }}
+                            className="xl:col-span-4 bg-slate-50 p-8 border-l border-slate-100 space-y-8"
+                          >
+                            <div className="flex items-center justify-between">
+                               <div className="flex items-center gap-3">
+                                  <div className="w-10 h-10 bg-riverside-red/10 rounded-xl flex items-center justify-center animate-pulse-border">
+                                     <Brain size={20} className="text-riverside-red" />
+                                  </div>
+                                  <h4 className="text-[10px] font-black text-slate-900 uppercase tracking-widest">Riverside Copilot</h4>
                                </div>
+                               {isAnalyzing && <Loader2 size={16} className="animate-spin text-riverside-red" />}
                             </div>
 
-                            <div className="pt-6 border-t border-slate-200">
-                               <p className="text-[8px] font-black text-slate-400 uppercase leading-[1.6] tracking-tight">
-                                  L&apos;IA Copilot a analysé la transcription et pré-rempli vos champs Notes et Ordonnance. Vérifiez ces informations avant de valider pour garantir l&apos;exactitude médicale.
-                               </p>
-                            </div>
-                         </div>
+                            {isAnalyzing ? (
+                              <div className="space-y-4 py-10 text-center">
+                                 <div className="relative inline-block">
+                                    <Sparkles className="text-riverside-red animate-bounce" size={32} />
+                                    <div className="absolute inset-0 bg-riverside-red/20 blur-xl rounded-full" />
+                                 </div>
+                                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Analyse clinique en cours...</p>
+                              </div>
+                            ) : (
+                             <div className="space-y-4">
+                                <div className="space-y-2">
+                                   <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                                     <AlertCircle size={11} className="text-riverside-red" /> Diagnostic Suggéré
+                                   </label>
+                                   <div className="p-4 bg-white rounded-xl border border-slate-200 shadow-sm">
+                                      <p className="text-xs font-bold text-slate-800 leading-relaxed italic">&quot;{aiAnalysis?.diagnostic_suggere}&quot;</p>
+                                   </div>
+                                </div>
+
+                                <div className="space-y-2">
+                                   <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                                     <Activity size={11} className="text-riverside-red" /> Examens Préconisés
+                                   </label>
+                                   <div className="p-4 bg-slate-900 rounded-xl">
+                                      <p className="text-[10px] font-mono font-bold text-emerald-400 leading-relaxed uppercase">{aiAnalysis?.examens_recommandes}</p>
+                                   </div>
+                                </div>
+
+                                <div className="pt-6 border-t border-slate-200">
+                                   <p className="text-[8px] font-black text-slate-400 uppercase leading-[1.6] tracking-tight">
+                                      L&apos;IA Copilot a analysé la transcription et pré-rempli vos champs Notes et Ordonnance. Vérifiez ces informations avant de valider pour garantir l&apos;exactitude médicale.
+                                   </p>
+                                </div>
+                             </div>
+                            )}
+                          </motion.div>
                         )}
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
+                      </AnimatePresence>
+                    </>
+                  ) : activeSubTab === 'history' ? (
+                    <div className="xl:col-span-12 p-8 space-y-6 overflow-y-auto max-h-[700px]">
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-sm font-black text-slate-900 uppercase tracking-widest">Historique du Patient</h4>
+                        <span className="text-[10px] font-bold text-slate-400">{history.length} consultations passées</span>
+                      </div>
+                      
+                      {loadingHistory ? (
+                        <div className="py-20 flex flex-col items-center justify-center gap-4 opacity-50">
+                          <Loader2 className="animate-spin text-riverside-red" size={24} />
+                          <p className="text-[10px] font-black uppercase tracking-widest">Chargement de l&apos;historique...</p>
+                        </div>
+                      ) : history.length === 0 ? (
+                        <div className="py-20 text-center bg-slate-50 rounded-3xl border-2 border-dashed border-slate-100">
+                          <p className="text-sm font-black text-slate-300 uppercase">Aucun antécédent trouvé</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-4">
+                          {history.map((h) => (
+                            <div key={h.id} className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm hover:border-slate-200 transition-all">
+                              <div className="flex items-center justify-between mb-4">
+                                <div className="flex items-center gap-3">
+                                  <div className="bg-slate-50 p-2 rounded-lg">
+                                    <Clock size={14} className="text-slate-400" />
+                                  </div>
+                                  <div>
+                                    <p className="text-xs font-black text-slate-900">{new Date(h.created_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
+                                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Dr. {h.personnel?.nom_complet || 'Inconnu'}</p>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <div className="px-2 py-1 bg-slate-50 rounded text-[9px] font-black text-slate-500 uppercase">
+                                    T°: {h.constantes?.temperature}°C
+                                  </div>
+                                  <div className="px-2 py-1 bg-slate-50 rounded text-[9px] font-black text-slate-500 uppercase">
+                                    TA: {h.constantes?.tension}
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div className="space-y-2">
+                                  <p className="text-[9px] font-black text-riverside-red uppercase tracking-widest">Diagnostic & Notes</p>
+                                  <p className="text-xs font-bold text-slate-700 leading-relaxed bg-slate-50/50 p-4 rounded-xl">{h.diagnostic || h.notes_cliniques}</p>
+                                </div>
+                                <div className="space-y-2">
+                                  <p className="text-[9px] font-black text-emerald-500 uppercase tracking-widest">Ordonnance</p>
+                                  <p className="text-xs font-medium text-slate-600 leading-relaxed italic bg-emerald-50/20 p-4 rounded-xl border border-emerald-50">{h.ordonnance}</p>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="xl:col-span-12 p-8 space-y-8">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        {/* Calculateur IMC */}
+                        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm space-y-6">
+                          <div className="flex items-center gap-4">
+                            <div className="w-12 h-12 bg-blue-50 rounded-2xl flex items-center justify-center">
+                              <Activity className="text-blue-500" size={20} />
+                            </div>
+                            <div>
+                               <h4 className="text-sm font-black text-slate-900 uppercase tracking-widest">Calculateur d&apos;IMC</h4>
+                               <p className="text-[10px] font-bold text-slate-400">Indice de Masse Corporelle</p>
+                            </div>
+                          </div>
+                          
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                              <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Poids (kg)</label>
+                              <input 
+                                type="number" 
+                                value={bmiInput.weight}
+                                onChange={(e) => setBmiInput({ ...bmiInput, weight: e.target.value })}
+                                className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl font-black text-sm outline-none focus:border-blue-500"
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Taille (cm)</label>
+                              <input 
+                                type="number" 
+                                value={bmiInput.height}
+                                onChange={(e) => setBmiInput({ ...bmiInput, height: e.target.value })}
+                                className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl font-black text-sm outline-none focus:border-blue-500"
+                              />
+                            </div>
+                          </div>
+
+                          {bmiInput.weight && bmiInput.height && (
+                            <div className="p-6 bg-slate-900 rounded-3xl text-center space-y-2">
+                              <p className="text-[9px] font-black text-white/40 uppercase tracking-widest">Résultat IMC</p>
+                              <div className="text-3xl font-black text-white">
+                                {(Number(bmiInput.weight) / ((Number(bmiInput.height)/100) ** 2)).toFixed(1)}
+                              </div>
+                              <p className="text-[10px] font-black text-blue-400 uppercase tracking-tighter">
+                                {(() => {
+                                  const imc = Number(bmiInput.weight) / ((Number(bmiInput.height)/100) ** 2);
+                                  if (imc < 18.5) return "Insuffisance pondérale";
+                                  if (imc < 25) return "Poids normal";
+                                  if (imc < 30) return "Surpoids";
+                                  return "Obésité";
+                                })()}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Calculateur Paracétamol Enfant */}
+                        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm space-y-6">
+                          <div className="flex items-center gap-4">
+                            <div className="w-12 h-12 bg-emerald-50 rounded-2xl flex items-center justify-center">
+                              <Pill className="text-emerald-500" size={20} />
+                            </div>
+                            <div>
+                               <h4 className="text-sm font-black text-slate-900 uppercase tracking-widest">Dose Pédiatrique</h4>
+                               <p className="text-[10px] font-bold text-slate-400">Paracétamol (15mg/kg)</p>
+                            </div>
+                          </div>
+                          
+                          <div className="space-y-2">
+                            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Poids de l&apos;enfant (kg)</label>
+                            <input 
+                              type="number" 
+                              value={paraInput.weight}
+                              onChange={(e) => setParaInput({ weight: e.target.value })}
+                              className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl font-black text-sm outline-none focus:border-emerald-500"
+                            />
+                          </div>
+
+                          {paraInput.weight && (
+                            <div className="p-6 bg-emerald-950 rounded-3xl text-center space-y-2">
+                              <p className="text-[9px] font-black text-emerald-400/40 uppercase tracking-widest">Dose par prise recommandée</p>
+                              <div className="text-3xl font-black text-emerald-400">
+                                {Math.round(Number(paraInput.weight) * 15)} mg
+                              </div>
+                              <p className="text-[10px] font-bold text-emerald-200/50 uppercase tracking-tighter">
+                                Ne pas dépasser 4 prises par 24h (intervalle de 6h)
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="p-6 bg-blue-50 border border-blue-100 rounded-3xl flex items-start gap-4">
+                        <AlertCircle className="text-blue-500 mt-1" size={18} />
+                        <div className="space-y-1">
+                          <p className="text-xs font-black text-blue-900 uppercase tracking-widest text-[9px]">Avertissement Médical</p>
+                          <p className="text-[10px] font-medium text-blue-800 leading-relaxed uppercase">
+                             Ces calculateurs sont des outils d&apos;aide à la décision clinique. La responsabilité finale de la prescription incombe au médecin praticien. Vérifiez toujours vos calculs manuellement pour les cas critiques.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+        </AnimatePresence>
                 </div>
               </motion.div>
             )}

@@ -11,7 +11,7 @@ import { Menu, ChevronLeft } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(true);
   const pathname = usePathname();
 
   return (
