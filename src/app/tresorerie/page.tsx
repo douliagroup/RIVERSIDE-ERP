@@ -55,7 +55,8 @@ export default function TresoreriePage() {
   const [success, setSuccess] = useState(false);
   const [paymentMode, setPaymentMode] = useState("CASH");
   const [montantVerse, setMontantVerse] = useState<string>("");
-  const [activeTab, setActiveTab] = useState<"caise" | "dettes">("caise");
+  const [activeTab, setActiveTab] = useState<"caise" | "dettes" | "journal">("caise");
+  const [journal, setJournal] = useState<any[]>([]);
   const [dettes, setDettes] = useState<any[]>([]);
   const [stocks, setStocks] = useState<any[]>([]);
   const [selectedStockId, setSelectedStockId] = useState("");
@@ -123,6 +124,16 @@ export default function TresoreriePage() {
       
       if (dettesError) console.error("Erreur dettes:", dettesError);
       else setDettes(dettesData || []);
+
+      // 4. Récupérer le journal du jour
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const { data: journalData } = await supabase
+        .from('transactions_caisse')
+        .select('*, patients(nom_complet)')
+        .gte('date_transaction', today.toISOString())
+        .order('date_transaction', { ascending: false });
+      setJournal(journalData || []);
 
       // 4. Récupérer TOUS les patients (pour facture libre)
       const { data: patientsData } = await supabase
@@ -318,6 +329,15 @@ export default function TresoreriePage() {
             )}
            >
              Terminal
+           </button>
+           <button 
+            onClick={() => setActiveTab("journal")}
+            className={cn(
+              "px-5 py-2 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all",
+              activeTab === "journal" ? "bg-slate-900 text-white shadow-sm" : "text-slate-400 hover:text-slate-600"
+            )}
+           >
+             Journal du Jour
            </button>
            <button 
             onClick={() => setActiveTab("dettes")}
@@ -695,7 +715,83 @@ export default function TresoreriePage() {
           </div>
         </motion.div>
       </motion.div>
-      ) : (
+        ) : activeTab === "journal" ? (
+          <motion.div 
+            key="journal"
+            initial={{ opacity: 0, scale: 0.98 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.98 }}
+            className="bg-white rounded-[2.5rem] border border-slate-200 shadow-xl overflow-hidden"
+          >
+            <div className="p-10 border-b border-slate-50 flex flex-col md:flex-row md:items-center justify-between gap-6">
+              <div>
+                <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Journal des Ventes du Jour</h3>
+                <p className="text-[10px] text-slate-400 font-bold uppercase mt-1 tracking-widest">Récapitulatif des transactions encaissées aujourd&apos;hui</p>
+              </div>
+              <div className="flex items-center gap-8">
+                <div className="text-right">
+                  <p className="text-[9px] font-black text-slate-400 uppercase mb-1">Total Journalier</p>
+                  <p className="text-xl font-black text-slate-900">{journal.reduce((a, b) => a + (b.montant_total || 0), 0).toLocaleString()} FCFA</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-[9px] font-black text-slate-400 uppercase mb-1">Encaisse Réelle</p>
+                  <p className="text-xl font-black text-emerald-500">{journal.reduce((a, b) => a + (b.montant_verse || 0), 0).toLocaleString()} FCFA</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-slate-50">
+                    <th className="px-8 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest border-b border-slate-100">Heure</th>
+                    <th className="px-8 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest border-b border-slate-100">Patient</th>
+                    <th className="px-8 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest border-b border-slate-100">Désignation</th>
+                    <th className="px-8 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest border-b border-slate-100 text-right">Total</th>
+                    <th className="px-8 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest border-b border-slate-100 text-right">Perçu</th>
+                    <th className="px-8 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest border-b border-slate-100 text-right">Reste</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-50">
+                  {journal.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="px-8 py-20 text-center text-slate-300 font-bold uppercase text-xs">Aucune transaction enregistrée aujourd&apos;hui</td>
+                    </tr>
+                  ) : (
+                    journal.map((tx) => (
+                      <tr key={tx.id} className="hover:bg-slate-50/50 transition-colors group">
+                        <td className="px-8 py-5 text-[11px] font-mono font-bold text-slate-400">
+                          {new Date(tx.date_transaction).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </td>
+                        <td className="px-8 py-5">
+                          <p className="text-xs font-black text-slate-800 uppercase leading-none">{tx.patients?.nom_complet || "Patient Externe"}</p>
+                          <p className="text-[9px] text-slate-400 font-bold mt-1 uppercase tracking-tighter">ID: {tx.id.slice(0, 8)}</p>
+                        </td>
+                        <td className="px-8 py-5">
+                          <p className="text-[10px] font-bold text-slate-600 line-clamp-1 max-w-xs">{tx.description}</p>
+                        </td>
+                        <td className="px-8 py-5 text-right text-xs font-black text-slate-900 tabular-nums">
+                          {tx.montant_total.toLocaleString()}
+                        </td>
+                        <td className="px-8 py-5 text-right text-xs font-black text-emerald-500 tabular-nums">
+                          {tx.montant_verse.toLocaleString()}
+                        </td>
+                        <td className="px-8 py-5 text-right">
+                          <span className={cn(
+                            "text-xs font-black tabular-nums",
+                            tx.reste_a_payer > 0 ? "text-riverside-red" : "text-slate-300"
+                          )}>
+                            {tx.reste_a_payer.toLocaleString()}
+                          </span>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </motion.div>
+        ) : (
           <motion.div 
             key="dettes"
             initial={{ opacity: 0, y: 20 }}

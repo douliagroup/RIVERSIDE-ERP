@@ -4,15 +4,15 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 export async function POST(req: Request) {
   try {
     const { transcription } = await req.json();
-    const apiKey = process.env.RIVERSIDE_GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY;
+    const apiKey = process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY || process.env.RIVERSIDE_GEMINI_API_KEY;
 
     if (!apiKey) {
-      console.error("[IA ROUTE] ERREUR : Clé API manquante dans les variables d'environnement (RIVERSIDE_GEMINI_API_KEY ou NEXT_PUBLIC_GEMINI_API_KEY)");
-      return NextResponse.json({ error: "Clé API manquante dans les variables d'environnement" }, { status: 500 });
+      console.error("[IA ROUTE] ERREUR : Clé API manquante (GEMINI_API_KEY)");
+      return NextResponse.json({ error: "Service IA temporairement indisponible (clé manquante), saisie manuelle requise" }, { status: 500 });
     }
 
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
     const prompt = `
       Tu es un copilote médical expert pour Riverside Medical Center à Douala.
@@ -30,17 +30,24 @@ export async function POST(req: Request) {
       }
     `;
 
-    const result = await model.generateContent(prompt);
-    const responseText = result.response.text();
-    
-    // Nettoyage de la réponse pour extraire le JSON
-    const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      throw new Error("Format JSON non détecté dans la réponse IA");
-    }
+    try {
+      const result = await model.generateContent(prompt);
+      const responseText = result.response.text();
+      
+      // Nettoyage de la réponse pour extraire le JSON
+      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        throw new Error("Format JSON non détecté dans la réponse IA");
+      }
 
-    const analysis = JSON.parse(jsonMatch[0]);
-    return NextResponse.json(analysis);
+      const analysis = JSON.parse(jsonMatch[0]);
+      return NextResponse.json(analysis);
+    } catch (apiError) {
+      console.error("Gemini API Call Failed:", apiError);
+      return NextResponse.json({ 
+        error: "Service IA temporairement indisponible, saisie manuelle requise" 
+      }, { status: 503 });
+    }
 
   } catch (error) {
     console.error("AI Consultation Error:", error);

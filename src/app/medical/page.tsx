@@ -211,8 +211,8 @@ export default function MedicalPage() {
 
     } catch (err: any) {
       console.error("AI Analysis Failed", err);
-      // Show toast if possible, using alert as fallback
-      alert("Erreur de diagnostic IA : " + (err.message || "Le service est temporairement indisponible."));
+      // Harmonisation avec la réponse de l'API
+      alert("Service IA temporairement indisponible, saisie manuelle requise");
     } finally {
       setIsAnalyzing(false);
     }
