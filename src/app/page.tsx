@@ -14,12 +14,17 @@ import {
   CheckCircle2,
   AlertCircle,
   Loader2,
-  TrendingUp
+  TrendingUp,
+  Eye,
+  Pencil,
+  Trash2,
+  X
 } from "lucide-react";
-import { motion } from "motion/react";
+import { motion, AnimatePresence } from "motion/react";
 import Image from "next/image";
 import { supabase } from "@/src/lib/supabase";
 import { cn } from "@/src/lib/utils";
+import { toast } from "sonner";
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -28,6 +33,11 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [caDuJour, setCaDuJour] = useState(0);
+  
+  // New states for actions
+  const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
+  const [selectedSejourDetail, setSelectedSejourDetail] = useState<any | null>(null);
+  const [isDeleting, setIsDeleting] = useState<string | null>(null);
 
   const fetchData = async () => {
     try {
@@ -63,6 +73,28 @@ export default function DashboardPage() {
       setError("Erreur de connexion à la base de données.");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const cancelSejour = async (id: string) => {
+    if (!confirm("Êtes-vous sûr de vouloir annuler cette visite ?")) return;
+    
+    try {
+      setIsDeleting(id);
+      const { error } = await supabase
+        .from('sejours_actifs')
+        .update({ statut: 'Annulé' })
+        .eq('id', id);
+
+      if (error) throw error;
+      toast.success("Visite annulée avec succès");
+      fetchData();
+    } catch (err: any) {
+      toast.error("Erreur lors de l'annulation");
+      console.error(err);
+    } finally {
+      setIsDeleting(null);
+      setActiveMenuId(null);
     }
   };
 
@@ -133,12 +165,12 @@ export default function DashboardPage() {
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-6 bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm relative overflow-hidden group">
         <div className="absolute top-0 right-0 p-4 opacity-[0.03] group-hover:opacity-[0.05] transition-opacity">
            <Image 
-             src="https://i.postimg.cc/jj9x2wr9/92953051_100850928268975_2573263542966812672_n.png" 
+             src="https://i.postimg.cc/qRmsjmD7/Background-Eraser-20241231-212658879.png" 
              alt="Riverside Logo Watermark" 
-             width={120}
-             height={120}
+             width={150}
+             height={150}
              referrerPolicy="no-referrer"
-             className="w-32 h-32 object-contain"
+             className="w-40 h-40 object-contain"
            />
         </div>
 
@@ -146,15 +178,15 @@ export default function DashboardPage() {
           <motion.div
             initial={{ opacity: 0, scale: 0.8 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="w-16 h-16 bg-white rounded-2xl shadow-xl shadow-red-50 flex items-center justify-center border border-slate-50 overflow-hidden"
+            className="w-24 h-24 bg-white rounded-2xl shadow-xl shadow-red-50 flex items-center justify-center border border-slate-50 overflow-hidden"
           >
              <Image 
-               src="https://i.postimg.cc/jj9x2wr9/92953051_100850928268975_2573263542966812672_n.png" 
+               src="https://i.postimg.cc/qRmsjmD7/Background-Eraser-20241231-212658879.png" 
                alt="Riverside Logo" 
-               width={48}
-               height={48}
+               width={80}
+               height={80}
                referrerPolicy="no-referrer"
-               className="w-12 h-12 object-contain"
+               className="w-20 h-20 object-contain"
              />
           </motion.div>
           <div>
@@ -283,14 +315,15 @@ export default function DashboardPage() {
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     transition={{ delay: idx * 0.05 }}
-                    className="hover:bg-slate-50/50 transition-colors group cursor-pointer"
+                    onClick={() => router.push("/medical")}
+                    className="hover:bg-slate-50 transition-colors group cursor-pointer relative"
                   >
                     <td className="px-8 py-5 text-slate-400 font-black text-[10px] uppercase tracking-tighter">
                       #{sejour.id.substring(0, 6).toUpperCase()}
                     </td>
                     <td className="px-8 py-5">
                       <div className="flex items-center gap-4">
-                        <div className="w-8 h-8 rounded-lg bg-slate-50 border border-slate-100 flex items-center justify-center text-[9px] font-black text-slate-900 group-hover:bg-white group-hover:border-riverside-red transition-all shadow-inner">
+                        <div className="w-8 h-8 rounded-lg bg-slate-50 border border-slate-100 flex items-center justify-center text-[9px] font-black text-slate-900 group-hover:bg-red-50 group-hover:border-riverside-red transition-all shadow-inner">
                           {sejour.patients?.nom_complet?.charAt(0) || "P"}
                         </div>
                         <div className="flex flex-col">
@@ -310,10 +343,67 @@ export default function DashboardPage() {
                     <td className="px-8 py-5 text-center">
                       <StatusBadge status={sejour.statut} />
                     </td>
-                    <td className="px-8 py-5 text-right">
-                      <button className="w-8 h-8 inline-flex items-center justify-center hover:bg-slate-50 rounded-lg transition-colors border border-transparent hover:border-slate-100">
-                        <MoreHorizontal size={14} className="text-slate-400" />
+                    <td className="px-8 py-5 text-right relative">
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setActiveMenuId(activeMenuId === sejour.id ? null : sejour.id);
+                        }}
+                        className="w-8 h-8 inline-flex items-center justify-center hover:bg-white rounded-lg transition-all border border-transparent hover:border-slate-100 shadow-sm"
+                      >
+                        <MoreHorizontal size={14} className={cn("transition-colors", activeMenuId === sejour.id ? "text-riverside-red" : "text-slate-400")} />
                       </button>
+
+                      {/* Dropdown Menu */}
+                      <AnimatePresence>
+                        {activeMenuId === sejour.id && (
+                          <>
+                            <div 
+                              className="fixed inset-0 z-40" 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setActiveMenuId(null);
+                              }} 
+                            />
+                            <motion.div
+                              initial={{ opacity: 0, scale: 0.95, y: -10 }}
+                              animate={{ opacity: 1, scale: 1, y: 0 }}
+                              exit={{ opacity: 0, scale: 0.95, y: -10 }}
+                              className="absolute right-8 top-12 w-48 bg-white rounded-xl shadow-2xl border border-slate-100 z-50 overflow-hidden py-2"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <button 
+                                onClick={() => {
+                                  setSelectedSejourDetail(sejour);
+                                  setActiveMenuId(null);
+                                }}
+                                className="w-full px-4 py-2.5 text-left flex items-center gap-3 hover:bg-slate-50 transition-colors"
+                              >
+                                <Eye size={12} className="text-slate-400" />
+                                <span className="text-[9px] font-black uppercase text-slate-600 tracking-widest">Voir Détails</span>
+                              </button>
+                              <button 
+                                onClick={() => router.push(`/admission?edit=${sejour.id}`)}
+                                className="w-full px-4 py-2.5 text-left flex items-center gap-3 hover:bg-slate-50 transition-colors"
+                              >
+                                <Pencil size={12} className="text-slate-400" />
+                                <span className="text-[9px] font-black uppercase text-slate-600 tracking-widest">Modifier</span>
+                              </button>
+                              <div className="h-[1px] bg-slate-50 my-1 mx-2" />
+                              <button 
+                                onClick={() => cancelSejour(sejour.id)}
+                                disabled={isDeleting === sejour.id}
+                                className="w-full px-4 py-2.5 text-left flex items-center gap-3 hover:bg-red-50 transition-colors group"
+                              >
+                                <Trash2 size={12} className="text-slate-400 group-hover:text-riverside-red" />
+                                <span className="text-[9px] font-black uppercase text-slate-600 group-hover:text-riverside-red tracking-widest">
+                                  {isDeleting === sejour.id ? "Annulation..." : "Annuler Visite"}
+                                </span>
+                              </button>
+                            </motion.div>
+                          </>
+                        )}
+                      </AnimatePresence>
                     </td>
                   </motion.tr>
                 ))
@@ -330,6 +420,91 @@ export default function DashboardPage() {
            <p className="text-[9px] text-slate-300 font-black uppercase tracking-[0.2em]">Medical Intelligence Core</p>
         </div>
       </motion.div>
+
+      {/* Details Modal */}
+      <AnimatePresence>
+        {selectedSejourDetail && (
+          <>
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setSelectedSejourDetail(null)}
+              className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[100]"
+            />
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="fixed inset-0 m-auto w-full max-w-xl h-fit max-h-[90vh] bg-white rounded-[2.5rem] shadow-2xl z-[101] overflow-hidden border border-slate-100"
+            >
+              <div className="p-10 border-b border-slate-50 flex items-center justify-between">
+                <div>
+                  <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Détails de la Visite</h3>
+                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-1">Dossier Patient Riverside</p>
+                </div>
+                <button 
+                  onClick={() => setSelectedSejourDetail(null)}
+                  className="w-10 h-10 flex items-center justify-center bg-slate-50 hover:bg-white rounded-xl border border-transparent hover:border-slate-100 transition-all text-slate-400"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="p-10 space-y-8 overflow-y-auto max-h-[60vh] custom-scrollbar">
+                <div className="grid grid-cols-2 gap-8">
+                  <div className="space-y-1">
+                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Nom Complet</p>
+                    <p className="text-xs font-black text-slate-800 uppercase tracking-tight">{selectedSejourDetail.patients?.nom_complet}</p>
+                  </div>
+                  <div className="space-y-1 text-right">
+                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">ID Admission</p>
+                    <p className="text-xs font-mono font-bold text-slate-500 uppercase">#{selectedSejourDetail.id.substring(0, 8)}</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-8">
+                   <div className="space-y-1">
+                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Contact</p>
+                    <p className="text-xs font-bold text-slate-800">{selectedSejourDetail.patients?.telephone || "N/A"}</p>
+                  </div>
+                  <div className="space-y-1 text-right">
+                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Assurance</p>
+                    <p className="text-xs font-black text-emerald-600 uppercase italic">{selectedSejourDetail.patients?.type_assurance || "Cash"}</p>
+                  </div>
+                </div>
+
+                <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100 space-y-4">
+                  <div className="space-y-1">
+                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Motif de Visite</p>
+                    <p className="text-xs font-medium text-slate-700 leading-relaxed italic">&quot;{selectedSejourDetail.motif_visite}&quot;</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-8">
+                   <div className="space-y-1">
+                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Profession</p>
+                    <p className="text-xs font-bold text-slate-800 uppercase tracking-tight">{selectedSejourDetail.patients?.profession || "N/A"}</p>
+                  </div>
+                  <div className="space-y-1 text-right">
+                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Société</p>
+                    <p className="text-xs font-bold text-slate-800 uppercase tracking-tight">{selectedSejourDetail.patients?.societe || "N/A"}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-8 border-t border-slate-50 bg-slate-50/30 flex justify-end">
+                <button 
+                  onClick={() => setSelectedSejourDetail(null)}
+                  className="px-8 py-3 bg-slate-900 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:scale-[1.02] transition-all"
+                >
+                  Fermer le dossier
+                </button>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

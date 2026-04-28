@@ -18,7 +18,10 @@ import {
   Sparkles,
   Brain,
   AlertCircle,
-  Shield
+  Shield,
+  FlaskConical,
+  Calculator,
+  ChevronRight
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { supabase } from "@/src/lib/supabase";
@@ -83,7 +86,7 @@ export default function MedicalPage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
-  const [activeSubTab, setActiveSubTab] = useState<'consultation' | 'history' | 'tools'>('consultation');
+  const [activeSubTab, setActiveSubTab] = useState<'consultation' | 'history' | 'tools' | 'lab'>('consultation');
   const [history, setHistory] = useState<any[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
 
@@ -485,7 +488,8 @@ export default function MedicalPage() {
                           {[
                             { id: 'consultation', label: 'CONSUL.', icon: Stethoscope },
                             { id: 'history', label: 'HIST.', icon: FileText },
-                            { id: 'tools', label: 'OUTILS', icon: Activity }
+                            { id: 'lab', label: 'LABO', icon: FlaskConical },
+                            { id: 'tools', label: 'OUTILS', icon: Calculator }
                           ].map(tab => (
                             <button
                               key={tab.id}
@@ -642,7 +646,7 @@ export default function MedicalPage() {
                                  value={formData.diagnostic}
                                  onChange={e => setFormData({...formData, diagnostic: e.target.value})}
                                  placeholder="Saisissez le diagnostic final..."
-                                 className="w-full p-6 bg-slate-50 border border-slate-100 rounded-3xl focus:border-riverside-red outline-none font-bold text-sm resize-none transition-all"
+                                 className="w-full p-6 bg-slate-50 border border-slate-100 rounded-3xl focus:border-riverside-red outline-none font-bold text-sm resize-y min-h-[150px] transition-all"
                                />
                             </div>
 
@@ -656,7 +660,7 @@ export default function MedicalPage() {
                                  value={formData.ordonnance}
                                  onChange={e => setFormData({...formData, ordonnance: e.target.value})}
                                  placeholder="Prescription médicamenteuse..."
-                                 className="w-full p-6 bg-emerald-50/30 border border-emerald-100 rounded-3xl focus:border-emerald-500 outline-none font-bold text-sm font-mono resize-none text-emerald-800 transition-all shadow-sm"
+                                 className="w-full p-6 bg-emerald-50/30 border border-emerald-100 rounded-3xl focus:border-emerald-500 outline-none font-bold text-sm font-mono resize-y min-h-[150px] text-emerald-800 transition-all shadow-sm"
                                />
                             </div>
                           </div>
@@ -741,52 +745,97 @@ export default function MedicalPage() {
                       </AnimatePresence>
                     </>
                   ) : activeSubTab === 'history' ? (
-                    <div className="xl:col-span-12 p-8 space-y-6 overflow-y-auto max-h-[700px]">
-                      <div className="flex items-center justify-between">
-                        <h4 className="text-sm font-black text-slate-900 uppercase tracking-widest">Historique du Patient</h4>
-                        <span className="text-[10px] font-bold text-slate-400">{history.length} consultations passées</span>
+                    <div className="xl:col-span-12 p-8 space-y-8 overflow-y-auto max-h-[700px] bg-slate-50/20">
+                      <div className="flex items-center justify-between mb-8">
+                        <div>
+                          <h4 className="text-xl font-black text-slate-900 uppercase tracking-tight">Dossier Historique</h4>
+                          <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] mt-1">Parcours de soins complet du patient</p>
+                        </div>
+                        <div className="px-4 py-2 bg-white border border-slate-100 rounded-xl shadow-sm text-[10px] font-black text-slate-500 uppercase tracking-widest">
+                          {history.length} Actes Enregistrés
+                        </div>
                       </div>
                       
                       {loadingHistory ? (
                         <div className="py-20 flex flex-col items-center justify-center gap-4 opacity-50">
                           <Loader2 className="animate-spin text-riverside-red" size={24} />
-                          <p className="text-[10px] font-black uppercase tracking-widest">Chargement de l&apos;historique...</p>
+                          <p className="text-[10px] font-black uppercase tracking-widest italic">Interrogation du dossier...</p>
                         </div>
                       ) : history.length === 0 ? (
-                        <div className="py-20 text-center bg-slate-50 rounded-3xl border-2 border-dashed border-slate-100">
-                          <p className="text-sm font-black text-slate-300 uppercase">Aucun antécédent trouvé</p>
+                        <div className="py-32 text-center bg-white rounded-[3rem] border-2 border-dashed border-slate-100">
+                          <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <FileText size={24} className="text-slate-200" />
+                          </div>
+                          <p className="text-xs font-black text-slate-300 uppercase tracking-widest">Aucun antécédent dans la base</p>
                         </div>
                       ) : (
-                        <div className="space-y-4">
-                          {history.map((h) => (
-                            <div key={h.id} className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm hover:border-slate-200 transition-all">
-                              <div className="flex items-center justify-between mb-4">
-                                <div className="flex items-center gap-3">
-                                  <div className="bg-slate-50 p-2 rounded-lg">
-                                    <Clock size={14} className="text-slate-400" />
-                                  </div>
-                                  <div>
-                                    <p className="text-xs font-black text-slate-900">{new Date(h.created_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
-                                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Dr. {h.personnel?.nom_complet || 'Inconnu'}</p>
-                                  </div>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <div className="px-2 py-1 bg-slate-50 rounded text-[9px] font-black text-slate-500 uppercase">
-                                    T°: {h.constantes?.temperature}°C
-                                  </div>
-                                  <div className="px-2 py-1 bg-slate-50 rounded text-[9px] font-black text-slate-500 uppercase">
-                                    TA: {h.constantes?.tension}
-                                  </div>
-                                </div>
+                        <div className="relative space-y-12 before:absolute before:left-[19px] before:top-4 before:bottom-4 before:w-[2px] before:bg-slate-100">
+                          {history.map((h, idx) => (
+                            <div key={h.id} className="relative pl-12 group">
+                              <div className={cn(
+                                "absolute left-0 top-1 w-10 h-10 rounded-full flex items-center justify-center border-4 border-white shadow-md z-10 transition-transform group-hover:scale-110",
+                                idx === 0 ? "bg-riverside-red text-white" : "bg-slate-100 text-slate-400"
+                              )}>
+                                <Activity size={12} />
                               </div>
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div className="space-y-2">
-                                  <p className="text-[9px] font-black text-riverside-red uppercase tracking-widest">Diagnostic & Notes</p>
-                                  <p className="text-xs font-bold text-slate-700 leading-relaxed bg-slate-50/50 p-4 rounded-xl">{h.diagnostic || h.notes_cliniques}</p>
+                              
+                              <div className="bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm hover:shadow-xl hover:shadow-slate-200/40 hover:border-riverside-red/20 transition-all duration-300">
+                                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 pb-6 border-b border-slate-50">
+                                  <div className="flex items-center gap-4">
+                                    <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                                      <Clock size={16} className="text-slate-400" />
+                                    </div>
+                                    <div>
+                                      <p className="text-sm font-black text-slate-900 uppercase tracking-tight">Consultation du {new Date(h.created_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
+                                      <div className="flex items-center gap-2 mt-1">
+                                        <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full" />
+                                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Praticien: Dr. {h.personnel?.nom_complet || 'Médicin Riverside'}</p>
+                                      </div>
+                                    </div>
+                                  </div>
+                                  
+                                  <div className="flex items-center gap-3">
+                                    <div className="flex flex-col items-end">
+                                      <p className="text-[8px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">Constantes</p>
+                                      <div className="flex items-center gap-2">
+                                        <div className="px-3 py-1 bg-slate-50 rounded-lg text-[10px] font-black text-slate-600 border border-slate-100">
+                                          T°: {h.constantes?.temperature}°C
+                                        </div>
+                                        <div className="px-3 py-1 bg-slate-50 rounded-lg text-[10px] font-black text-slate-600 border border-slate-100">
+                                          TA: {h.constantes?.tension}
+                                        </div>
+                                        <div className="px-3 py-1 bg-slate-50 rounded-lg text-[10px] font-black text-slate-600 border border-slate-100">
+                                          Poids: {h.constantes?.poids}kg
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
                                 </div>
-                                <div className="space-y-2">
-                                  <p className="text-[9px] font-black text-emerald-500 uppercase tracking-widest">Ordonnance</p>
-                                  <p className="text-xs font-medium text-slate-600 leading-relaxed italic bg-emerald-50/20 p-4 rounded-xl border border-emerald-50">{h.ordonnance}</p>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                  <div className="space-y-4">
+                                    <div className="bg-slate-50/50 p-6 rounded-2xl border border-slate-50">
+                                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+                                        <FileText size={12} className="text-riverside-red" /> Motif & Observations
+                                      </p>
+                                      <p className="text-xs font-bold text-slate-700 leading-relaxed italic">{h.notes_cliniques || "Non renseigné"}</p>
+                                    </div>
+                                    <div className="bg-amber-50/30 p-6 rounded-2xl border border-amber-100/50">
+                                      <p className="text-[9px] font-black text-amber-600 uppercase tracking-widest mb-3 flex items-center gap-2">
+                                        <Sparkles size={12} /> Diagnostic Établi
+                                      </p>
+                                      <p className="text-xs font-black text-slate-800 leading-relaxed uppercase">{h.diagnostic || "Analyse en cours"}</p>
+                                    </div>
+                                  </div>
+                                  
+                                  <div className="bg-emerald-50/20 p-8 rounded-[2rem] border border-emerald-100 flex flex-col h-full">
+                                    <p className="text-[9px] font-black text-emerald-600 uppercase tracking-widest mb-4 flex items-center gap-2">
+                                      <Pill size={14} /> Ordonnance Riverside
+                                    </p>
+                                    <p className="text-xs font-mono font-bold text-emerald-800 leading-[1.8] whitespace-pre-line flex-1">
+                                      {h.ordonnance}
+                                    </p>
+                                  </div>
                                 </div>
                               </div>
                             </div>
@@ -794,30 +843,88 @@ export default function MedicalPage() {
                         </div>
                       )}
                     </div>
+                  ) : activeSubTab === 'lab' ? (
+                    <div className="xl:col-span-12 p-10 space-y-8 h-[600px] overflow-y-auto">
+                       <div className="flex items-center justify-between">
+                          <div>
+                            <h4 className="text-xl font-black text-slate-900 uppercase tracking-tight">Examens & Laboratoire</h4>
+                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] mt-1 italic">Résultats techniques et imagerie</p>
+                          </div>
+                          <div className="flex gap-4">
+                             <div className="px-5 py-2 bg-emerald-50 text-emerald-600 rounded-xl text-[9px] font-black uppercase tracking-widest border border-emerald-100">
+                               Tous les tests payés
+                             </div>
+                          </div>
+                       </div>
+
+                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          {[
+                            { test: "NFS (HÉMOGRAMME)", status: "COMPLÉTÉ", date: "28/04/2026", result: "Paramètres normaux", doctor: "Biochimiste" },
+                            { test: "GLYCÉMIE À JEUN", status: "EN ATTENTE", date: "En cours", result: "---", doctor: "Laboratoire" },
+                            { test: "TEST PALU (TDR)", status: "COMPLÉTÉ", date: "28/04/2026", result: "NÉGATIF", doctor: "Infirmerie" },
+                            { test: "CRP", status: "EN ATTENTE", date: "Prélèvement fait", result: "---", doctor: "Laboratoire" }
+                          ].map((lab, i) => (
+                            <div key={i} className="bg-white border border-slate-100 p-6 rounded-[2rem] shadow-sm flex items-center justify-between hover:border-riverside-red/30 transition-all group">
+                               <div className="flex items-center gap-5">
+                                  <div className={cn(
+                                    "w-12 h-12 rounded-2xl flex items-center justify-center transition-colors shadow-inner",
+                                    lab.status === "COMPLÉTÉ" ? "bg-emerald-50 text-emerald-500" : "bg-amber-50 text-amber-500"
+                                  )}>
+                                     <FlaskConical size={20} />
+                                  </div>
+                                  <div>
+                                     <p className="text-xs font-black text-slate-900 uppercase tracking-tight">{lab.test}</p>
+                                     <div className="flex items-center gap-3 mt-1.5">
+                                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">DR. {lab.doctor}</p>
+                                        <span className="w-1 h-1 bg-slate-200 rounded-full" />
+                                        <p className="text-[9px] font-bold text-slate-400">{lab.date}</p>
+                                     </div>
+                                  </div>
+                               </div>
+                               <div className="flex flex-col items-end gap-2">
+                                  <span className={cn(
+                                    "px-3 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest",
+                                    lab.status === "COMPLÉTÉ" ? "bg-emerald-100/50 text-emerald-600" : "bg-amber-100/50 text-amber-600"
+                                  )}>
+                                    {lab.status}
+                                  </span>
+                                  {lab.status === "COMPLÉTÉ" && (
+                                    <p className="text-[10px] font-black text-slate-900 group-hover:text-riverside-red transition-colors">{lab.result}</p>
+                                  )}
+                               </div>
+                            </div>
+                          ))}
+                       </div>
+                       
+                       <div className="mt-10 p-10 bg-slate-50 rounded-[3rem] border-2 border-dashed border-slate-100 text-center flex flex-col items-center gap-4">
+                          <Brain className="text-slate-200" size={32} />
+                          <p className="text-xs font-black text-slate-300 uppercase tracking-widest">Connectez un automate de laboratoire Riverside<br/>pour la synchronisation directe des résultats.</p>
+                       </div>
+                    </div>
                   ) : (
                     <div className="xl:col-span-12 p-8 space-y-10">
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                         {/* BMI Calculator */}
-                        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm space-y-6 flex flex-col justify-between">
+                        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm space-y-8 flex flex-col justify-between hover:shadow-xl hover:shadow-slate-200/50 transition-all duration-300 group">
                           <div className="space-y-6">
                             <div className="flex items-center gap-4">
-                              <div className="w-12 h-12 bg-blue-50 rounded-2xl flex items-center justify-center">
-                                <Activity className="text-blue-500" size={20} />
+                              <div className="w-14 h-14 bg-blue-50 rounded-2xl flex items-center justify-center border border-blue-100 shadow-inner group-hover:bg-blue-500 group-hover:text-white transition-all">
+                                <Activity size={24} />
                               </div>
                               <div>
-                                 <h4 className="text-[11px] font-black text-slate-900 uppercase tracking-widest">Calculateur d&apos;IMC</h4>
-                                 <p className="text-[9px] font-bold text-slate-400 uppercase">INDICE DE MASSE CORPORELLE</p>
+                                 <h4 className="text-sm font-black text-slate-900 uppercase tracking-tighter">Calculateur d&apos;IMC</h4>
+                                 <p className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.2em]">Indice de Masse Corporelle</p>
                               </div>
                             </div>
                             
-                            <div className="grid grid-cols-2 gap-4">
+                            <div className="grid grid-cols-2 gap-6">
                               <div className="space-y-2">
                                 <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Poids (kg)</label>
                                 <input 
                                   type="number" 
                                   value={bmiInput.weight}
                                   onChange={(e) => setBmiInput({ ...bmiInput, weight: e.target.value })}
-                                  className="w-full p-3.5 bg-slate-50 border border-slate-100 rounded-xl font-black text-xs outline-none focus:border-blue-500 shadow-inner"
+                                  className="w-full px-5 py-4 bg-slate-50 border border-slate-100 rounded-2xl font-black text-sm outline-none focus:border-blue-500 shadow-inner focus:bg-white transition-all"
                                 />
                               </div>
                               <div className="space-y-2">
@@ -826,80 +933,87 @@ export default function MedicalPage() {
                                   type="number" 
                                   value={bmiInput.height}
                                   onChange={(e) => setBmiInput({ ...bmiInput, height: e.target.value })}
-                                  className="w-full p-3.5 bg-slate-50 border border-slate-100 rounded-xl font-black text-xs outline-none focus:border-blue-500 shadow-inner"
+                                  className="w-full px-5 py-4 bg-slate-50 border border-slate-100 rounded-2xl font-black text-sm outline-none focus:border-blue-500 shadow-inner focus:bg-white transition-all"
                                 />
                               </div>
                             </div>
                           </div>
 
                           {bmiInput.weight && bmiInput.height ? (
-                            <div className="p-6 bg-slate-900 rounded-3xl text-center space-y-2 shadow-xl">
-                              <p className="text-[8px] font-black text-slate-500 uppercase tracking-[0.2em]">Résultat Brut</p>
-                              <div className="text-3xl font-black text-white tracking-tighter">
+                            <div className="p-8 bg-slate-900 rounded-[2rem] text-center space-y-3 shadow-2xl relative overflow-hidden">
+                              <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 rounded-full -mr-16 -mt-16 blur-2xl" />
+                              <p className="text-[9px] font-black text-slate-500 uppercase tracking-[0.3em] relative z-10">Résultat IMC</p>
+                              <div className="text-4xl font-black text-white tracking-tighter relative z-10">
                                 {(Number(bmiInput.weight) / ((Number(bmiInput.height)/100) ** 2)).toFixed(1)}
                               </div>
-                              <p className={cn(
-                                "text-[9px] font-black uppercase tracking-widest",
-                                (Number(bmiInput.weight) / ((Number(bmiInput.height)/100) ** 2)) < 18.5 ? "text-amber-400" :
-                                (Number(bmiInput.weight) / ((Number(bmiInput.height)/100) ** 2)) < 25 ? "text-emerald-400" : "text-red-400"
+                              <div className={cn(
+                                "px-4 py-2 rounded-xl inline-block text-[10px] font-black uppercase tracking-widest relative z-10 border",
+                                (() => {
+                                  const imc = Number(bmiInput.weight) / ((Number(bmiInput.height)/100) ** 2);
+                                  if (imc < 18.5) return "bg-amber-500/10 text-amber-400 border-amber-500/20";
+                                  if (imc < 25) return "bg-emerald-500/10 text-emerald-400 border-emerald-500/20";
+                                  if (imc < 30) return "bg-orange-500/10 text-orange-400 border-orange-500/20";
+                                  return "bg-red-500/10 text-red-400 border-red-500/20";
+                                })()
                               )}>
                                 {(() => {
                                   const imc = Number(bmiInput.weight) / ((Number(bmiInput.height)/100) ** 2);
-                                  if (imc < 18.5) return "Insuffisance Pondérale";
-                                  if (imc < 25) return "Poids Normal";
+                                  if (imc < 18.5) return "Maigreur";
+                                  if (imc < 25) return "Normal";
                                   if (imc < 30) return "Surpoids";
                                   return "Obésité";
                                 })()}
-                              </p>
+                              </div>
                             </div>
                           ) : (
-                            <div className="p-8 border-2 border-dashed border-slate-100 rounded-3xl text-center">
-                               <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest">En attente de valeurs</p>
+                            <div className="p-10 border-2 border-dashed border-slate-100 rounded-[2rem] text-center">
+                               <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest">En attente de paramètres</p>
                             </div>
                           )}
                         </div>
 
                         {/* Paracetamol Calculator */}
-                        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm space-y-6 flex flex-col justify-between">
+                        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm space-y-8 flex flex-col justify-between hover:shadow-xl hover:shadow-slate-200/50 transition-all duration-300 group">
                           <div className="space-y-6">
                             <div className="flex items-center gap-4">
-                              <div className="w-12 h-12 bg-emerald-50 rounded-2xl flex items-center justify-center">
-                                <Pill className="text-emerald-500" size={20} />
+                              <div className="w-14 h-14 bg-emerald-50 rounded-2xl flex items-center justify-center border border-emerald-100 shadow-inner group-hover:bg-emerald-500 group-hover:text-white transition-all">
+                                <Pill size={24} />
                               </div>
                               <div>
-                                 <h4 className="text-[11px] font-black text-slate-900 uppercase tracking-widest">Dose Pédiatrique</h4>
-                                 <p className="text-[9px] font-bold text-slate-400 uppercase">PARACÉTAMOL SIROP (2.4%)</p>
+                                 <h4 className="text-sm font-black text-slate-900 uppercase tracking-tighter">Dose Paracétamol</h4>
+                                 <p className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.2em]">Pédiatrie (15mg/kg/prise)</p>
                               </div>
                             </div>
                             
                             <div className="space-y-2">
                               <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Poids de l&apos;enfant (kg)</label>
                               <div className="relative group">
-                                <Weight className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-emerald-500 transition-colors" size={14} />
+                                <Weight className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-emerald-500 transition-colors" size={16} />
                                 <input 
                                   type="number" 
                                   value={paraInput.weight}
                                   onChange={(e) => setParaInput({ weight: e.target.value })}
-                                  placeholder="EX: 12"
-                                  className="w-full pl-12 pr-4 py-3.5 bg-slate-50 border border-slate-100 rounded-xl font-black text-xs outline-none focus:border-emerald-500 shadow-inner"
+                                  placeholder="Ex: 10"
+                                  className="w-full pl-14 pr-5 py-4 bg-slate-50 border border-slate-100 rounded-2xl font-black text-sm outline-none focus:border-emerald-500 shadow-inner focus:bg-white transition-all"
                                 />
                               </div>
                             </div>
                           </div>
 
                           {paraInput.weight ? (
-                            <div className="p-6 bg-emerald-950 rounded-3xl text-center space-y-2 shadow-xl border-b-4 border-emerald-800">
-                              <p className="text-[8px] font-black text-emerald-500/50 uppercase tracking-[0.2em]">Dose par Prise (8h/prise)</p>
-                              <div className="text-3xl font-black text-emerald-400 tracking-tighter">
-                                {(Number(paraInput.weight) / 2).toFixed(1)} <span className="text-sm">ML</span>
+                            <div className="p-8 bg-emerald-950 rounded-[2rem] text-center space-y-3 shadow-2xl border-b-8 border-emerald-900 relative overflow-hidden">
+                              <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/10 rounded-full -mr-16 -mt-16 blur-2xl" />
+                              <p className="text-[9px] font-black text-emerald-500/50 uppercase tracking-[0.3em] relative z-10">Dose Recommandée</p>
+                              <div className="text-4xl font-black text-emerald-400 tracking-tighter relative z-10">
+                                {Number(paraInput.weight) * 15} <span className="text-lg">MG</span>
                               </div>
-                              <p className="text-[8px] font-black text-emerald-200 uppercase tracking-widest opacity-60">
-                                Max: 60mg/kg/jour répartis en 3 ou 4 prises
-                              </p>
+                              <div className="bg-emerald-500/10 px-4 py-2 rounded-xl inline-block text-[10px] font-black text-emerald-200 uppercase tracking-widest relative z-10 italic">
+                                Max 4 fois par jour
+                              </div>
                             </div>
                           ) : (
-                            <div className="p-8 border-2 border-dashed border-slate-100 rounded-3xl text-center">
-                               <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest">Entrez le poids</p>
+                            <div className="p-10 border-2 border-dashed border-slate-100 rounded-[2rem] text-center">
+                               <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Entrez le poids du patient</p>
                             </div>
                           )}
                         </div>

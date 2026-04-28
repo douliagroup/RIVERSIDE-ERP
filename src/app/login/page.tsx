@@ -38,7 +38,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col md:flex-row">
+    <div className="min-h-screen bg-slate-100 flex flex-col md:flex-row">
       
       {/* Côté Gauche : Identité Visuelle */}
       <div className="hidden md:flex md:w-1/2 bg-riverside-red items-center justify-center p-20 relative overflow-hidden">
@@ -46,12 +46,12 @@ export default function LoginPage() {
         <div className="absolute bottom-0 left-0 w-96 h-96 bg-black/10 rounded-full -ml-48 -mb-48 blur-3xl" />
         
         <div className="relative z-10 text-white space-y-8 max-w-md">
-          <div className="w-24 h-24 bg-white rounded-3xl flex items-center justify-center shadow-2xl relative overflow-hidden p-2">
+          <div className="w-32 h-32 bg-white rounded-3xl flex items-center justify-center shadow-2xl relative overflow-hidden p-3">
             <Image 
-              src="https://i.postimg.cc/jj9x2wr9/92953051_100850928268975_2573263542966812672_n.png"
+              src="https://i.postimg.cc/qRmsjmD7/Background-Eraser-20241231-212658879.png"
               alt="Logo Riverside"
               fill
-              className="object-cover"
+              className="object-contain p-2"
               referrerPolicy="no-referrer"
             />
           </div>

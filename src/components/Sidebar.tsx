@@ -117,14 +117,14 @@ export default function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
         <Link href="/" className="flex items-center gap-3 group">
           <div className="relative">
             <Image 
-              src="https://i.postimg.cc/jj9x2wr9/92953051_100850928268975_2573263542966812672_n.png" 
+              src="https://i.postimg.cc/qRmsjmD7/Background-Eraser-20241231-212658879.png" 
               alt="Logo Riverside" 
-              width={56}
-              height={56}
+              width={96}
+              height={96}
               referrerPolicy="no-referrer"
               className={cn(
                 "transition-all duration-500 rounded-xl",
-                isCollapsed ? "w-10 h-10 shadow-none" : "w-14 h-14 shadow-xl shadow-red-100"
+                isCollapsed ? "w-10 h-10 shadow-none" : "w-24 h-24 shadow-xl shadow-red-100"
               )}
             />
             {!isCollapsed && (

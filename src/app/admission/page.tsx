@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, Suspense } from "react";
 import { 
   User, 
   Phone, 
@@ -12,19 +12,25 @@ import {
   Plus,
   ArrowLeft,
   Briefcase,
-  Building
+  Building,
+  Pencil
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { supabase } from "@/src/lib/supabase";
 import { cn } from "@/src/lib/utils";
 import { toast } from "sonner";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
-export default function AdmissionPage() {
+function AdmissionForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const editId = searchParams.get("edit");
+  
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [existingPatientId, setExistingPatientId] = useState<string | null>(null);
 
   // Form State
   const [formData, setFormData] = useState({
@@ -43,6 +49,52 @@ export default function AdmissionPage() {
 
   const [assurances, setAssurances] = useState<any[]>([]);
   const [loadingAssurances, setLoadingAssurances] = useState(false);
+
+  useEffect(() => {
+    const fetchEditData = async () => {
+      if (!editId) return;
+      
+      setLoading(true);
+      try {
+        const { data: sejourData, error: sejourErr } = await supabase
+          .from('sejours_actifs')
+          .select(`
+            *,
+            patients (*)
+          `)
+          .eq('id', editId)
+          .single();
+        
+        if (sejourErr) throw sejourErr;
+        
+        if (sejourData) {
+          setIsEditMode(true);
+          setExistingPatientId(sejourData.patient_id);
+          const p = sejourData.patients;
+          setFormData({
+            nom_complet: p.nom_complet || "",
+            telephone: p.telephone || "",
+            sexe: p.sexe || "M",
+            age: p.age ? p.age.toString() : "",
+            quartier: p.quartier || "",
+            profession: p.profession || "",
+            societe: p.societe || "",
+            type_assurance: p.type_assurance || "Cash",
+            numero_assurance: p.numero_assurance || "",
+            alertes_medicales: p.alertes_medicales || "",
+            motif_visite: sejourData.motif_visite || "",
+          });
+        }
+      } catch (err: any) {
+        toast.error("Erreur de récupération des données");
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchEditData();
+  }, [editId]);
 
   useEffect(() => {
     const fetchAssurances = async () => {
@@ -72,39 +124,70 @@ export default function AdmissionPage() {
     setError(null);
 
     try {
-      // ÉTAPE A : Création du patient
-      // Validation : age et telephone sont facultatifs
-      const { data: patientData, error: patientError } = await supabase
-        .from("patients")
-        .insert([{
-          nom_complet: formData.nom_complet.toUpperCase(),
-          telephone: formData.telephone || null,
-          sexe: formData.sexe,
-          age: formData.age ? parseInt(formData.age) : null,
-          quartier: formData.quartier.toUpperCase(),
-          profession: formData.profession.toUpperCase(),
-          societe: formData.societe.toUpperCase(),
-          type_assurance: formData.type_assurance,
-          numero_assurance: formData.numero_assurance,
-          alertes_medicales: formData.alertes_medicales
-        }])
-        .select()
-        .single();
+      if (isEditMode && existingPatientId && editId) {
+        // UPDATE MODE
+        const { error: patientError } = await supabase
+          .from("patients")
+          .update({
+            nom_complet: formData.nom_complet.toUpperCase(),
+            telephone: formData.telephone || null,
+            sexe: formData.sexe,
+            age: formData.age ? parseInt(formData.age) : null,
+            quartier: formData.quartier.toUpperCase(),
+            profession: formData.profession.toUpperCase(),
+            societe: formData.societe.toUpperCase(),
+            type_assurance: formData.type_assurance,
+            numero_assurance: formData.numero_assurance,
+            alertes_medicales: formData.alertes_medicales
+          })
+          .eq('id', existingPatientId);
 
-      if (patientError) throw patientError;
+        if (patientError) throw patientError;
 
-      // ÉTAPE B : Création du séjour actif
-      const { error: sejourError } = await supabase
-        .from("sejours_actifs")
-        .insert([{
-          patient_id: patientData.id,
-          statut: "En attente",
-          motif_visite: formData.motif_visite
-        }]);
+        const { error: sejourError } = await supabase
+          .from("sejours_actifs")
+          .update({
+            motif_visite: formData.motif_visite
+          })
+          .eq('id', editId);
 
-      if (sejourError) throw sejourError;
+        if (sejourError) throw sejourError;
 
-      toast.success("Admission réussie ! Redirection...");
+        toast.success("Modification enregistrée !");
+      } else {
+        // INSERT MODE
+        const { data: patientData, error: patientError } = await supabase
+          .from("patients")
+          .insert([{
+            nom_complet: formData.nom_complet.toUpperCase(),
+            telephone: formData.telephone || null,
+            sexe: formData.sexe,
+            age: formData.age ? parseInt(formData.age) : null,
+            quartier: formData.quartier.toUpperCase(),
+            profession: formData.profession.toUpperCase(),
+            societe: formData.societe.toUpperCase(),
+            type_assurance: formData.type_assurance,
+            numero_assurance: formData.numero_assurance,
+            alertes_medicales: formData.alertes_medicales
+          }])
+          .select()
+          .single();
+
+        if (patientError) throw patientError;
+
+        const { error: sejourError } = await supabase
+          .from("sejours_actifs")
+          .insert([{
+            patient_id: patientData.id,
+            statut: "En attente",
+            motif_visite: formData.motif_visite
+          }]);
+
+        if (sejourError) throw sejourError;
+
+        toast.success("Admission réussie ! Redirection...");
+      }
+
       setSuccess(true);
       setTimeout(() => {
         router.push("/");
@@ -140,9 +223,15 @@ export default function AdmissionPage() {
               </button>
               
               <div>
-                <h1 className="text-3xl font-black tracking-tighter leading-tight italic">RIVERSIDE<br/><span className="text-riverside-red">ADMISSION</span></h1>
+                <h1 className="text-3xl font-black tracking-tighter leading-tight italic">
+                  RIVERSIDE<br/>
+                  <span className="text-riverside-red">{isEditMode ? "MODIFICATION" : "ADMISSION"}</span>
+                </h1>
                 <p className="text-slate-400 text-xs font-medium mt-4 leading-relaxed uppercase tracking-tight">
-                  Enregistrement centralisé des patients pour consultations, examens et soins ambulatoires.
+                  {isEditMode 
+                    ? "Mise à jour des informations du patient et du motif de la visite en cours." 
+                    : "Enregistrement centralisé des patients pour consultations, examens et soins ambulatoires."
+                  }
                 </p>
               </div>
 
@@ -351,7 +440,10 @@ export default function AdmissionPage() {
                    <div className="flex items-center gap-4 text-amber-600 bg-amber-50 px-6 py-4 rounded-2xl border border-amber-100">
                       <AlertTriangle size={20} className="shrink-0" />
                       <p className="text-[10px] font-black uppercase leading-tight tracking-tight">
-                        En validant, le patient sera automatiquement<br/>ajouté à la file d&apos;attente médicale.
+                        {isEditMode 
+                          ? "Les modifications seront appliquées immédiatement\nsur le dossier du patient."
+                          : "En validant, le patient sera automatiquement\najouté à la file d'attente médicale."
+                        }
                       </p>
                    </div>
                    
@@ -359,8 +451,8 @@ export default function AdmissionPage() {
                     disabled={loading}
                     className="w-full md:w-auto px-12 py-5 bg-riverside-red text-white rounded-2xl font-black uppercase text-xs tracking-widest shadow-2xl shadow-red-200 hover:scale-[1.02] transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-4"
                    >
-                     {loading ? <Loader2 size={18} className="animate-spin" /> : <Plus size={18} />}
-                     Lancer l&apos;Admission
+                     {loading ? <Loader2 size={18} className="animate-spin" /> : isEditMode ? <Pencil size={18} /> : <Plus size={18} />}
+                     {isEditMode ? "Enregistrer les modifications" : "Lancer l'Admission"}
                    </button>
                 </div>
               </form>
@@ -369,5 +461,17 @@ export default function AdmissionPage() {
         </div>
       </motion.div>
     </div>
+  );
+}
+
+export default function AdmissionPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <Loader2 className="animate-spin text-riverside-red" size={48} />
+      </div>
+    }>
+      <AdmissionForm />
+    </Suspense>
   );
 }

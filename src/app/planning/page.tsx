@@ -14,11 +14,21 @@ import {
   MoreVertical,
   Loader2,
   Filter,
-  Users
+  Users,
+  Globe,
+  Bell,
+  Send,
+  Trash2,
+  ChevronLeft,
+  ChevronRight,
+  AlertCircle,
+  X,
+  Activity
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { supabase } from "@/src/lib/supabase";
 import { cn } from "@/src/lib/utils";
+import { toast } from "sonner";
 
 interface Appointment {
   id: string;
@@ -26,17 +36,33 @@ interface Appointment {
   medecin_name: string;
   date_rdv: string;
   heure_rdv: string;
-  statut: "Planifié" | "En salle" | "Terminé";
+  statut: "Planifié" | "Confirmé" | "En salle" | "Terminé" | "Annulé";
   motif: string;
+  source?: string;
+}
+
+interface Announcement {
+  id: string;
+  auteur: string;
+  message: string;
+  created_at: string;
 }
 
 const physicians = ["Dr TONYE", "Dr NDEDI", "Dr KAMGA", "Dr EBELLE"];
 
 export default function PlanningPage() {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingAnnouncements, setLoadingAnnouncements] = useState(false);
   const [showModal, setShowModal] = useState(false);
+  const [showDetailModal, setShowDetailModal] = useState(false);
+  const [selectedRdv, setSelectedRdv] = useState<Appointment | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [viewMode, setViewMode] = useState<'liste' | 'grille'>('grille');
+  const [newAnnouncement, setNewAnnouncement] = useState("");
+
+  const [currentDate, setCurrentDate] = useState(new Date().toISOString().split('T')[0]);
 
   // New RDV Form
   const [form, setForm] = useState({
@@ -47,13 +73,46 @@ export default function PlanningPage() {
     motif: ""
   });
 
+  const fetchAnnouncements = async () => {
+    setLoadingAnnouncements(true);
+    try {
+      const { data, error } = await supabase
+        .from('annonces_equipe')
+        .select('*')
+        .order('created_at', { ascending: false });
+      if (!error) setAnnouncements(data || []);
+    } catch (err) {
+      console.error("Error fetching announcements:", err);
+    } finally {
+      setLoadingAnnouncements(false);
+    }
+  };
+
+  const publishAnnouncement = async () => {
+    if (!newAnnouncement.trim()) return;
+    try {
+      const { error } = await supabase
+        .from('annonces_equipe')
+        .insert([{
+          auteur: "Direction",
+          message: newAnnouncement
+        }]);
+      if (error) throw error;
+      setNewAnnouncement("");
+      fetchAnnouncements();
+      toast.success("Annonce publiée");
+    } catch (err) {
+      toast.error("Erreur de publication");
+    }
+  };
+
   const fetchAppointments = React.useCallback(async () => {
     setLoading(true);
     try {
       const { data, error } = await supabase
         .from('rendez_vous')
         .select('*')
-        .order('date_rdv', { ascending: true })
+        .eq('date_rdv', currentDate)
         .order('heure_rdv', { ascending: true });
 
       if (error) throw error;
@@ -63,10 +122,11 @@ export default function PlanningPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [currentDate]);
 
   useEffect(() => {
     fetchAppointments();
+    fetchAnnouncements();
   }, [fetchAppointments]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -108,13 +168,24 @@ export default function PlanningPage() {
         .eq('id', id);
       
       if (error) {
-        alert(`Erreur de mise à jour du statut: ${error.message}`);
+        toast.error(`Erreur: ${error.message}`);
         throw error;
       }
+      toast.success(`RDV ${newStatus.toLowerCase()}`);
+      setShowDetailModal(false);
       fetchAppointments();
     } catch (err) {
       console.error("Error updating status:", err);
     }
+  };
+
+  const hours = Array.from({ length: 11 }, (_, i) => `${(i + 8).toString().padStart(2, '0')}:00`);
+
+  const getRdvForSlot = (hour: string, physician: string) => {
+    return appointments.find(a => {
+      const rdvHour = a.heure_rdv.split(':')[0] + ':00';
+      return rdvHour === hour && a.medecin_name === physician;
+    });
   };
 
   return (
@@ -141,12 +212,37 @@ export default function PlanningPage() {
         <div className="lg:col-span-8 space-y-4">
           <div className="flex items-center justify-between mb-2">
              <div className="flex items-center gap-2 bg-slate-50 border border-slate-100 p-1.5 rounded-xl">
-                <button className="px-5 py-1.5 bg-white text-slate-900 shadow-sm border border-slate-100 rounded-lg text-[9px] font-black uppercase tracking-widest">Jour</button>
-                <button className="px-5 py-1.5 text-slate-400 hover:text-slate-900 transition-colors text-[9px] font-black uppercase tracking-widest">Semaine</button>
+                <button 
+                  onClick={() => setViewMode('grille')}
+                  className={cn("px-5 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all", 
+                    viewMode === 'grille' ? "bg-white text-slate-900 shadow-sm border border-slate-100" : "text-slate-400 hover:text-slate-900"
+                  )}
+                >
+                  Grille
+                </button>
+                <button 
+                  onClick={() => setViewMode('liste')}
+                  className={cn("px-5 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all", 
+                    viewMode === 'liste' ? "bg-white text-slate-900 shadow-sm border border-slate-100" : "text-slate-400 hover:text-slate-900"
+                  )}
+                >
+                  Liste
+                </button>
              </div>
-             <div className="flex items-center gap-2">
-                <Filter size={14} className="text-slate-400" />
-                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Médecins Riverside</span>
+             <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2 bg-white border border-slate-100 px-3 py-1.5 rounded-xl shadow-sm">
+                   <button onClick={() => {
+                     const d = new Date(currentDate);
+                     d.setDate(d.getDate() - 1);
+                     setCurrentDate(d.toISOString().split('T')[0]);
+                   }} className="p-1 hover:bg-slate-50 rounded"><ChevronLeft size={14}/></button>
+                   <span className="text-[10px] font-black text-slate-900 uppercase min-w-[80px] text-center">{currentDate}</span>
+                   <button onClick={() => {
+                     const d = new Date(currentDate);
+                     d.setDate(d.getDate() + 1);
+                     setCurrentDate(d.toISOString().split('T')[0]);
+                   }} className="p-1 hover:bg-slate-50 rounded"><ChevronRight size={14}/></button>
+                </div>
              </div>
           </div>
 
@@ -155,6 +251,81 @@ export default function PlanningPage() {
               <div className="p-20 flex flex-col items-center justify-center gap-4 text-slate-300">
                 <Loader2 className="animate-spin text-riverside-red" size={24} />
                 <p className="text-[9px] font-black uppercase tracking-widest">Sync des agendas...</p>
+              </div>
+            ) : viewMode === 'grille' ? (
+              <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden overflow-x-auto">
+                <table className="w-full border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50/50 border-b border-slate-100">
+                      <th className="p-4 border-r border-slate-100 w-24"></th>
+                      {physicians.map(doc => (
+                        <th key={doc} className="p-4 text-[9px] font-black text-slate-400 uppercase tracking-widest min-w-[150px]">
+                          {doc}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {hours.map(hour => (
+                      <tr key={hour} className="border-b border-slate-50 last:border-0 h-28">
+                        <td className="p-4 border-r border-slate-100 text-center align-top">
+                          <span className="text-[10px] font-black text-slate-900 tracking-tighter">{hour}</span>
+                        </td>
+                        {physicians.map(doc => {
+                          const rdv = getRdvForSlot(hour, doc);
+                          return (
+                            <td key={`${hour}-${doc}`} className="p-2 relative group-hover:bg-slate-50/30 transition-colors">
+                              {rdv ? (
+                                <motion.button
+                                  whileHover={{ scale: 1.02 }}
+                                  whileTap={{ scale: 0.98 }}
+                                  onClick={() => {
+                                    setSelectedRdv(rdv);
+                                    setShowDetailModal(true);
+                                  }}
+                                  className={cn(
+                                    "w-full h-full p-3 rounded-2xl border flex flex-col text-left transition-all relative overflow-hidden",
+                                    rdv.statut === "Planifié" ? "bg-blue-50/50 border-blue-100 shadow-sm" :
+                                    rdv.statut === "Confirmé" ? "bg-emerald-50/50 border-emerald-100 shadow-sm" :
+                                    rdv.statut === "En salle" ? "bg-amber-50/50 border-amber-100 shadow-md ring-2 ring-amber-400/20" :
+                                    "bg-slate-50 border-slate-200"
+                                  )}
+                                >
+                                  {rdv.source === 'Site Web' && (
+                                    <div className="absolute top-0 right-0 px-2 py-1 bg-riverside-red text-white text-[7px] font-black rounded-bl-lg flex items-center gap-1 uppercase tracking-widest z-10">
+                                      <Globe size={8} /> Web
+                                    </div>
+                                  )}
+                                  <p className="text-[10px] font-black text-slate-900 uppercase tracking-tight mb-1 truncate">{rdv.patient_name}</p>
+                                  <p className="text-[9px] font-bold text-slate-500 line-clamp-2 leading-tight uppercase italic">{rdv.motif}</p>
+                                  <div className="mt-auto flex items-center justify-between">
+                                    <span className={cn(
+                                      "text-[7px] font-black uppercase px-2 py-0.5 rounded-full",
+                                      rdv.statut === "En salle" ? "bg-amber-500 text-white" : "text-slate-400"
+                                    )}>
+                                      {rdv.statut}
+                                    </span>
+                                    <span className="text-[8px] font-bold text-slate-300">{rdv.heure_rdv}</span>
+                                  </div>
+                                </motion.button>
+                              ) : (
+                                <button 
+                                  onClick={() => {
+                                    setForm({ ...form, medecin_name: doc, heure_rdv: hour });
+                                    setShowModal(true);
+                                  }}
+                                  className="w-full h-full rounded-2xl border-2 border-dashed border-slate-50 hover:border-slate-200 transition-all flex items-center justify-center group"
+                                >
+                                  <Plus size={14} className="text-slate-100 group-hover:text-slate-200" />
+                                </button>
+                              )}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             ) : appointments.length === 0 ? (
                <div className="p-20 bg-white rounded-2xl border border-dashed border-slate-100 text-center flex flex-col items-center justify-center gap-4">
@@ -250,16 +421,60 @@ export default function PlanningPage() {
                 <Users size={12} className="text-riverside-red" />
                 Médecins Riverside
               </h4>
-              <div className="space-y-4">
+              <div className="space-y-3">
                  {physicians.map(doc => (
-                   <div key={doc} className="flex items-center justify-between group">
+                   <div key={doc} className="flex items-center justify-between group bg-slate-50/50 p-3 rounded-xl border border-transparent hover:border-slate-100 transition-all">
                       <div className="flex items-center gap-3">
-                         <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
+                         <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
                          <span className="text-[11px] font-black text-slate-700 uppercase tracking-tight group-hover:text-riverside-red transition-colors">{doc}</span>
                       </div>
-                      <span className="text-[8px] font-black text-slate-300 uppercase tracking-widest border border-slate-50 px-1.5 py-0.5 rounded">Actif</span>
+                      <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest border bg-white px-1.5 py-0.5 rounded shadow-sm">Actif</span>
                    </div>
                  ))}
+              </div>
+           </div>
+
+           {/* Announcement Panel */}
+           <div className="pt-8 border-t border-slate-50 space-y-6">
+              <div className="flex items-center justify-between">
+                <h4 className="text-[10px] font-black text-slate-900 uppercase tracking-widest flex items-center gap-2">
+                  <Bell size={14} className="text-riverside-red" />
+                  Notes de Service
+                </h4>
+                {loadingAnnouncements && <Loader2 size={12} className="animate-spin text-slate-300" />}
+              </div>
+
+              <div className="space-y-4 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+                {announcements.map(note => (
+                  <div key={note.id} className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-2 relative group hover:bg-white transition-all">
+                    <div className="flex items-center justify-between">
+                      <p className="text-[8px] font-black text-riverside-red uppercase tracking-widest">{note.auteur}</p>
+                      <p className="text-[7px] font-bold text-slate-400">{new Date(note.created_at).toLocaleDateString('fr-FR')}</p>
+                    </div>
+                    <p className="text-[10px] font-bold text-slate-600 leading-relaxed uppercase">{note.message}</p>
+                  </div>
+                ))}
+                {announcements.length === 0 && (
+                  <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest text-center py-4 italic">Aucune note active</p>
+                )}
+              </div>
+
+              <div className="space-y-3 pt-2">
+                <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest ml-1">Publier une note (Admin)</p>
+                <div className="relative">
+                  <textarea 
+                    value={newAnnouncement}
+                    onChange={(e) => setNewAnnouncement(e.target.value)}
+                    placeholder="Message à l'équipe..."
+                    className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl font-bold text-[10px] outline-none focus:border-riverside-red focus:bg-white transition-all resize-none h-20"
+                  />
+                  <button 
+                    onClick={publishAnnouncement}
+                    className="absolute bottom-3 right-3 w-8 h-8 bg-riverside-red text-white rounded-xl shadow-lg shadow-red-100 flex items-center justify-center hover:scale-110 active:scale-95 transition-all"
+                  >
+                    <Send size={14} />
+                  </button>
+                </div>
               </div>
            </div>
         </div>
@@ -268,7 +483,7 @@ export default function PlanningPage() {
       {/* New RDV Modal section */}
       <AnimatePresence>
         {showModal && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
              <motion.div 
                initial={{ opacity: 0 }}
                animate={{ opacity: 1 }}
@@ -352,6 +567,74 @@ export default function PlanningPage() {
                       </button>
                    </div>
                 </form>
+             </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+      {/* Appointment Detail Modal */}
+      <AnimatePresence>
+        {showDetailModal && selectedRdv && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+             <motion.div 
+               initial={{ opacity: 0 }}
+               animate={{ opacity: 1 }}
+               exit={{ opacity: 0 }}
+               onClick={() => setShowDetailModal(false)}
+               className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+             />
+             <motion.div 
+               initial={{ scale: 0.9, opacity: 0 }}
+               animate={{ scale: 1, opacity: 1 }}
+               exit={{ scale: 0.9, opacity: 0 }}
+               className="relative w-full max-w-sm bg-white rounded-[2.5rem] shadow-2xl overflow-hidden border border-slate-100"
+             >
+                <div className="p-8 border-b border-slate-50 flex items-center justify-between bg-slate-50/50">
+                   <div>
+                     <h3 className="text-xl font-black text-slate-900 uppercase tracking-tighter">Fiche Rendez-vous</h3>
+                     <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-1">Détails de la programmation</p>
+                   </div>
+                   <button onClick={() => setShowDetailModal(false)} className="w-10 h-10 flex items-center justify-center bg-white border border-slate-100 rounded-xl text-slate-300 hover:text-riverside-red transition-all shadow-sm"><X size={20}/></button>
+                </div>
+
+                <div className="p-8 space-y-6">
+                   <div className="flex items-center gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                      <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center text-riverside-red shadow-inner"><User size={24}/></div>
+                      <div>
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Patient</p>
+                        <p className="text-xs font-black text-slate-900 uppercase">{selectedRdv.patient_name}</p>
+                      </div>
+                   </div>
+
+                   <div className="grid grid-cols-2 gap-4">
+                      <div className="bg-slate-50/50 p-4 rounded-2xl border border-slate-100/50">
+                         <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Date</p>
+                         <p className="text-[10px] font-black text-slate-800">{selectedRdv.date_rdv}</p>
+                      </div>
+                      <div className="bg-slate-50/50 p-4 rounded-2xl border border-slate-100/50">
+                         <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Heure</p>
+                         <p className="text-[10px] font-black text-slate-800">{selectedRdv.heure_rdv}</p>
+                      </div>
+                   </div>
+
+                   <div className="space-y-4 pt-4">
+                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Actions & Statut</p>
+                      <div className="grid grid-cols-1 gap-3">
+                         <button onClick={() => updateStatus(selectedRdv.id, "Confirmé")} className="w-full py-3 bg-emerald-50 text-emerald-600 rounded-xl border border-emerald-100 font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-emerald-100 transition-all">
+                            <CheckCircle2 size={14} /> Confirmer la présence
+                         </button>
+                         <button onClick={() => updateStatus(selectedRdv.id, "En salle")} className="w-full py-3 bg-amber-50 text-amber-600 rounded-xl border border-amber-100 font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-amber-100 transition-all">
+                            <Activity size={14} /> Lancer Consultation
+                         </button>
+                         <button onClick={() => updateStatus(selectedRdv.id, "Annulé")} className="w-full py-3 bg-red-50 text-red-600 rounded-xl border border-red-100 font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-red-100 transition-all">
+                            <Trash2 size={14} /> Annuler le RDV
+                         </button>
+                      </div>
+                   </div>
+
+                   <div className="pt-6 flex justify-center">
+                      <button onClick={() => setShowDetailModal(false)} className="text-[9px] font-black text-slate-300 uppercase tracking-widest hover:text-slate-900 transition-colors">Retour au planning</button>
+                   </div>
+                </div>
              </motion.div>
           </div>
         )}
