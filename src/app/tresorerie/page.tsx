@@ -14,7 +14,9 @@ import {
   FileText,
   ShoppingBag,
   ShieldCheck,
-  Activity
+  Activity,
+  ArrowLeft,
+  PlusCircle
 } from "lucide-react";
 import { supabase } from "@/src/lib/supabase";
 import { cn } from "@/src/lib/utils";
@@ -58,6 +60,10 @@ export default function TresoreriePage() {
   const [stocks, setStocks] = useState<any[]>([]);
   const [selectedStockId, setSelectedStockId] = useState("");
   
+  const [isFreeInvoicing, setIsFreeInvoicing] = useState(false);
+  const [allPatients, setAllPatients] = useState<Patient[]>([]);
+  const [searchPatientTerm, setSearchPatientTerm] = useState("");
+  const [selectedFreePatient, setSelectedFreePatient] = useState<Patient | null>(null);
   const [pendingTransactions, setPendingTransactions] = useState<any[]>([]);
   
   // Selection states
@@ -74,11 +80,10 @@ export default function TresoreriePage() {
     try {
       setLoading(true);
       
-      // 1. Récupérer les séjours actifs
+      // 1. Récupérer les séjours actifs (File d'attente)
       const { data: sejoursData, error: sejoursError } = await supabase
         .from('sejours_actifs')
         .select('*, patients(id, nom_complet, type_assurance)')
-        .filter('statut', 'neq', 'Terminé')
         .order('created_at', { ascending: false });
 
       if (sejoursError) throw sejoursError;
@@ -91,7 +96,8 @@ export default function TresoreriePage() {
           *,
           patients (
             id,
-            nom_complet
+            nom_complet,
+            type_assurance
           )
         `)
         .eq('statut_paiement', 'En attente')
@@ -113,17 +119,17 @@ export default function TresoreriePage() {
         .from('transactions_caisse')
         .select('*, patients(nom_complet, type_assurance)')
         .gt('reste_a_payer', 0)
-        .in('statut_paiement', ['En attente', 'Partiel'])
         .order('date_transaction', { ascending: false });
       
       if (dettesError) console.error("Erreur dettes:", dettesError);
       else setDettes(dettesData || []);
 
-      // 4. Récupérer les stocks consommables
-      const { data: stocksData } = await supabase
-        .from('stocks')
-        .select('id, designation, quantite_actuelle');
-      setStocks(stocksData || []);
+      // 4. Récupérer TOUS les patients (pour facture libre)
+      const { data: patientsData } = await supabase
+        .from('patients')
+        .select('id, nom_complet, type_assurance')
+        .order('nom_complet');
+      setAllPatients(patientsData || []);
 
     } catch (err) {
       console.error("[Treasury] Erreur de chargement:", err);
@@ -142,17 +148,23 @@ export default function TresoreriePage() {
 
   const calculateTotal = () => {
     if (selectedTransaction) return selectedTransaction.montant_total;
-    if (!selectedSejour) return 0;
-    const isCashOnly = selectedSejour.patients?.type_assurance === "Cash";
     
-    return cart.reduce((acc, item) => {
+    // Determine which patient info to use
+    const patientInfo = selectedFreePatient || selectedSejour?.patients;
+    if (!patientInfo) return 0;
+
+    const isCashOnly = patientInfo.type_assurance === "Cash";
+    
+    const total = cart.reduce((acc, item) => {
       return acc + (isCashOnly ? item.prix_cash : item.base_assurance);
     }, 0);
+
+    return total;
   };
 
   const handleValidate = async () => {
-    if (!selectedSejour && !selectedTransaction) {
-      alert("Veuillez sélectionner un séjour ou une transaction.");
+    if (!selectedSejour && !selectedTransaction && !selectedFreePatient) {
+      alert("Veuillez sélectionner un patient ou une transaction.");
       return;
     }
     
@@ -161,45 +173,46 @@ export default function TresoreriePage() {
       return;
     }
 
-    const transactionId = selectedTransaction?.id;
-    if (selectedTransaction && !transactionId) {
-      console.error("ERREUR FATALE : ID de transaction indéfini.");
-      alert("Erreur interne : ID de transaction manquant.");
-      return;
-    }
-
     setSubmitting(true);
     try {
       const total = calculateTotal();
+      // Facturation logic: si vide, on considère payé totalement.
       const verse = montantVerse ? parseFloat(montantVerse) : total;
+      
+      // CRITICAL LOGIC: reste_a_payer = total - verse
       const reste = Math.max(0, total - verse);
-      const isPaid = reste <= 0;
+      
+      // Status update logic
+      let finalStatut = 'Payé';
+      if (reste > 0) {
+        finalStatut = verse > 0 ? 'Partiel' : 'En attente';
+      }
+
       const description = selectedTransaction 
         ? selectedTransaction.description 
         : cart.map(item => item.nom_acte).join(", ");
 
-      console.log("Flux Trésorerie - 1. Validation Paiement...");
+      console.log(`Flux Trésorerie - Validation Paiement: Total=${total}, Versé=${verse}, Reste=${reste}`);
 
-      // 1. Enregistrer ou Mettre à jour la transaction
       if (selectedTransaction) {
         const { error: txUpdError } = await supabase
           .from('transactions_caisse')
           .update({
             montant_verse: verse,
             reste_a_payer: reste,
-            statut_paiement: verse >= total ? 'Payé' : 'Partiel'
+            statut_paiement: finalStatut
           })
-          .eq('id', transactionId);
+          .eq('id', selectedTransaction.id);
         if (txUpdError) throw txUpdError;
 
-        // Si la transaction est liée à un séjour (via la colonne sejour_id qu'on vient d'ajouter dans le flux)
-        if (isPaid && selectedTransaction.sejour_id) {
+        if (reste === 0 && selectedTransaction.sejour_id) {
           await supabase
             .from('sejours_actifs')
             .update({ statut: 'Terminé' })
             .eq('id', selectedTransaction.sejour_id);
         }
       } else {
+        const effectivePatientId = selectedFreePatient?.id || selectedSejour?.patient_id;
         const { error: txError } = await supabase
           .from('transactions_caisse')
           .insert([{
@@ -207,57 +220,18 @@ export default function TresoreriePage() {
             montant_total: total,
             montant_verse: verse,
             reste_a_payer: reste,
-            description: `Facturation [${paymentMode}] patient: ${selectedSejour?.patients?.nom_complet}. Actes: ${description}`,
-            statut_paiement: verse >= total ? 'Payé' : 'Partiel',
-            patient_id: selectedSejour?.patient_id,
+            description: `Facture [${paymentMode}] - Actes: ${description}`,
+            statut_paiement: finalStatut,
+            patient_id: effectivePatientId,
             date_transaction: new Date().toISOString()
           }]);
         if (txError) throw txError;
-      }
 
-      // 2. Mettre à jour le statut du séjour si manuel
-      if (isPaid && selectedSejour) {
-        await supabase
-          .from('sejours_actifs')
-          .update({ statut: 'Terminé' })
-          .eq('id', selectedSejour.id);
-      }
-
-      // 2. Décrémentation des stocks (Isolée pour ne pas bloquer l'encaissement)
-      try {
-        const itemsToDecrement = selectedTransaction ? [selectedTransaction.description] : cart.map(item => item.nom_acte);
-        
-        for (const itemName of itemsToDecrement) {
-          if (!itemName) continue;
-          // Tentative de trouver le médicament avec une recherche robuste
-          const { data: pharmItems } = await supabase
-            .from('stocks_pharmacie')
-            .select('*')
-            .ilike('nom_article', `%${itemName.split(':')[0].trim()}%`)
-            .limit(1);
-          
-          if (pharmItems && pharmItems.length > 0) {
-            const item = pharmItems[0];
-            if (item.quantite_stock > 0) {
-              await supabase
-                .from('stocks_pharmacie')
-                .update({ quantite_stock: item.quantite_stock - 1 })
-                .eq('id', item.id);
-            }
-          }
-        }
-      } catch (stockErr) {
-        console.warn("Erreur stock (non-bloquante):", stockErr);
-      }
-
-      // 4. Décrémenter le stock manuel si sélectionné (legacy support)
-      if (selectedStockId) {
-        const itemToDec = stocks.find(s => s.id === selectedStockId);
-        if (itemToDec && itemToDec.quantite_actuelle > 0) {
+        if (reste === 0 && selectedSejour) {
           await supabase
-            .from('stocks')
-            .update({ quantite_actuelle: itemToDec.quantite_actuelle - 1 })
-            .eq('id', selectedStockId);
+            .from('sejours_actifs')
+            .update({ statut: 'Terminé' })
+            .eq('id', selectedSejour.id);
         }
       }
 
@@ -268,13 +242,14 @@ export default function TresoreriePage() {
         setMontantVerse("");
         setSelectedSejour(null);
         setSelectedTransaction(null);
-        setSelectedStockId("");
+        setSelectedFreePatient(null);
+        setIsFreeInvoicing(false);
         fetchInitialData();
-      }, 3000);
+      }, 2000);
 
     } catch (err: any) {
-      console.error("Flux Trésorerie - ERREUR GLOBALE:", err);
-      alert(`Erreur d'encaissement : ${err.message || "Veuillez réessayer"}`);
+      console.error("Flux Trésorerie - ERREUR:", err);
+      alert(`Erreur d'encaissement : ${err.message}`);
     } finally {
       setSubmitting(false);
     }
@@ -376,58 +351,127 @@ export default function TresoreriePage() {
             >
               <div className="flex items-center justify-between mb-6">
                 <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">En attente de paiement (Médical)</label>
-                <div className="flex items-center gap-2">
-                   <div className="w-2 h-2 bg-riverside-red rounded-full animate-pulse" />
-                   <span className="text-[10px] text-riverside-red font-black uppercase">{pendingTransactions.length} FACTURES</span>
-                </div>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-                 {pendingTransactions.map(pt => (
-                   <button
-                    key={pt.id}
+                <div className="flex items-center gap-4">
+                   <button 
                     onClick={() => {
-                      setSelectedTransaction(pt);
+                      setIsFreeInvoicing(!isFreeInvoicing);
                       setSelectedSejour(null);
+                      setSelectedTransaction(null);
+                      setSelectedFreePatient(null);
                       setCart([]);
                     }}
                     className={cn(
-                      "p-4 rounded-2xl border text-left transition-all",
-                      selectedTransaction?.id === pt.id 
-                        ? "bg-riverside-red border-riverside-red text-white shadow-lg" 
-                        : "bg-slate-50 border-slate-100 text-slate-600 hover:bg-white hover:border-slate-300"
+                      "px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all flex items-center gap-2",
+                      isFreeInvoicing ? "bg-slate-900 text-white" : "bg-emerald-50 text-emerald-600 hover:bg-emerald-100"
                     )}
                    >
-                     <p className="text-xs font-black uppercase">{pt.patients?.nom_complet}</p>
-                     <p className="text-[8px] font-bold opacity-60 mt-1">{pt.description}</p>
-                     <p className="text-sm font-black mt-2">{pt.montant_total.toLocaleString()} FCFA</p>
+                     {isFreeInvoicing ? <ArrowLeft size={14} /> : <PlusCircle size={14} />}
+                     {isFreeInvoicing ? "Retour Process Standard" : "Nouvelle Facture Libre"}
                    </button>
-                 ))}
-                 {pendingTransactions.length === 0 && (
-                   <p className="col-span-2 text-[10px] font-bold text-slate-300 uppercase py-4">Aucune facture médicale en attente</p>
-                 )}
+                   <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 bg-riverside-red rounded-full animate-pulse" />
+                      <span className="text-[10px] text-riverside-red font-black uppercase">{pendingTransactions.length} FACTURES</span>
+                   </div>
+                </div>
               </div>
 
-              <div className="flex items-center justify-between mb-6 pt-6 border-t border-slate-100">
-                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Saisie Manuelle (File d&apos;attente)</label>
-                <span className="text-[10px] bg-slate-100 px-2 py-1 rounded text-slate-400 font-black">{sejours.length} EN ATTENTE</span>
-              </div>
-              <select 
-                value={selectedSejour?.id || ""}
-                onChange={(e) => {
-                  const s = sejours.find(x => x.id === e.target.value);
-                  setSelectedSejour(s || null);
-                  setSelectedTransaction(null);
-                }}
-                className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-riverside-red/20 focus:border-riverside-red outline-none transition-all text-sm font-bold appearance-none cursor-pointer"
-              >
-                <option value="">-- Choisir un patient dans la file d&apos;attente --</option>
-                {sejours.length === 0 && <option disabled>Aucun patient en attente</option>}
-                {sejours.map(s => (
-                  <option key={s.id} value={s.id}>
-                    {s.patients?.nom_complet || 'Sans nom'} - ({s.patients?.type_assurance || 'Cash'})
-                  </option>
-                ))}
-              </select>
+              {isFreeInvoicing ? (
+                <div className="space-y-6 mb-8 animate-in fade-in slide-in-from-top-4 duration-500">
+                  <div className="p-6 bg-slate-900 rounded-3xl text-white">
+                    <h4 className="text-sm font-black uppercase tracking-tight flex items-center gap-3">
+                      <User className="text-riverside-red" /> 
+                      Sélection Patient (Externe / Ambulatoire)
+                    </h4>
+                    <p className="text-[9px] text-slate-400 font-bold uppercase mt-2">Recherchez un patient dans la base de données globale</p>
+                    
+                    <div className="mt-4 relative">
+                      <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={16} />
+                      <input 
+                        type="text"
+                        placeholder="RECHERCHER UN PATIENT PAR NOM..."
+                        value={searchPatientTerm}
+                        onChange={(e) => setSearchPatientTerm(e.target.value)}
+                        className="w-full pl-12 pr-6 py-4 bg-white/5 border border-white/10 rounded-2xl outline-none focus:border-riverside-red transition-all font-bold text-sm uppercase"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[300px] overflow-y-auto pr-2 scrollbar-thin">
+                    {allPatients
+                      .filter(p => p.nom_complet.toLowerCase().includes(searchPatientTerm.toLowerCase()))
+                      .slice(0, 12)
+                      .map(p => (
+                        <button
+                          key={p.id}
+                          onClick={() => setSelectedFreePatient(p)}
+                          className={cn(
+                            "p-5 rounded-2xl border text-left transition-all group",
+                            selectedFreePatient?.id === p.id 
+                              ? "bg-riverside-red border-riverside-red text-white shadow-xl" 
+                              : "bg-white border-slate-100 hover:border-slate-300"
+                          )}
+                        >
+                          <p className="text-[10px] font-black uppercase group-hover:tracking-wider transition-all">{p.nom_complet}</p>
+                          <p className="text-[8px] font-bold opacity-60 mt-1 uppercase">Régime: {p.type_assurance}</p>
+                        </button>
+                      ))
+                    }
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+                     {pendingTransactions.map(pt => (
+                       <button
+                        key={pt.id}
+                        onClick={() => {
+                          setSelectedTransaction(pt);
+                          setSelectedSejour(null);
+                          setSelectedFreePatient(null);
+                          setCart([]);
+                        }}
+                        className={cn(
+                          "p-4 rounded-2xl border text-left transition-all",
+                          selectedTransaction?.id === pt.id 
+                            ? "bg-riverside-red border-riverside-red text-white shadow-lg" 
+                            : "bg-slate-50 border-slate-100 text-slate-600 hover:bg-white hover:border-slate-300"
+                        )}
+                       >
+                         <p className="text-xs font-black uppercase">{pt.patients?.nom_complet}</p>
+                         <p className="text-[8px] font-bold opacity-60 mt-1">{pt.description}</p>
+                         <p className="text-sm font-black mt-2">{pt.montant_total.toLocaleString()} FCFA</p>
+                       </button>
+                     ))}
+                     {pendingTransactions.length === 0 && (
+                       <p className="col-span-2 text-[10px] font-bold text-slate-300 uppercase py-4">Aucune facture médicale en attente</p>
+                     )}
+                  </div>
+
+                  <div className="flex items-center justify-between mb-6 pt-6 border-t border-slate-100">
+                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Saisie Manuelle (File d&apos;attente)</label>
+                    <span className="text-[10px] bg-slate-100 px-2 py-1 rounded text-slate-400 font-black">{sejours.length} EN ATTENTE</span>
+                  </div>
+                  <select 
+                    value={selectedSejour?.id || ""}
+                    onChange={(e) => {
+                      const s = sejours.find(x => x.id === e.target.value);
+                      setSelectedSejour(s || null);
+                      setSelectedTransaction(null);
+                      setSelectedFreePatient(null);
+                      setCart([]);
+                    }}
+                    className="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-riverside-red/20 focus:border-riverside-red outline-none transition-all text-sm font-bold appearance-none cursor-pointer"
+                  >
+                    <option value="">-- Choisir un patient dans la file d&apos;attente --</option>
+                    {sejours.length === 0 && <option disabled>Aucun patient en attente</option>}
+                    {sejours.map(s => (
+                      <option key={s.id} value={s.id}>
+                        {s.patients?.nom_complet || 'Sans nom'} - ({s.patients?.type_assurance || 'Cash'})
+                      </option>
+                    ))}
+                  </select>
+                </>
+              )}
             </motion.div>
 
             {/* Catalogue / Recherche */}
@@ -522,21 +566,21 @@ export default function TresoreriePage() {
                 </div>
               </div>
 
-              {selectedTransaction || selectedSejour ? (
+              {selectedTransaction || selectedSejour || selectedFreePatient ? (
                 <div className="mb-8 p-6 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
                   <div className="flex items-center justify-between mb-4">
                     <p className="text-[10px] uppercase text-slate-400 font-black tracking-widest">Client</p>
                     <span className={cn(
                       "px-2 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-tighter",
-                      (selectedTransaction?.patients?.type_assurance || selectedSejour?.patients?.type_assurance) === "Cash" ? "bg-amber-100 text-amber-600" : "bg-blue-600 text-white"
+                      (selectedTransaction?.patients?.type_assurance || selectedSejour?.patients?.type_assurance || selectedFreePatient?.type_assurance) === "Cash" ? "bg-amber-100 text-amber-600" : "bg-blue-600 text-white"
                     )}>
-                      {selectedTransaction?.patients?.type_assurance || selectedSejour?.patients?.type_assurance || 'Privé'}
+                      {selectedTransaction?.patients?.type_assurance || selectedSejour?.patients?.type_assurance || selectedFreePatient?.type_assurance || 'Privé'}
                     </span>
                   </div>
                   <p className="text-lg font-black text-slate-900 tracking-tight">
-                    {selectedTransaction?.patients?.nom_complet || selectedSejour?.patients?.nom_complet}
+                    {selectedTransaction?.patients?.nom_complet || selectedSejour?.patients?.nom_complet || selectedFreePatient?.nom_complet}
                   </p>
-                  <p className="text-[10px] text-slate-400 font-bold mt-1">Ref: {selectedTransaction?.id?.slice(0, 8) || selectedSejour?.id?.slice(0, 8)}</p>
+                  <p className="text-[10px] text-slate-400 font-bold mt-1">Ref: {selectedTransaction?.id?.slice(0, 8) || selectedSejour?.id?.slice(0, 8) || selectedFreePatient?.id?.slice(0, 8)}</p>
                 </div>
               ) : (
                 <div className="mb-8 p-10 border-2 border-dashed border-slate-100 rounded-3xl flex flex-col items-center justify-center text-center bg-slate-50/50">
@@ -588,7 +632,7 @@ export default function TresoreriePage() {
               <div className="mt-8 pt-8 border-t-2 border-slate-50 space-y-3">
                 <div className="flex items-center justify-between">
                   <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Brut</span>
-                  <span className="text-xs font-black text-slate-800 tabular-nums">{cart.reduce((a, b) => a + (selectedSejour?.patients?.type_assurance === "Cash" ? b.prix_cash : b.base_assurance), 0).toLocaleString()} FCFA</span>
+                  <span className="text-xs font-black text-slate-800 tabular-nums">{calculateTotal().toLocaleString()} FCFA</span>
                 </div>
 
                 <div className="space-y-2">

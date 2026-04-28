@@ -20,7 +20,6 @@ import { motion } from "motion/react";
 import Image from "next/image";
 import { supabase } from "@/src/lib/supabase";
 import { cn } from "@/src/lib/utils";
-import NewAdmissionModal from "@/src/components/NewAdmissionModal";
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -28,7 +27,6 @@ export default function DashboardPage() {
   const [sejours, setSejours] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [isModalOpen, setIsModalOpen] = useState(false);
   const [caDuJour, setCaDuJour] = useState(0);
 
   const fetchData = async () => {
@@ -186,10 +184,10 @@ export default function DashboardPage() {
         </div>
         <motion.button 
           whileTap={{ scale: 0.95 }}
-          onClick={() => setIsModalOpen(true)}
-          className="bg-riverside-red text-white px-8 py-3 rounded-lg shadow-lg shadow-red-100 font-black text-[10px] uppercase tracking-widest flex items-center gap-2 hover:scale-[1.02] transition-all relative z-10"
+          onClick={() => router.push("/admission")}
+          className="bg-riverside-red text-white px-8 py-4 rounded-xl shadow-lg shadow-red-100 font-black text-[10px] uppercase tracking-widest flex items-center gap-3 hover:scale-[1.02] transition-all relative z-10"
         >
-          <PlusCircle size={16} />
+          <PlusCircle size={18} />
           Nouvelle Admission
         </motion.button>
       </header>
@@ -332,11 +330,6 @@ export default function DashboardPage() {
            <p className="text-[9px] text-slate-300 font-black uppercase tracking-[0.2em]">Medical Intelligence Core</p>
         </div>
       </motion.div>
-      <NewAdmissionModal 
-        isOpen={isModalOpen} 
-        onClose={() => setIsModalOpen(false)} 
-        onSuccess={fetchData}
-      />
     </div>
   );
 }

@@ -193,6 +193,9 @@ export default function MedicalPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ transcription }),
       });
+      
+      if (!res.ok) throw new Error("Erreur de réponse du serveur AI");
+      
       const data = await res.json();
       if (data.error) throw new Error(data.error);
 
@@ -206,8 +209,10 @@ export default function MedicalPage() {
         ordonnance: data.ordonnance_proposee || prev.ordonnance,
       }));
 
-    } catch (err) {
+    } catch (err: any) {
       console.error("AI Analysis Failed", err);
+      // Show toast if possible, using alert as fallback
+      alert("Erreur de diagnostic IA : " + (err.message || "Le service est temporairement indisponible."));
     } finally {
       setIsAnalyzing(false);
     }
@@ -224,6 +229,7 @@ export default function MedicalPage() {
           motif_visite,
           created_at,
           patients (
+            id,
             nom_complet,
             telephone,
             sexe,
@@ -264,14 +270,14 @@ export default function MedicalPage() {
     try {
       if (!user) throw new Error("Authentification requise pour cette opération.");
 
-      // 1. Sauvegarde de la Consultation
-      console.log("Flux Médical - 1. Enregistrement Consultation...");
+      // 1. Sauvegarde de la Consultation (SANS MONTANT)
+      console.log("Flux Médical - 1. Enregistrement Consultation (Logic Refactor)...");
       
       const { data: personnelData } = await supabase
-        .from('personnel')
-        .select('id')
-        .eq('email', user.email)
-        .single();
+          .from('personnel')
+          .select('id')
+          .eq('email', user.email)
+          .single();
       
       const realMedecinId = personnelData?.id || null;
 
@@ -298,30 +304,9 @@ export default function MedicalPage() {
         throw new Error(`Échec enregistrement consultation: ${consultError.message}`);
       }
 
-      console.log("Flux Médical - 2. Consultation sauvegardée, création transaction...");
+      console.log("Flux Médical - 2. Consultation sauvegardée. Transfert en caisse pour facturation externe.");
       
-      // 2. Création de la Transaction en Caisse
-      // Amélioration de la description pour la Trésorerie
-      const detailDescription = `CONSULTATION MÉDICALE (${selectedPatient.motif_visite}) + ÉTABLISSEMENT ORDONNANCE`;
-      const montantConsultation = 10000; 
-
-      const { error: caisseError } = await supabase
-        .from('transactions_caisse')
-        .insert([{
-          patient_id: selectedPatient.patient_id,
-          montant_total: montantConsultation,
-          statut_paiement: 'En attente',
-          type_flux: 'Entrée',
-          description: detailDescription
-        }]);
-
-      if (caisseError) {
-        console.error("Erreur Médical (Caisse):", caisseError.message, caisseError.details);
-        // On ne bloque pas tout si la caisse échoue mais on alerte
-        alert("Attention : Consultation enregistrée, mais échec de transmission à la caisse.");
-      }
-
-      // 3. Mise à jour du statut du séjour
+      // 2. Mise à jour du statut du séjour -> Le patient va en caisse pour que le caissier facture selon le catalogue
       const { error: updateError } = await supabase
         .from('sejours_actifs')
         .update({ statut: 'En caisse' }) 
@@ -331,7 +316,10 @@ export default function MedicalPage() {
         console.error("Erreur Médical (Statut Séjour):", updateError.message);
       }
 
-      console.log("Flux Médical - Opération terminée avec succès.");
+      // NOTE: PLUS DE CRÉATION DE TRANSACTION ICI. 
+      // C'EST AU CAISSIER DE SÉLECTIONNER LES ACTES DEPUIS LE CATALOGUE.
+
+      console.log("Flux Médical - Opération terminée. Prêt pour facturation caisse.");
       setSuccess(true);
       setTimeout(() => {
         setSuccess(false);
