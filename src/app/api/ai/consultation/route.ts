@@ -4,10 +4,10 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 export async function POST(req: Request) {
   try {
     const { transcription } = await req.json();
-    const apiKey = process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY || process.env.RIVERSIDE_GEMINI_API_KEY;
+    const apiKey = process.env.GEMINI_API_KEY;
 
     if (!apiKey) {
-      console.error("[IA ROUTE] ERREUR : Clé API manquante (GEMINI_API_KEY)");
+      console.error("[IA ROUTE] ERREUR : Clé API manquante (GEMINI_API_KEY) dans les secrets/environnement.");
       return NextResponse.json({ error: "Service IA temporairement indisponible (clé manquante), saisie manuelle requise" }, { status: 500 });
     }
 

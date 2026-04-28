@@ -234,6 +234,7 @@ export default function TresoreriePage() {
             description: `Facture [${paymentMode}] - Actes: ${description}`,
             statut_paiement: finalStatut,
             patient_id: effectivePatientId,
+            sejour_id: selectedSejour?.id || null,
             date_transaction: new Date().toISOString()
           }]);
         if (txError) throw txError;

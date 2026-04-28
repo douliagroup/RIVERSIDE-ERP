@@ -24,6 +24,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { supabase } from "@/src/lib/supabase";
 import { cn } from "@/src/lib/utils";
 import { useAuth } from "@/src/context/AuthContext";
+import { toast } from "sonner";
 
 // Type definitions for SpeechRecognition
 interface SpeechRecognitionErrorEvent extends Event {
@@ -211,8 +212,9 @@ export default function MedicalPage() {
 
     } catch (err: any) {
       console.error("AI Analysis Failed", err);
-      // Harmonisation avec la réponse de l'API
-      alert("Service IA temporairement indisponible, saisie manuelle requise");
+      // Éviter le spinner infini en assurant que isAnalyzing est false
+      setIsAnalyzing(false); 
+      toast.error("Échec de la connexion à l'IA. Vérifiez la clé API ou votre connexion.");
     } finally {
       setIsAnalyzing(false);
     }
