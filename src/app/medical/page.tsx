@@ -266,11 +266,9 @@ export default function MedicalPage() {
         .from('transactions_caisse')
         .insert([{
           patient_id: selectedPatient.patient_id,
-          sejour_id: selectedPatient.id,
-          type_flux: 'Entrée',
           montant_total: montantConsultation,
           statut_paiement: 'En attente',
-          date_transaction: new Date().toISOString()
+          type_flux: 'Entrée'
         }]);
 
       if (caisseError) {

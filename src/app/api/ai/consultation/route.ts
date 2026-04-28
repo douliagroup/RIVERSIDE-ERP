@@ -4,10 +4,11 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 export async function POST(req: Request) {
   try {
     const { transcription } = await req.json();
-    const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
+    const apiKey = process.env.RIVERSIDE_GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY;
 
     if (!apiKey) {
-      return NextResponse.json({ error: 'Clé manquante' }, { status: 500 });
+      console.error("[IA ROUTE] ERREUR : Clé API manquante dans les variables d'environnement (RIVERSIDE_GEMINI_API_KEY ou NEXT_PUBLIC_GEMINI_API_KEY)");
+      return NextResponse.json({ error: "Clé API manquante dans les variables d'environnement" }, { status: 500 });
     }
 
     const genAI = new GoogleGenerativeAI(apiKey);
