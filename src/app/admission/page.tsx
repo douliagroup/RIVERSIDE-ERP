@@ -8,458 +8,709 @@ import {
   AlertTriangle, 
   FileText, 
   Loader2,
-  CheckCircle,
+  CheckCircle2,
   Plus,
   ArrowLeft,
-  Briefcase,
-  Building,
-  Pencil
+  Search,
+  UserPlus,
+  Stethoscope,
+  Clock,
+  Printer,
+  ChevronRight,
+  Activity,
+  Thermometer,
+  Scale,
+  Zap,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { supabase } from "@/src/lib/supabase";
 import { cn } from "@/src/lib/utils";
-import { toast } from "sonner";
-import { useRouter, useSearchParams } from "next/navigation";
+import { toast } from "react-hot-toast";
+import { useRouter } from "next/navigation";
 
-function AdmissionForm() {
+interface Patient {
+  id: string;
+  nom_complet: string;
+  telephone: string;
+  sexe: string;
+  date_naissance?: string;
+  age?: number;
+  type_assurance: string;
+  numero_assurance?: string;
+}
+
+interface QueueEntry {
+  id: string;
+  patient_id: string;
+  heure_arrivee: string;
+  motif: string;
+  service: string;
+  tension?: string;
+  temperature?: string;
+  poids?: string;
+  urgence: boolean;
+  statut: string;
+  patients?: Patient;
+}
+
+function AdmissionDashboard() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const editId = searchParams.get("edit");
   
-  const [loading, setLoading] = useState(false);
-  const [success, setSuccess] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [isEditMode, setIsEditMode] = useState(false);
-  const [existingPatientId, setExistingPatientId] = useState<string | null>(null);
+  // Search & Selection
+  const [searchTerm, setSearchTerm] = useState("");
+  const [searching, setSearching] = useState(false);
+  const [foundPatients, setFoundPatients] = useState<Patient[]>([]);
+  const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
+  const [showCreateForm, setShowCreateForm] = useState(false);
 
-  // Form State
-  const [formData, setFormData] = useState({
+  // Queue Data
+  const [waitingList, setWaitingList] = useState<QueueEntry[]>([]);
+  const [loadingQueue, setLoadingQueue] = useState(true);
+
+  // Triage Modal
+  const [showTriageModal, setShowTriageModal] = useState(false);
+  const [triageData, setTriageData] = useState({
+    motif: "",
+    service: "Généraliste",
+    tension: "",
+    temperature: "",
+    poids: "",
+    urgence: false
+  });
+
+  // New Patient Form
+  const [newPatient, setNewPatient] = useState({
     nom_complet: "",
     telephone: "",
     sexe: "M",
-    age: "",
-    quartier: "",
-    profession: "",
-    societe: "",
+    date_naissance: "",
     type_assurance: "Cash",
-    numero_assurance: "",
-    alertes_medicales: "",
-    motif_visite: "",
+    numero_assurance: ""
   });
 
-  const [assurances, setAssurances] = useState<any[]>([]);
-  const [loadingAssurances, setLoadingAssurances] = useState(false);
+  const services = ["Généraliste", "Pédiatre", "Gynécologue", "Cardiologue", "Ophtalmologue", "Chirurgien"];
 
   useEffect(() => {
-    const fetchEditData = async () => {
-      if (!editId) return;
-      
-      setLoading(true);
-      try {
-        const { data: sejourData, error: sejourErr } = await supabase
-          .from('sejours_actifs')
-          .select(`
-            *,
-            patients (*)
-          `)
-          .eq('id', editId)
-          .single();
-        
-        if (sejourErr) throw sejourErr;
-        
-        if (sejourData) {
-          setIsEditMode(true);
-          setExistingPatientId(sejourData.patient_id);
-          const p = sejourData.patients;
-          setFormData({
-            nom_complet: p.nom_complet || "",
-            telephone: p.telephone || "",
-            sexe: p.sexe || "M",
-            age: p.age ? p.age.toString() : "",
-            quartier: p.quartier || "",
-            profession: p.profession || "",
-            societe: p.societe || "",
-            type_assurance: p.type_assurance || "Cash",
-            numero_assurance: p.numero_assurance || "",
-            alertes_medicales: p.alertes_medicales || "",
-            motif_visite: sejourData.motif_visite || "",
-          });
-        }
-      } catch (err: any) {
-        toast.error("Erreur de récupération des données");
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    };
+    fetchWaitingList();
+    // Realtime subscription (using sejours_actifs as fallback if file_attente fails)
+    const subscription = supabase
+      .channel('file_attente_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'file_attente' }, () => {
+        fetchWaitingList();
+      })
+      .subscribe();
 
-    fetchEditData();
-  }, [editId]);
-
-  useEffect(() => {
-    const fetchAssurances = async () => {
-      setLoadingAssurances(true);
-      try {
-        const { data } = await supabase.from('assurances').select('nom').order('nom');
-        if (data && data.length > 0) {
-          setAssurances(data);
-        }
-      } catch (err) {
-        console.error("Erreur chargement assurances:", err);
-      } finally {
-        setLoadingAssurances(false);
-      }
+    return () => {
+      supabase.removeChannel(subscription);
     };
-    fetchAssurances();
   }, []);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError(null);
-
+  const fetchWaitingList = async () => {
+    setLoadingQueue(true);
     try {
-      if (isEditMode && existingPatientId && editId) {
-        // UPDATE MODE
-        const { error: patientError } = await supabase
-          .from("patients")
-          .update({
-            nom_complet: formData.nom_complet.toUpperCase(),
-            telephone: formData.telephone || null,
-            sexe: formData.sexe,
-            age: formData.age ? parseInt(formData.age) : null,
-            quartier: formData.quartier.toUpperCase(),
-            profession: formData.profession.toUpperCase(),
-            societe: formData.societe.toUpperCase(),
-            type_assurance: formData.type_assurance,
-            numero_assurance: formData.numero_assurance,
-            alertes_medicales: formData.alertes_medicales
-          })
-          .eq('id', existingPatientId);
-
-        if (patientError) throw patientError;
-
-        const { error: sejourError } = await supabase
-          .from("sejours_actifs")
-          .update({
-            motif_visite: formData.motif_visite
-          })
-          .eq('id', editId);
-
-        if (sejourError) throw sejourError;
-
-        toast.success("Modification enregistrée !");
+      const today = new Date();
+      today.setHours(0,0,0,0);
+      
+      const { data, error } = await supabase
+        .from('file_attente')
+        .select('*, patients(*)')
+        .gte('created_at', today.toISOString())
+        .order('heure_arrivee', { ascending: true });
+      
+      if (error) {
+          // Si file_attente n'existe pas, on tente sejours_actifs
+          const { data: altData } = await supabase
+            .from('sejours_actifs')
+            .select('*, patients(*)')
+            .gte('created_at', today.toISOString())
+            .order('created_at', { ascending: true });
+          setWaitingList(altData?.map(d => ({...d, heure_arrivee: d.created_at, motif: d.motif_visite, service: d.service || "Généraliste", urgence: d.urgence || false})) || []);
       } else {
-        // INSERT MODE
-        const { data: patientData, error: patientError } = await supabase
-          .from("patients")
-          .insert([{
-            nom_complet: formData.nom_complet.toUpperCase(),
-            telephone: formData.telephone || null,
-            sexe: formData.sexe,
-            age: formData.age ? parseInt(formData.age) : null,
-            quartier: formData.quartier.toUpperCase(),
-            profession: formData.profession.toUpperCase(),
-            societe: formData.societe.toUpperCase(),
-            type_assurance: formData.type_assurance,
-            numero_assurance: formData.numero_assurance,
-            alertes_medicales: formData.alertes_medicales
-          }])
-          .select()
-          .single();
-
-        if (patientError) throw patientError;
-
-        const { error: sejourError } = await supabase
-          .from("sejours_actifs")
-          .insert([{
-            patient_id: patientData.id,
-            statut: "En attente",
-            motif_visite: formData.motif_visite
-          }]);
-
-        if (sejourError) throw sejourError;
-
-        toast.success("Admission réussie ! Redirection...");
+          setWaitingList(data || []);
       }
-
-      setSuccess(true);
-      setTimeout(() => {
-        router.push("/");
-      }, 2000);
-
-    } catch (err: any) {
-      console.error("[Admission] Error:", err);
-      setError(err.message || "Une erreur est survenue.");
-      toast.error(err.message || "Erreur d'admission");
+    } catch (err) {
+      console.error("Queue Fetch Error:", err);
     } finally {
-      setLoading(false);
+      setLoadingQueue(false);
     }
   };
 
-  return (
-    <div className="min-h-screen bg-slate-50 p-4 md:p-8 flex flex-col items-center justify-center">
-      <motion.div 
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="w-full max-w-4xl bg-white rounded-[2.5rem] shadow-2xl shadow-slate-200 border border-slate-100 overflow-hidden"
-      >
-        <div className="grid grid-cols-1 md:grid-cols-12 h-full">
-          {/* Sidebar Info */}
-          <div className="md:col-span-4 bg-slate-900 p-10 text-white flex flex-col justify-between relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-64 h-64 bg-riverside-red/10 rounded-full blur-[100px] -mr-32 -mt-32" />
-            
-            <div className="relative z-10 space-y-8">
-              <button 
-                onClick={() => router.push("/")}
-                className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors text-[10px] font-black uppercase tracking-widest"
-              >
-                <ArrowLeft size={16} /> Retour Dashboard
-              </button>
-              
-              <div>
-                <h1 className="text-3xl font-black tracking-tighter leading-tight italic">
-                  RIVERSIDE<br/>
-                  <span className="text-riverside-red">{isEditMode ? "MODIFICATION" : "ADMISSION"}</span>
-                </h1>
-                <p className="text-slate-400 text-xs font-medium mt-4 leading-relaxed uppercase tracking-tight">
-                  {isEditMode 
-                    ? "Mise à jour des informations du patient et du motif de la visite en cours." 
-                    : "Enregistrement centralisé des patients pour consultations, examens et soins ambulatoires."
-                  }
-                </p>
-              </div>
+  const handleSearch = async (val: string) => {
+    setSearchTerm(val);
+    if (val.length < 2) {
+      setFoundPatients([]);
+      return;
+    }
 
-              <div className="space-y-4">
-                 <div className="flex items-center gap-4 group">
-                    <div className="w-10 h-10 bg-white/5 rounded-xl flex items-center justify-center border border-white/10 group-hover:bg-riverside-red group-hover:border-riverside-red transition-all">
-                       <User size={18} className="text-slate-400 group-hover:text-white" />
-                    </div>
-                    <div>
-                       <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Identité</p>
-                       <p className="text-[11px] font-bold">Vérification ID requise</p>
-                    </div>
-                 </div>
-                 <div className="flex items-center gap-4 group">
-                    <div className="w-10 h-10 bg-white/5 rounded-xl flex items-center justify-center border border-white/10 group-hover:bg-riverside-red group-hover:border-riverside-red transition-all">
-                       <Shield size={18} className="text-slate-400 group-hover:text-white" />
-                    </div>
-                    <div>
-                       <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Assurance</p>
-                       <p className="text-[11px] font-bold">Couverture & Droits</p>
-                    </div>
-                 </div>
-              </div>
-            </div>
+    setSearching(true);
+    try {
+      const { data } = await supabase
+        .from('patients')
+        .select('*')
+        .ilike('nom_complet', `%${val}%`)
+        .limit(5);
+      setFoundPatients(data || []);
+    } catch (err) {
+      console.error("Search Error:", err);
+    } finally {
+      setSearching(false);
+    }
+  };
 
-            <div className="relative z-10 pt-10 border-t border-white/5">
-              <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Medical Management System v4.0</p>
-            </div>
+  const handleCreatePatient = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSearching(true);
+    try {
+      const { data, error } = await supabase
+        .from('patients')
+        .insert([{
+          ...newPatient,
+          nom_complet: newPatient.nom_complet.toUpperCase()
+        }])
+        .select()
+        .single();
+      
+      if (error) throw error;
+      
+      toast.success("Patient créé avec succès !");
+      setSelectedPatient(data);
+      setShowCreateForm(false);
+      setShowTriageModal(true);
+    } catch (err: any) {
+      toast.error("Erreur creation: " + err.message);
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  const handleAddToQueue = async () => {
+    if (!selectedPatient) return;
+    setSearching(true);
+    
+    const payload = {
+        patient_id: selectedPatient.id,
+        motif: triageData.motif,
+        service: triageData.service,
+        tension: triageData.tension,
+        temperature: triageData.temperature,
+        poids: triageData.poids,
+        urgence: triageData.urgence,
+        heure_arrivee: new Date().toISOString(),
+        statut: "En attente"
+    };
+
+    try {
+      // On tente file_attente, puis sejours_actifs
+      const { error } = await supabase.from('file_attente').insert([payload]);
+      
+      if (error) {
+          // Fallback sejours_actifs (structure differente)
+          await supabase.from('sejours_actifs').insert([{
+            patient_id: selectedPatient.id,
+            motif_visite: triageData.motif,
+            statut: "En attente",
+            urgence: triageData.urgence
+          }]);
+      }
+      
+      toast.success(`${selectedPatient.nom_complet} ajouté à la file d'attente !`);
+      setShowTriageModal(false);
+      setSelectedPatient(null);
+      setSearchTerm("");
+      setFoundPatients([]);
+      fetchWaitingList();
+    } catch (err: any) {
+      toast.error("Erreur admission: " + err.message);
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  const printTicket = (entry: QueueEntry) => {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+
+    const html = `
+      <html>
+        <head>
+          <title>Ticket Admission - ${entry.patients?.nom_complet}</title>
+          <style>
+            @page { size: 80mm 200mm; margin: 0; }
+            body { font-family: 'Courier New', Courier, monospace; width: 80mm; padding: 10mm; font-size: 12px; line-height: 1.4; color: #000; }
+            .header { text-align: center; border-bottom: 1px dashed #000; padding-bottom: 5mm; margin-bottom: 5mm; }
+            .clinic-name { font-weight: bold; font-size: 16px; margin: 0; }
+            .ticket-info { margin-bottom: 5mm; }
+            .label { font-weight: bold; text-transform: uppercase; font-size: 10px; }
+            .value { font-size: 14px; margin-bottom: 3mm; display: block; }
+            .urgency { border: 2px solid #000; padding: 2mm; text-align: center; font-weight: bold; margin-bottom: 5mm; }
+            .footer { text-align: center; border-top: 1px dashed #000; padding-top: 5mm; margin-top: 10mm; font-size: 10px; }
+            @media print { .no-print { display: none; } }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <p class="clinic-name">CLINIQUE RIVERSIDE</p>
+            <p>TICKET D'ADMISSION # ${entry.id.slice(0, 5).toUpperCase()}</p>
           </div>
+          <div class="ticket-info">
+            <span class="label">Patient</span>
+            <span class="value">${entry.patients?.nom_complet}</span>
+            
+            <span class="label">Heure Arrivée</span>
+            <span class="value">${new Date(entry.heure_arrivee).toLocaleTimeString()}</span>
+            
+            <span class="label">Service</span>
+            <span class="value">${entry.service}</span>
+            
+            <span class="label">Motif</span>
+            <span class="value">${entry.motif}</span>
+          </div>
+          ${entry.urgence ? '<div class="urgency">URGENT / VITAL</div>' : ''}
+          <div class="footer">
+            <p>Merci de patienter en salle d'attente.<br/>Votre santé est notre priorité.</p>
+            <p>${new Date().toLocaleDateString()}</p>
+          </div>
+          <script>window.print(); window.close();</script>
+        </body>
+      </html>
+    `;
 
-          {/* Form Content */}
-          <div className="md:col-span-8 p-10 md:p-16 h-full overflow-y-auto max-h-[80vh] custom-scrollbar">
-            {success ? (
-              <div className="h-full flex flex-col items-center justify-center text-center space-y-6 py-20">
-                <div className="w-20 h-20 bg-emerald-50 text-emerald-500 rounded-3xl flex items-center justify-center shadow-lg shadow-emerald-100 animate-bounce">
-                  <CheckCircle size={40} />
-                </div>
-                <div>
-                  <h2 className="text-2xl font-black text-slate-900 tracking-tight uppercase">Admission Réussie</h2>
-                  <p className="text-slate-400 text-sm font-bold mt-2 uppercase tracking-wide">Le patient a été ajouté à la file d&apos;attente</p>
-                </div>
-              </div>
-            ) : (
-              <form onSubmit={handleSubmit} className="space-y-12">
-                <div className="space-y-8">
-                  <div className="flex items-center gap-3">
-                    <div className="w-1 h-6 bg-riverside-red rounded-full" />
-                    <h2 className="text-lg font-black text-slate-900 uppercase tracking-tight">Informations Patient</h2>
-                  </div>
+    printWindow.document.write(html);
+    printWindow.document.close();
+  };
 
-                  <div className="grid grid-cols-1 gap-6">
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nom Complet</label>
-                      <input 
-                        required
-                        type="text"
-                        name="nom_complet"
-                        value={formData.nom_complet}
-                        onChange={handleChange}
-                        className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl focus:border-riverside-red outline-none transition-all font-bold text-sm uppercase"
-                        placeholder="EX: MOKO JEAN PIERRE"
-                      />
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div className="space-y-2">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Téléphone (Facultatif)</label>
-                        <input 
-                          type="tel"
-                          name="telephone"
-                          value={formData.telephone}
-                          onChange={handleChange}
-                          className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl focus:border-riverside-red outline-none transition-all font-bold text-sm"
-                          placeholder="6XX XX XX XX"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Âge (Facultatif)</label>
-                        <input 
-                          type="number"
-                          name="age"
-                          value={formData.age}
-                          onChange={handleChange}
-                          className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl focus:border-riverside-red outline-none transition-all font-bold text-sm"
-                          placeholder="EX: 45"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div className="space-y-2">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Sexe</label>
-                        <select 
-                          name="sexe"
-                          value={formData.sexe}
-                          onChange={handleChange}
-                          className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl focus:border-riverside-red outline-none transition-all font-bold text-sm appearance-none"
-                        >
-                          <option value="M">MASCULIN</option>
-                          <option value="F">FÉMININ</option>
-                        </select>
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Quartier</label>
-                        <input 
-                          required
-                          type="text"
-                          name="quartier"
-                          value={formData.quartier}
-                          onChange={handleChange}
-                          className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl focus:border-riverside-red outline-none transition-all font-bold text-sm uppercase"
-                          placeholder="EX: PK12"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div className="space-y-2">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Profession</label>
-                        <div className="relative group">
-                          <Briefcase className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-riverside-red transition-colors" size={16} />
-                          <input 
-                            type="text"
-                            name="profession"
-                            value={formData.profession}
-                            onChange={handleChange}
-                            className="w-full pl-12 pr-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl focus:border-riverside-red outline-none transition-all font-bold text-sm uppercase"
-                            placeholder="EX: COMPTABLE"
-                          />
-                        </div>
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Société</label>
-                        <div className="relative group">
-                          <Building className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-riverside-red transition-colors" size={16} />
-                          <input 
-                            type="text"
-                            name="societe"
-                            value={formData.societe}
-                            onChange={handleChange}
-                            className="w-full pl-12 pr-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl focus:border-riverside-red outline-none transition-all font-bold text-sm uppercase"
-                            placeholder="EX: ENEO / SABC"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="space-y-8">
-                  <div className="flex items-center gap-3">
-                    <div className="w-1 h-6 bg-emerald-500 rounded-full" />
-                    <h2 className="text-lg font-black text-slate-900 uppercase tracking-tight">Couverture Médicale</h2>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Assurance / Partenaire</label>
-                      <select 
-                        name="type_assurance"
-                        value={formData.type_assurance}
-                        onChange={handleChange}
-                        className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl focus:border-riverside-red outline-none transition-all font-bold text-sm appearance-none"
-                      >
-                        <option value="Cash">CASH / PRIVÉ</option>
-                        {assurances.map(a => (
-                          <option key={a.nom} value={a.nom}>{a.nom.toUpperCase()}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Numéro de Matricule</label>
-                      <input 
-                        type="text"
-                        name="numero_assurance"
-                        value={formData.numero_assurance}
-                        onChange={handleChange}
-                        className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl focus:border-riverside-red outline-none transition-all font-bold text-sm"
-                        placeholder="789/XYZ/2026"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="space-y-8">
-                  <div className="flex items-center gap-3">
-                    <div className="w-1 h-6 bg-amber-500 rounded-full" />
-                    <h2 className="text-lg font-black text-slate-900 uppercase tracking-tight">Motif de Visite</h2>
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Description des symptômes</label>
-                    <textarea 
-                      required
-                      name="motif_visite"
-                      value={formData.motif_visite}
-                      onChange={handleChange}
-                      rows={4}
-                      className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-3xl focus:border-riverside-red outline-none transition-all font-bold text-sm resize-none"
-                      placeholder="DÉTAILLEZ ICI LE MOTIF DU PATIENT..."
-                    />
-                  </div>
-                </div>
-
-                <div className="pt-10 border-t border-slate-100 flex flex-col md:flex-row items-center justify-between gap-6">
-                   <div className="flex items-center gap-4 text-amber-600 bg-amber-50 px-6 py-4 rounded-2xl border border-amber-100">
-                      <AlertTriangle size={20} className="shrink-0" />
-                      <p className="text-[10px] font-black uppercase leading-tight tracking-tight">
-                        {isEditMode 
-                          ? "Les modifications seront appliquées immédiatement\nsur le dossier du patient."
-                          : "En validant, le patient sera automatiquement\najouté à la file d'attente médicale."
-                        }
-                      </p>
-                   </div>
-                   
-                   <button 
-                    disabled={loading}
-                    className="w-full md:w-auto px-12 py-5 bg-riverside-red text-white rounded-2xl font-black uppercase text-xs tracking-widest shadow-2xl shadow-red-200 hover:scale-[1.02] transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-4"
-                   >
-                     {loading ? <Loader2 size={18} className="animate-spin" /> : isEditMode ? <Pencil size={18} /> : <Plus size={18} />}
-                     {isEditMode ? "Enregistrer les modifications" : "Lancer l'Admission"}
-                   </button>
-                </div>
-              </form>
-            )}
+  return (
+    <div className="w-full max-w-7xl mx-auto space-y-8 pb-20">
+      
+      {/* Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div className="flex items-center gap-4">
+          <div className="w-16 h-16 bg-slate-900 rounded-3xl flex items-center justify-center text-white shadow-xl">
+            <Clock size={32} />
+          </div>
+          <div>
+            <h1 className="text-3xl font-black text-slate-950 tracking-tight leading-tight">
+              Centre d&apos;Admission <span className="text-riverside-red">& Triage</span>
+            </h1>
+            <p className="text-[10px] text-slate-400 font-black uppercase tracking-[0.3em] mt-1">Accueil rapide & Orientation patients</p>
           </div>
         </div>
-      </motion.div>
+        
+        <div className="flex items-center gap-4">
+          <div className="bg-white/80 backdrop-blur-md p-4 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-4 px-6">
+            <div className="text-right">
+              <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Aujourd&apos;hui</p>
+              <p className="text-xl font-black text-slate-900">{waitingList.length} Patients</p>
+            </div>
+            <div className="w-px h-10 bg-slate-100" />
+            <div className="text-right">
+              <p className="text-[9px] font-black text-red-400 uppercase tracking-widest">Urgences</p>
+              <p className="text-xl font-black text-riverside-red">{waitingList.filter(e => e.urgence).length}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        
+        {/* Left Column: Search & Quick Add */}
+        <div className="lg:col-span-12 xl:col-span-4 space-y-8">
+          <div className="bg-white rounded-[32px] p-8 border border-slate-100 shadow-xl shadow-slate-100/50">
+            <div className="flex items-center justify-between mb-8">
+               <h2 className="text-sm font-black text-slate-900 uppercase tracking-widest">Identification Patient</h2>
+               <div className="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center text-slate-400">
+                  <Search size={16} />
+               </div>
+            </div>
+
+            <div className="relative mb-6">
+              <input 
+                type="text"
+                value={searchTerm}
+                onChange={(e) => handleSearch(e.target.value)}
+                placeholder="Rechercher (Nom ou Téléphone)..."
+                className="w-full pl-12 pr-6 py-5 bg-slate-50 border border-slate-100 rounded-2xl font-bold text-sm outline-none focus:border-riverside-red transition-all"
+              />
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={20} />
+              {searching && <Loader2 className="absolute right-4 top-1/2 -translate-y-1/2 text-riverside-red animate-spin" size={20} />}
+            </div>
+
+            <div className="space-y-3">
+              {foundPatients.map(p => (
+                <button 
+                  key={p.id}
+                  onClick={() => {
+                    setSelectedPatient(p);
+                    setShowTriageModal(true);
+                  }}
+                  className="w-full p-5 bg-white border border-slate-50 rounded-2xl flex items-center justify-between hover:border-riverside-red hover:bg-red-50/10 transition-all group"
+                >
+                  <div className="text-left">
+                    <p className="text-sm font-black text-slate-900 group-hover:text-riverside-red transition-colors uppercase">{p.nom_complet}</p>
+                    <p className="text-[10px] text-slate-400 font-bold mt-1 uppercase tracking-widest">{p.telephone || 'Aucun Tel'} • {p.type_assurance}</p>
+                  </div>
+                  <Plus size={20} className="text-slate-200 group-hover:text-riverside-red" />
+                </button>
+              ))}
+
+              {!searchTerm && !searching && foundPatients.length === 0 && (
+                <div className="py-10 text-center border-2 border-dashed border-slate-100 rounded-[2rem]">
+                  <p className="text-[10px] text-slate-300 font-black uppercase tracking-widest leading-relaxed">
+                    Saisissez un nom pour rechercher<br/>ou créez un nouveau dossier
+                  </p>
+                </div>
+              )}
+
+              {searchTerm.length >= 2 && !searching && foundPatients.length === 0 && (
+                <motion.button 
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  onClick={() => setShowCreateForm(true)}
+                  className="w-full p-8 border-2 border-dashed border-red-100 rounded-[2.5rem] flex flex-col items-center justify-center gap-4 text-riverside-red hover:bg-red-50 transition-all"
+                >
+                  <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center">
+                    <UserPlus size={28} />
+                  </div>
+                  <div className="text-center">
+                    <p className="text-xs font-black uppercase tracking-widest">Nouveau Patient</p>
+                    <p className="text-[9px] font-bold opacity-60 mt-1 uppercase tracking-tight">Aucun résultat pour &quot;{searchTerm}&quot;</p>
+                  </div>
+                </motion.button>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Right Column: Waiting List */}
+        <div className="lg:col-span-12 xl:col-span-8 space-y-8">
+           <div className="bg-white rounded-[32px] overflow-hidden border border-slate-100 shadow-xl shadow-slate-100/50">
+              <div className="p-8 border-b border-slate-50 flex items-center justify-between bg-white">
+                <div>
+                  <h2 className="text-sm font-black text-slate-900 uppercase tracking-widest">Salle d&apos;Attente</h2>
+                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">File active du {new Date().toLocaleDateString()}</p>
+                </div>
+                <button 
+                  onClick={fetchWaitingList}
+                  className="p-3 bg-slate-50 text-slate-400 rounded-xl hover:bg-slate-900 hover:text-white transition-all shadow-sm"
+                >
+                  <Zap size={18} />
+                </button>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="bg-slate-50/50">
+                      <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Heure</th>
+                      <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Patient</th>
+                      <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Motif & Service</th>
+                      <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Statut</th>
+                      <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-50">
+                    {waitingList.map((entry) => (
+                      <tr 
+                        key={entry.id} 
+                        className={cn(
+                          "group hover:bg-slate-50/30 transition-all",
+                          entry.urgence && "bg-red-50/30 border-l-4 border-l-riverside-red"
+                        )}
+                      >
+                        <td className="px-8 py-6">
+                           <span className="text-xs font-black text-slate-900 italic">
+                             {new Date(entry.heure_arrivee).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                           </span>
+                        </td>
+                        <td className="px-8 py-6">
+                          <div>
+                            <p className={cn("text-sm font-black text-slate-900 uppercase", entry.urgence && "text-riverside-red")}>{entry.patients?.nom_complet}</p>
+                            <div className="flex items-center gap-2 mt-1">
+                               {entry.urgence && <div className="w-2 h-2 bg-riverside-red animate-ping rounded-full" />}
+                               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tight italic">
+                                 {entry.patients?.type_assurance}
+                               </p>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-8 py-6">
+                          <div>
+                            <p className="text-[11px] font-black text-slate-900 uppercase leading-none">{entry.service}</p>
+                            <p className="text-[10px] text-slate-500 font-bold mt-2 uppercase tracking-tight line-clamp-1 italic">{entry.motif}</p>
+                          </div>
+                        </td>
+                        <td className="px-8 py-6 text-center">
+                          <span className={cn(
+                            "px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest",
+                            entry.statut === "En attente" ? "bg-slate-100 text-slate-500" : "bg-blue-100 text-blue-600"
+                          )}>
+                            {entry.statut}
+                          </span>
+                        </td>
+                        <td className="px-8 py-6">
+                          <div className="flex items-center justify-center">
+                            <button 
+                              onClick={() => printTicket(entry)}
+                              className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center text-slate-400 hover:bg-slate-900 hover:text-white transition-all shadow-sm shadow-slate-100"
+                            >
+                              <Printer size={16} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                    {waitingList.length === 0 && !loadingQueue && (
+                      <tr>
+                        <td colSpan={5} className="py-20 text-center">
+                           <div className="flex flex-col items-center gap-4 text-slate-300">
+                              <User size={48} className="opacity-20" />
+                              <p className="text-[10px] font-black uppercase tracking-[0.3em]">Aucun patient enregistré aujourd&apos;hui</p>
+                           </div>
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+           </div>
+        </div>
+      </div>
+
+      {/* Triage Modal */}
+      <AnimatePresence>
+        {showTriageModal && selectedPatient && (
+          <>
+            <motion.div 
+              initial={{ opacity: 0 }} 
+              animate={{ opacity: 1 }} 
+              exit={{ opacity: 0 }} 
+              onClick={() => setShowTriageModal(false)}
+              className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[1001]" 
+            />
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0, x: "-50%", y: "-50%" }} 
+              animate={{ scale: 1, opacity: 1, x: "-50%", y: "-50%" }} 
+              exit={{ scale: 0.9, opacity: 0, x: "-50%", y: "-50%" }} 
+              className="fixed top-1/2 left-1/2 w-[95%] max-w-xl bg-white rounded-[40px] z-[1002] p-10 shadow-2xl overflow-y-auto max-h-[90vh]"
+            >
+               <div className="flex items-center justify-between mb-8 border-b border-slate-50 pb-6">
+                 <div>
+                    <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter">Fiche de Triage</h3>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">Admission de {selectedPatient.nom_complet}</p>
+                 </div>
+                 <div className="w-16 h-16 bg-red-50 rounded-2xl flex items-center justify-center text-riverside-red">
+                    <Stethoscope size={28} />
+                 </div>
+               </div>
+
+               <div className="space-y-6">
+                  <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                    <div className="flex items-center gap-3">
+                       <AlertTriangle className={cn(triageData.urgence ? "text-riverside-red" : "text-slate-300")} size={20} />
+                       <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Niveau d&apos;Urgence</span>
+                    </div>
+                    <button 
+                      onClick={() => setTriageData({...triageData, urgence: !triageData.urgence})}
+                      className={cn(
+                        "px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all",
+                        triageData.urgence ? "bg-riverside-red text-white shadow-lg shadow-red-200" : "bg-white text-slate-400 border border-slate-100"
+                      )}
+                    >
+                      {triageData.urgence ? "URGENT" : "NORMAL"}
+                    </button>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Service / Spécialité</label>
+                    <select 
+                      className="w-full p-5 bg-slate-50 border border-slate-100 rounded-2xl text-[11px] font-black uppercase tracking-widest outline-none focus:border-riverside-red transition-all"
+                      value={triageData.service}
+                      onChange={e => setTriageData({...triageData, service: e.target.value})}
+                    >
+                      {services.map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Motif de consultation</label>
+                    <textarea 
+                      required
+                      className="w-full p-5 bg-slate-50 border border-slate-100 rounded-2xl text-sm font-bold outline-none focus:border-riverside-red transition-all resize-none"
+                      rows={3}
+                      placeholder="Douleurs abdominales, Fièvre, Contrôle..."
+                      value={triageData.motif}
+                      onChange={e => setTriageData({...triageData, motif: e.target.value})}
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="space-y-1.5">
+                      <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Tension (mmHg)</label>
+                      <div className="relative group">
+                        <Activity className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={14} />
+                        <input 
+                          className="w-full pl-10 pr-4 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-xs font-bold outline-none focus:border-riverside-red"
+                          placeholder="12/8"
+                          value={triageData.tension}
+                          onChange={e => setTriageData({...triageData, tension: e.target.value})}
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Temp. (°C)</label>
+                      <div className="relative group">
+                        <Thermometer className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={14} />
+                        <input 
+                          className="w-full pl-10 pr-4 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-xs font-bold outline-none focus:border-riverside-red"
+                          placeholder="37.5"
+                          value={triageData.temperature}
+                          onChange={e => setTriageData({...triageData, temperature: e.target.value})}
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Poids (Kg)</label>
+                      <div className="relative group">
+                        <Scale className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={14} />
+                        <input 
+                          className="w-full pl-10 pr-4 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-xs font-bold outline-none focus:border-riverside-red"
+                          placeholder="75"
+                          value={triageData.poids}
+                          onChange={e => setTriageData({...triageData, poids: e.target.value})}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-4 pt-6">
+                    <button 
+                      onClick={() => setShowTriageModal(false)}
+                      className="flex-1 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-slate-600 transition-colors"
+                    >
+                      Annuler
+                    </button>
+                    <button 
+                      disabled={searching}
+                      onClick={handleAddToQueue}
+                      className="flex-[2] py-5 bg-slate-950 text-white rounded-[20px] text-[10px] font-black uppercase tracking-[0.2em] shadow-xl hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-3 disabled:opacity-50"
+                    >
+                      {searching ? <Loader2 className="animate-spin" size={18} /> : <CheckCircle2 size={18} />}
+                      Confirmer l&apos;Arrivée
+                    </button>
+                  </div>
+               </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* Create Patient Form */}
+      <AnimatePresence>
+        {showCreateForm && (
+          <>
+            <motion.div 
+              initial={{ opacity: 0 }} 
+              animate={{ opacity: 1 }} 
+              exit={{ opacity: 0 }} 
+              onClick={() => setShowCreateForm(false)}
+              className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[1001]" 
+            />
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0, x: "-50%", y: "-50%" }} 
+              animate={{ scale: 1, opacity: 1, x: "-50%", y: "-50%" }} 
+              exit={{ scale: 0.9, opacity: 0, x: "-50%", y: "-50%" }} 
+              className="fixed top-1/2 left-1/2 w-[95%] max-w-2xl bg-white rounded-[40px] z-[1002] p-10 md:p-12 shadow-2xl overflow-y-auto max-h-[90vh]"
+            >
+               <div className="flex items-center justify-between mb-10 border-b border-slate-50 pb-8">
+                 <div>
+                    <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter">Nouveau Dossier Patient</h3>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">Enregistrement initial dans la base de données</p>
+                 </div>
+                 <div className="w-16 h-16 bg-slate-950 rounded-[24px] flex items-center justify-center text-white">
+                    <UserPlus size={28} />
+                 </div>
+               </div>
+
+               <form onSubmit={handleCreatePatient} className="space-y-8">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-1.5 md:col-span-2">
+                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nom Complet</label>
+                       <input 
+                         required
+                         className="w-full p-5 bg-slate-50 border border-slate-100 rounded-2xl text-sm font-bold uppercase outline-none focus:border-riverside-red"
+                         placeholder="JEAN PIERRE MOKO"
+                         value={newPatient.nom_complet}
+                         onChange={e => setNewPatient({...newPatient, nom_complet: e.target.value})}
+                       />
+                    </div>
+                    <div className="space-y-1.5">
+                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Téléphone</label>
+                       <input 
+                         required
+                         className="w-full p-5 bg-slate-50 border border-slate-100 rounded-2xl text-sm font-bold outline-none focus:border-riverside-red"
+                         placeholder="6XXXXXXXX"
+                         value={newPatient.telephone}
+                         onChange={e => setNewPatient({...newPatient, telephone: e.target.value})}
+                       />
+                    </div>
+                    <div className="space-y-1.5">
+                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Date de Naissance</label>
+                       <input 
+                         type="date"
+                         required
+                         className="w-full p-5 bg-slate-50 border border-slate-100 rounded-2xl text-sm font-bold outline-none focus:border-riverside-red"
+                         value={newPatient.date_naissance}
+                         onChange={e => setNewPatient({...newPatient, date_naissance: e.target.value})}
+                       />
+                    </div>
+                    <div className="space-y-1.5">
+                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Sexe</label>
+                       <select 
+                         className="w-full p-5 bg-slate-50 border border-slate-100 rounded-2xl text-[11px] font-black uppercase tracking-widest outline-none focus:border-riverside-red"
+                         value={newPatient.sexe}
+                         onChange={e => setNewPatient({...newPatient, sexe: e.target.value})}
+                       >
+                         <option value="M">Masculin</option>
+                         <option value="F">Féminin</option>
+                       </select>
+                    </div>
+                    <div className="space-y-1.5">
+                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Type Assurance</label>
+                       <select 
+                         className="w-full p-5 bg-slate-50 border border-slate-100 rounded-2xl text-[11px] font-black uppercase tracking-widest outline-none focus:border-riverside-red"
+                         value={newPatient.type_assurance}
+                         onChange={e => setNewPatient({...newPatient, type_assurance: e.target.value})}
+                       >
+                         <option value="Cash">Cash / Privé</option>
+                         <option value="ASCOMA">ASCOMA</option>
+                         <option value="AXA">AXA</option>
+                         <option value="Sunu">Sunu</option>
+                       </select>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-4 pt-6">
+                    <button 
+                      type="button"
+                      onClick={() => setShowCreateForm(false)}
+                      className="flex-1 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-slate-600 transition-colors"
+                    >
+                      Annuler
+                    </button>
+                    <button 
+                      type="submit"
+                      disabled={searching}
+                      className="flex-[2] py-5 bg-riverside-red text-white rounded-[20px] text-[10px] font-black uppercase tracking-[0.2em] shadow-xl shadow-red-100 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-3 disabled:opacity-50"
+                    >
+                      {searching ? <Loader2 className="animate-spin" size={18} /> : <CheckCircle2 size={18} />}
+                      Enregistrer & Passer au Triage
+                    </button>
+                  </div>
+               </form>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -471,7 +722,9 @@ export default function AdmissionPage() {
         <Loader2 className="animate-spin text-riverside-red" size={48} />
       </div>
     }>
-      <AdmissionForm />
+      <div className="p-4 md:p-8">
+        <AdmissionDashboard />
+      </div>
     </Suspense>
   );
 }

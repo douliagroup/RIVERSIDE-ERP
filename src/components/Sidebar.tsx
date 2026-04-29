@@ -35,7 +35,7 @@ const menuItems = [
   { icon: ShieldCheck, label: "Administration", href: "/administration", roles: ['patron', 'major'] },
   { icon: Package, label: "Inventaire", href: "/admin/stocks", roles: ['patron', 'major'] },
   { icon: Activity, label: "Patron (Insight)", href: "/patron", roles: ['patron'] },
-  { icon: FileText, label: "Comptabilité", href: "/comptable", roles: ['patron', 'comptable'] },
+  { icon: FileText, label: "Comptabilité", href: "/comptabilite", roles: ['patron', 'comptable'] },
   { icon: Megaphone, label: "Community", href: "/cm", roles: ['patron', 'comptable'] },
   { icon: MessageCircle, label: "DOULIA Love", href: "/doulia-love", roles: ['patron', 'communication'] },
 ];

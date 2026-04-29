@@ -19,7 +19,7 @@ export function middleware(request: NextRequest) {
   const protections: { [key: string]: string[] } = {
     '/patron': ['patron'],
     '/cm': ['patron', 'comptable'],
-    '/comptable': ['patron', 'comptable'],
+    '/comptabilite': ['patron', 'comptable'],
     '/admin/stocks': ['patron', 'major'],
     '/administration': ['patron', 'major'],
     '/medical': ['personnel', 'patron', 'major'],

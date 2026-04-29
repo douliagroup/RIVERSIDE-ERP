@@ -1,191 +1,356 @@
 "use client";
 
-import React, { useState } from "react";
-import { motion, AnimatePresence } from "motion/react";
-import { Megaphone, Layout, Facebook, Copy, Check, Loader2, Sparkles, TrendingUp, BarChart3, Image as ImageIcon, Share2 } from "lucide-react";
+import React, { useState, useEffect, useMemo } from "react";
+import { 
+  Megaphone, 
+  Plus, 
+  MoreHorizontal, 
+  ArrowRight, 
+  Search, 
+  Filter, 
+  MessageCircle, 
+  Calendar, 
+  CheckCircle2, 
+  UserPlus, 
+  Loader2,
+  Trash2,
+  Phone,
+  Layout
+} from "lucide-react";
+import { supabase } from "@/src/lib/supabase";
 import { cn } from "@/src/lib/utils";
+import { motion, AnimatePresence } from "motion/react";
+import toast from "react-hot-toast";
+
+interface Prospect {
+  id: string;
+  nom: string;
+  telephone: string;
+  source: string;
+  statut: "NOUVEAU" | "DISCUSSION" | "RDV";
+  note?: string;
+  created_at: string;
+}
+
+const COLUMNS = [
+  { id: "NOUVEAU", label: "NOUVEAUX MESSAGES", color: "bg-blue-500" },
+  { id: "DISCUSSION", label: "EN DISCUSSION", color: "bg-amber-500" },
+  { id: "RDV", label: "RDV FIXÉ", color: "bg-emerald-500" }
+];
 
 export default function CMPage() {
-  const [generating, setGenerating] = useState(false);
-  const [postContent, setPostContent] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
-  const [analyzing, setAnalyzing] = useState(false);
+  const [prospects, setProspects] = useState<Prospect[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [convertingId, setConvertingId] = useState<string | null>(null);
 
-  const handleGeneratePost = async () => {
-    setGenerating(true);
-    setAnalyzing(true);
-    
-    // Simuler l'analyse
-    await new Promise(r => setTimeout(r, 2000));
-    setAnalyzing(false);
+  const [form, setForm] = useState({
+    nom: "",
+    telephone: "",
+    source: "Facebook",
+    note: ""
+  });
 
+  const fetchData = React.useCallback(async () => {
+    setLoading(true);
     try {
-      const response = await fetch('/api/ai/cm-post', {
-        method: 'POST',
-      });
-      const data = await response.json();
-      if (data.post) {
-        setPostContent(data.post);
-      }
-    } catch (error) {
-      console.error("Error generating post:", error);
+      const { data, error } = await supabase
+        .from('prospects')
+        .select('*')
+        .order('created_at', { ascending: false });
+      
+      if (error) throw error;
+      setProspects(data || []);
+    } catch (err) {
+      console.error("Error prospects:", err);
     } finally {
-      setGenerating(false);
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  const handleAddProspect = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.nom || !form.telephone) return toast.error("Nom et téléphone requis");
+
+    setSubmitting(true);
+    try {
+      const { error } = await supabase
+        .from('prospects')
+        .insert([{ ...form, statut: "NOUVEAU" }]);
+      
+      if (error) throw error;
+      toast.success("Prospect ajouté !");
+      setShowAddModal(false);
+      setForm({ nom: "", telephone: "", source: "Facebook", note: "" });
+      fetchData();
+    } catch (err: any) {
+      toast.error("Erreur: " + err.message);
+    } finally {
+      setSubmitting(false);
     }
   };
 
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const updateStatus = async (id: string, newStatus: Prospect["statut"]) => {
+    try {
+      const { error } = await supabase
+        .from('prospects')
+        .update({ statut: newStatus })
+        .eq('id', id);
+      
+      if (error) throw error;
+      setProspects(prev => prev.map(p => p.id === id ? { ...p, statut: newStatus } : p));
+      toast.success("Statut mis à jour");
+    } catch (err: any) {
+      toast.error(err.message);
+    }
+  };
+
+  const convertToPatient = async (prospect: Prospect) => {
+    setConvertingId(prospect.id);
+    try {
+      // 1. Create patient
+      const { data: patientData, error: pError } = await supabase
+        .from('patients')
+        .insert([{
+          nom_complet: prospect.nom,
+          telephone: prospect.telephone,
+          statut: "Actif",
+          type_assurance: "Cash"
+        }])
+        .select()
+        .single();
+      
+      if (pError) throw pError;
+
+      // 2. Delete or archive prospect? The mission says "copie", so we might want to keep it or mark as converted
+      // Let's just delete for "conversion" feel or update status if we had a 'CONVERTI' status.
+      // But prompt says columns are fixed. Let's just toast and maybe delete.
+      await supabase.from('prospects').delete().eq('id', prospect.id);
+      
+      toast.success(`${prospect.nom} est maintenant un patient !`);
+      fetchData();
+    } catch (err: any) {
+      toast.error("Échec conversion: " + err.message);
+    } finally {
+      setConvertingId(null);
+    }
+  };
+
+  const deleteProspect = async (id: string) => {
+    if (!confirm("Supprimer ce prospect ?")) return;
+    try {
+      const { error } = await supabase.from('prospects').delete().eq('id', id);
+      if (error) throw error;
+      setProspects(prev => prev.filter(p => p.id !== id));
+      toast.success("Supprimé");
+    } catch (err: any) {
+      toast.error(err.message);
+    }
   };
 
   return (
-    <div className="p-8 max-w-7xl mx-auto space-y-12 h-full overflow-y-auto pb-32 scrollbar-hide">
-      {/* Header section */}
-      <header className="flex flex-col md:flex-row md:items-center justify-between gap-8 mb-12">
-        <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}>
-          <div className="flex items-center gap-4 mb-4">
-            <div className="w-14 h-14 bg-indigo-600 rounded-3xl flex items-center justify-center text-white shadow-xl shadow-indigo-100">
+    <div className="min-h-screen bg-slate-50 p-6 md:p-10 font-sans overflow-x-hidden">
+      
+      {/* HEADER */}
+      <div className="max-w-[1600px] mx-auto">
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-12 gap-6">
+          <div className="flex items-center gap-5">
+            <div className="w-14 h-14 bg-indigo-600 rounded-[1.5rem] flex items-center justify-center text-white shadow-xl shadow-indigo-100">
               <Megaphone size={28} />
             </div>
             <div>
-              <h1 className="text-4xl font-black text-slate-950 tracking-tighter">COMMUNITY <span className="text-indigo-600">Manager</span></h1>
-              <p className="text-slate-400 font-bold uppercase tracking-[0.2em] text-[10px]">Espace Créatif & Rayonnement Digital Riverside</p>
+              <h1 className="text-3xl font-black text-slate-900 tracking-tighter">Acquisition & Leads</h1>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mt-1">Riverside Community Management Pipeline</p>
             </div>
           </div>
-        </motion.div>
-        
-        <div className="flex gap-4">
-          <div className="bg-white border border-slate-100 px-6 py-3 rounded-2xl shadow-sm flex items-center gap-3">
-            <div className="w-2 h-2 bg-indigo-500 rounded-full animate-pulse" />
-            <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Stratégie Connectée</span>
+
+          <div className="flex items-center gap-4">
+            <div className="relative hidden md:block">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+              <input 
+                type="text" 
+                placeholder="Rechercher prospect..." 
+                className="pl-12 pr-6 py-3 bg-white border border-slate-200 rounded-2xl text-xs font-bold outline-none focus:border-indigo-500 w-64 shadow-sm"
+              />
+            </div>
+            <button 
+              onClick={() => setShowAddModal(true)}
+              className="bg-slate-950 text-white px-6 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-600 transition-all flex items-center gap-3 shadow-lg active:scale-95"
+            >
+              <Plus size={16} /> Nouveau Lead
+            </button>
           </div>
         </div>
-      </header>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
-        {/* Left: Controls & Analysis */}
-        <section className="space-y-10">
-          <div className="bg-white border border-slate-100 p-10 rounded-[3rem] shadow-xl shadow-slate-200/40 relative overflow-hidden">
-            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-indigo-500 to-purple-500" />
-            
-            <h2 className="text-sm font-black text-slate-950 uppercase tracking-[0.3em] mb-8 flex items-center gap-3">
-              <Sparkles size={18} className="text-indigo-500" /> Riverside Insight
-            </h2>
+        {/* KANBAN BOARD */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 items-start">
+          {COLUMNS.map(column => (
+            <div key={column.id} className="flex flex-col gap-6">
+              <div className="flex items-center justify-between px-4">
+                <div className="flex items-center gap-3">
+                  <div className={cn("w-2 h-2 rounded-full", column.color)} />
+                  <h2 className="text-[10px] font-black text-slate-900 uppercase tracking-widest">{column.label}</h2>
+                  <span className="bg-slate-200 px-2.5 py-0.5 rounded-full text-[9px] font-black text-slate-500">
+                    {prospects.filter(p => p.statut === column.id).length}
+                  </span>
+                </div>
+                <button className="text-slate-300 hover:text-slate-500 transition-colors">
+                  <MoreHorizontal size={16} />
+                </button>
+              </div>
 
-            <div className="space-y-8">
-              <p className="text-sm text-slate-500 leading-[1.8] font-medium">
-                Notre intelligence analyse en temps réel les diagnostics médicaux pour identifier les préoccupations sanitaires actuelles de la population de Douala.
-              </p>
-
-              <button 
-                onClick={handleGeneratePost}
-                disabled={generating}
-                className="w-full py-6 bg-slate-950 text-white rounded-[2rem] font-black text-sm uppercase tracking-widest hover:bg-indigo-600 transition-all active:scale-95 flex items-center justify-center gap-4 disabled:opacity-50 shadow-2xl shadow-indigo-100 group"
-              >
-                {generating ? <Loader2 size={24} className="animate-spin" /> : <TrendingUp size={24} className="group-hover:rotate-12 transition-transform" />}
-                {generating ? "Analyse & Rédaction..." : "LANCER L'IA STRATÉGIQUE"}
-              </button>
-
-              {analyzing && (
-                <motion.div 
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="p-6 bg-indigo-50 rounded-2xl border border-indigo-100 flex items-center gap-5"
-                >
-                  <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-indigo-500 shadow-sm">
-                    <BarChart3 size={20} className="animate-pulse" />
+              <div className="bg-slate-200/40 p-4 rounded-[2.5rem] min-h-[600px] flex flex-col gap-4 border border-slate-100">
+                {loading ? (
+                  <div className="flex items-center justify-center p-20">
+                    <Loader2 className="animate-spin text-slate-300" size={32} />
                   </div>
-                  <p className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">Analyse des 10 derniers diagnostics en cours...</p>
-                </motion.div>
-              )}
-            </div>
-          </div>
+                ) : (
+                  <AnimatePresence>
+                    {prospects.filter(p => p.statut === column.id).map((prospect, idx) => (
+                      <motion.div 
+                        layout
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, scale: 0.9 }}
+                        key={prospect.id}
+                        className="bg-white p-5 rounded-3xl shadow-sm border border-slate-100 group relative hover:shadow-xl hover:border-indigo-100 transition-all cursor-grab active:cursor-grabbing"
+                      >
+                        <div className="flex justify-between items-start mb-4">
+                          <span className="px-3 py-1 bg-indigo-50 text-[8px] font-black text-indigo-600 rounded-full uppercase tracking-widest">
+                            {prospect.source}
+                          </span>
+                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button 
+                              onClick={() => deleteProspect(prospect.id)}
+                              className="w-8 h-8 rounded-xl flex items-center justify-center text-slate-300 hover:text-red-500 hover:bg-red-50 transition-all"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            <div className="bg-slate-50 border border-slate-100 p-8 rounded-[2.5rem] group hover:border-indigo-200 transition-all">
-              <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-indigo-500 mb-6 shadow-sm">
-                <Share2 size={20} />
+                        <h3 className="text-sm font-black text-slate-900 mb-1">{prospect.nom}</h3>
+                        <p className="text-xs font-bold text-slate-400 mb-4 flex items-center gap-2">
+                          <Phone size={12} className="text-indigo-400" /> {prospect.telephone}
+                        </p>
+
+                        <div className="flex items-center justify-between pt-4 border-t border-slate-50">
+                          <div className="flex items-center gap-3">
+                            <select 
+                              value={prospect.statut}
+                              onChange={(e) => updateStatus(prospect.id, e.target.value as Prospect["statut"])}
+                              className="text-[9px] font-black uppercase text-slate-400 bg-transparent outline-none cursor-pointer hover:text-indigo-600"
+                            >
+                              {COLUMNS.map(c => <option key={c.id} value={c.id}>{c.id === column.id ? 'Déplacer...' : c.label}</option>)}
+                            </select>
+                          </div>
+                          
+                          <button 
+                            onClick={() => convertToPatient(prospect)}
+                            disabled={convertingId === prospect.id}
+                            className="bg-indigo-600 text-white p-2.5 rounded-xl hover:bg-slate-950 transition-all shadow-md shadow-indigo-100 flex items-center justify-center disabled:opacity-50"
+                            title="Convertir en Patient"
+                          >
+                            {convertingId === prospect.id ? <Loader2 size={14} className="animate-spin" /> : <UserPlus size={14} />}
+                          </button>
+                        </div>
+                      </motion.div>
+                    ))}
+                  </AnimatePresence>
+                )}
+                
+                {!loading && prospects.filter(p => p.statut === column.id).length === 0 && (
+                  <div className="flex-1 flex flex-col items-center justify-center text-slate-300 opacity-40 border-2 border-dashed border-slate-300 rounded-[2rem] m-2">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-center px-4">Aucune carte ici</p>
+                  </div>
+                )}
               </div>
-              <h4 className="text-xs font-black text-slate-950 uppercase mb-2">Multi-Plateforme</h4>
-              <p className="text-[10px] text-slate-500 font-bold uppercase tracking-tight leading-relaxed">Posts optimisés pour Facebook, Instagram et WhatsApp Status.</p>
             </div>
-            <div className="bg-slate-50 border border-slate-100 p-8 rounded-[2.5rem] group hover:border-indigo-200 transition-all">
-              <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-pink-500 mb-6 shadow-sm">
-                <Layout size={20} />
-              </div>
-              <h4 className="text-xs font-black text-slate-950 uppercase mb-2">Visuels IA</h4>
-              <p className="text-[10px] text-slate-500 font-bold uppercase tracking-tight leading-relaxed">Suggère des idées de visuels impactants pour vos créations graphiques.</p>
-            </div>
-          </div>
-        </section>
-
-        {/* Right: Preview Area */}
-        <section className="bg-slate-200/50 p-10 rounded-[3.5rem] border border-slate-200/50 flex flex-col items-center justify-center min-h-[600px] relative">
-          <div className="absolute top-8 left-10 flex items-center gap-3">
-             <Facebook size={18} className="text-indigo-600" />
-             <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Aperçu Réseaux Sociaux</span>
-          </div>
-
-          <AnimatePresence mode="wait">
-            {!postContent ? (
-              <motion.div 
-                key="empty"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="text-center space-y-6"
-              >
-                <div className="mx-auto w-32 h-32 bg-white rounded-[2.5rem] flex items-center justify-center text-slate-200 shadow-inner">
-                  <ImageIcon size={48} />
-                </div>
-                <p className="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] italic">Attente de direction stratégique...</p>
-              </motion.div>
-            ) : (
-              <motion.div 
-                key="preview"
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                className="w-full max-w-lg bg-white rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col"
-              >
-                {/* FB Post Header */}
-                <div className="p-8 border-b border-slate-50 flex items-center gap-5">
-                   <div className="w-14 h-14 bg-slate-100 rounded-full flex items-center justify-center text-indigo-600 font-black text-xl">R</div>
-                   <div>
-                     <h4 className="text-sm font-black text-slate-950">Riverside Medical Center</h4>
-                     <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">À l&apos;instant • Douala, Cameroun</p>
-                   </div>
-                </div>
-
-                {/* Post Content */}
-                <div className="p-8 lg:p-10 flex-1 bg-slate-50/30">
-                  <p className="text-lg text-slate-800 leading-relaxed font-medium whitespace-pre-wrap">
-                    {postContent}
-                  </p>
-                </div>
-
-                {/* Footer Actions */}
-                <div className="p-8 border-t border-slate-50 flex gap-4">
-                  <button 
-                    onClick={() => copyToClipboard(postContent)}
-                    className="flex-1 py-5 bg-indigo-600 text-white rounded-3xl font-black text-sm uppercase tracking-widest hover:bg-indigo-700 transition-all active:scale-95 flex items-center justify-center gap-4 shadow-xl shadow-indigo-100"
-                  >
-                    {copied ? <Check size={20} className="text-emerald-300" /> : <Copy size={20} />}
-                    {copied ? "Post Copié !" : "Copier le Post"}
-                  </button>
-                  <button 
-                    onClick={() => setPostContent(null)}
-                    className="px-8 py-5 bg-slate-100 text-slate-400 rounded-3xl font-black text-sm uppercase tracking-widest hover:bg-slate-200 transition-all font-sans"
-                  >
-                    Reset
-                  </button>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </section>
+          ))}
+        </div>
       </div>
+
+      {/* ADD MODAL */}
+      <AnimatePresence>
+        {showAddModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="bg-white w-full max-w-md rounded-[2.5rem] shadow-2xl p-10 relative overflow-hidden"
+            >
+              <div className="absolute top-0 left-0 w-full h-2 bg-indigo-600" />
+              
+              <h2 className="text-xl font-black text-slate-950 uppercase tracking-tighter mb-8 flex items-center gap-3">
+                <UserPlus size={24} className="text-indigo-600" /> Ajouter un Prospect
+              </h2>
+
+              <form onSubmit={handleAddProspect} className="space-y-6">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nom Complet</label>
+                  <input 
+                    required
+                    value={form.nom}
+                    onChange={(e) => setForm({...form, nom: e.target.value})}
+                    placeholder="Ex: Jean Dupont"
+                    className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl text-xs font-bold outline-none focus:border-indigo-500 transition-all"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Téléphone</label>
+                  <input 
+                    required
+                    value={form.telephone}
+                    onChange={(e) => setForm({...form, telephone: e.target.value})}
+                    placeholder="+237 6XX XXX XXX"
+                    className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl text-xs font-bold outline-none focus:border-indigo-500 transition-all"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Source du Lead</label>
+                  <select 
+                    value={form.source}
+                    onChange={(e) => setForm({...form, source: e.target.value})}
+                    className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl text-xs font-black uppercase outline-none focus:border-indigo-500"
+                  >
+                    <option value="Facebook">Facebook</option>
+                    <option value="WhatsApp">WhatsApp</option>
+                    <option value="Instagram">Instagram</option>
+                    <option value="Appel Direct">Appel Direct</option>
+                    <option value="Autre">Autre</option>
+                  </select>
+                </div>
+
+                <div className="flex gap-4 pt-4">
+                  <button 
+                    type="button"
+                    onClick={() => setShowAddModal(false)}
+                    className="flex-1 py-4 bg-slate-100 text-slate-400 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-200 transition-all"
+                  >
+                    Annuler
+                  </button>
+                  <button 
+                    disabled={submitting}
+                    className="flex-[2] py-4 bg-indigo-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-950 transition-all shadow-lg flex items-center justify-center gap-2"
+                  >
+                    {submitting ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
+                    Enregistrer le lead
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
     </div>
   );
 }

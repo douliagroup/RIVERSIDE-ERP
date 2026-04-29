@@ -87,5 +87,20 @@ export async function seedRiversideData() {
   ];
   await supabase.from('rapports_garde').insert(rapports);
 
+  // G. Table prospects
+  const prospects = [
+    { nom: "Marius Kemajou", telephone: "699001122", source: "Facebook", statut: "NOUVEAU", note: "Interessé par check-up" },
+    { nom: "Felicité Ngo", telephone: "677334455", source: "WhatsApp", statut: "DISCUSSION", note: "Demande tarifs accouchement" },
+    { nom: "Jean-Paul Belmondo", telephone: "655667788", source: "Facebook", statut: "RDV", note: "RDV Cardiologie demain" }
+  ];
+  await supabase.from('prospects').upsert(prospects, { onConflict: 'telephone' });
+
+  // H. Table campagnes_doulia_love
+  const campagnes = [
+    { titre: "Lancement Nouveau Vaccin", contenu: "Chers parents, le nouveau vaccin contre la grippe est disponible à Riverside. Protegez vos enfants !", statut: "Brouillon" },
+    { titre: "Promotion Check-up Senior", contenu: "Riverside offre 20% de remise sur les bilans santé senior ce mois-ci.", statut: "Envoyé", date_envoi: new Date().toISOString() }
+  ];
+  await supabase.from('campagnes_doulia_love').upsert(campagnes, { onConflict: 'titre' });
+
   console.log("Seeding Riverside terminé.");
 }
