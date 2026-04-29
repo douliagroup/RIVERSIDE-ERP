@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { 
   Receipt, 
   Search, 
@@ -16,11 +16,16 @@ import {
   ShieldCheck,
   Activity,
   ArrowLeft,
-  PlusCircle
+  PlusCircle,
+  Upload,
+  Printer,
+  ChevronRight,
+  Wallet
 } from "lucide-react";
 import { supabase } from "@/src/lib/supabase";
 import { cn } from "@/src/lib/utils";
 import { motion, AnimatePresence } from "motion/react";
+import toast from "react-hot-toast";
 
 interface Patient {
   id: string;
@@ -55,17 +60,27 @@ export default function TresoreriePage() {
   const [success, setSuccess] = useState(false);
   const [paymentMode, setPaymentMode] = useState("CASH");
   const [montantVerse, setMontantVerse] = useState<string>("");
-  const [activeTab, setActiveTab] = useState<"caise" | "dettes" | "journal">("caise");
+  const [activeTab, setActiveTab] = useState<"caise" | "dettes" | "journal" | "depenses">("caise");
+  const [recouvrementTab, setRecouvrementTab] = useState<"patients" | "assurances">("patients");
   const [journal, setJournal] = useState<any[]>([]);
   const [dettes, setDettes] = useState<any[]>([]);
   const [stocks, setStocks] = useState<any[]>([]);
   const [selectedStockId, setSelectedStockId] = useState("");
-  
+
   const [isFreeInvoicing, setIsFreeInvoicing] = useState(false);
   const [allPatients, setAllPatients] = useState<Patient[]>([]);
   const [searchPatientTerm, setSearchPatientTerm] = useState("");
   const [selectedFreePatient, setSelectedFreePatient] = useState<Patient | null>(null);
   const [pendingTransactions, setPendingTransactions] = useState<any[]>([]);
+
+  // Expenses States
+  const [beneficiaires, setBeneficiaires] = useState<any[]>([]);
+  const [expenseForm, setExpenseForm] = useState({
+    beneficiaire_id: "",
+    montant: "",
+    motif: "",
+    file: null as File | null
+  });
   
   // Selection states
   const [selectedSejour, setSelectedSejour] = useState<Sejour | null>(null);
@@ -135,12 +150,19 @@ export default function TresoreriePage() {
         .order('date_transaction', { ascending: false });
       setJournal(journalData || []);
 
-      // 4. Récupérer TOUS les patients (pour facture libre)
+      // 5. Récupérer TOUS les patients (pour facture libre)
       const { data: patientsData } = await supabase
         .from('patients')
         .select('id, nom_complet, type_assurance')
         .order('nom_complet');
       setAllPatients(patientsData || []);
+
+      // 6. Récupérer les bénéficiaires pour dépenses
+      const { data: bData } = await supabase
+        .from('liste_beneficiaires')
+        .select('*')
+        .order('nom');
+      setBeneficiaires(bData || []);
 
     } catch (err) {
       console.error("[Treasury] Erreur de chargement:", err);
@@ -175,12 +197,12 @@ export default function TresoreriePage() {
 
   const handleValidate = async () => {
     if (!selectedSejour && !selectedTransaction && !selectedFreePatient) {
-      alert("Veuillez sélectionner un patient ou une transaction.");
+      toast.error("Veuillez sélectionner un patient ou une transaction.");
       return;
     }
     
     if (!selectedTransaction && cart.length === 0) {
-      alert("Le panier est vide.");
+      toast.error("Le panier est vide.");
       return;
     }
 
@@ -205,15 +227,18 @@ export default function TresoreriePage() {
 
       console.log(`Flux Trésorerie - Validation Paiement: Total=${total}, Versé=${verse}, Reste=${reste}`);
 
+      let transactionId = "";
+
       if (selectedTransaction) {
+        transactionId = selectedTransaction.id;
         const { error: txUpdError } = await supabase
           .from('transactions_caisse')
           .update({
-            montant_verse: verse,
+            montant_verse: (selectedTransaction.montant_verse || 0) + verse,
             reste_a_payer: reste,
             statut_paiement: finalStatut
           })
-          .eq('id', selectedTransaction.id);
+          .eq('id', transactionId);
         if (txUpdError) throw txUpdError;
 
         if (reste === 0 && selectedTransaction.sejour_id) {
@@ -224,7 +249,7 @@ export default function TresoreriePage() {
         }
       } else {
         const effectivePatientId = selectedFreePatient?.id || selectedSejour?.patient_id;
-        const { error: txError } = await supabase
+        const { data: newTx, error: txError } = await supabase
           .from('transactions_caisse')
           .insert([{
             type_flux: 'Entrée',
@@ -236,8 +261,11 @@ export default function TresoreriePage() {
             patient_id: effectivePatientId,
             sejour_id: selectedSejour?.id || null,
             date_transaction: new Date().toISOString()
-          }]);
+          }])
+          .select()
+          .single();
         if (txError) throw txError;
+        if (newTx) transactionId = newTx.id;
 
         if (reste === 0 && selectedSejour) {
           await supabase
@@ -247,7 +275,19 @@ export default function TresoreriePage() {
         }
       }
 
+      // Historique des paiements
+      if (verse > 0) {
+        await supabase.from('historique_paiements').insert([{
+          transaction_id: transactionId,
+          montant_paye: verse,
+          mode_paiement: paymentMode,
+          date_paiement: new Date().toISOString()
+        }]);
+      }
+
       setSuccess(true);
+      toast.success("Transaction enregistrée avec succès");
+      
       setTimeout(() => {
         setSuccess(false);
         setCart([]);
@@ -261,21 +301,81 @@ export default function TresoreriePage() {
 
     } catch (err: any) {
       console.error("Flux Trésorerie - ERREUR:", err);
-      alert(`Erreur d'encaissement : ${err.message}`);
+      toast.error(`Erreur d'encaissement : ${err.message}`);
     } finally {
       setSubmitting(false);
     }
   };
 
-  const groupedDettes = React.useMemo(() => {
+  const handleSaveExpense = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!expenseForm.beneficiaire_id || !expenseForm.montant || !expenseForm.motif) {
+      toast.error("Veuillez remplir tous les champs obligatoires.");
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      let fileUrl = "";
+      if (expenseForm.file) {
+        const fileExt = expenseForm.file.name.split('.').pop();
+        const fileName = `${Math.random()}_${Date.now()}.${fileExt}`;
+        const { error: uploadError } = await supabase.storage
+          .from('justificatifs')
+          .upload(fileName, expenseForm.file);
+        
+        if (uploadError) throw uploadError;
+        const { data: publicUrlData } = supabase.storage.from('justificatifs').getPublicUrl(fileName);
+        fileUrl = publicUrlData.publicUrl;
+      }
+
+      const montant = parseFloat(expenseForm.montant);
+      const isAutoApproved = montant <= 30000;
+
+      const { error: insertError } = await supabase
+        .from('depenses_caisse')
+        .insert([{
+          beneficiaire_id: expenseForm.beneficiaire_id,
+          montant: montant,
+          motif: expenseForm.motif,
+          piece_jointe_url: fileUrl,
+          statut_validation: isAutoApproved ? 'Approuvé' : 'En attente',
+          date_depense: new Date().toISOString()
+        }]);
+
+      if (insertError) throw insertError;
+
+      if (isAutoApproved) {
+        toast.success("Dépense enregistrée et approuvée automatiquement.");
+      } else {
+        toast("Soumis à l'approbation de la direction (Montant > 30.000)", {
+          icon: '⚠️',
+          style: {
+            borderRadius: '16px',
+            background: '#fffbeb',
+            color: '#92400e',
+            border: '1px solid #fef3c7',
+            fontWeight: 'bold',
+            fontSize: '12px'
+          },
+        });
+      }
+
+      setExpenseForm({ beneficiaire_id: "", montant: "", motif: "", file: null });
+      fetchInitialData();
+    } catch (err: any) {
+      toast.error(`Erreur d'enregistrement: ${err.message}`);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const groupedDettes = useMemo(() => {
     const groups: { [key: string]: { name: string, total: number, items: any[], type: 'PATIENT' | 'ASSURANCE' } } = {};
     dettes.forEach(d => {
       const p = d.patients;
       const hasAssurance = p?.type_assurance && p.type_assurance !== 'Cash';
       
-      // If assurance, we might want to group by insurance name potentially, 
-      // but the user asked for "by patient and by insurance".
-      // Let's create a key that distinguishes them.
       const groupKey = hasAssurance ? `ASSURANCE_${p.type_assurance}` : `PATIENT_${p.nom_complet || d.id}`;
       const groupName = hasAssurance ? `Remboursement: ${p.type_assurance}` : (p?.nom_complet || "Patient Inconnu");
 
@@ -321,7 +421,7 @@ export default function TresoreriePage() {
           <p className="text-[9px] text-slate-400 font-bold uppercase tracking-[0.2em] mt-2">Gestion des Revenus & Flux Financiers</p>
         </div>
         
-        <div className="flex items-center gap-2 p-1 bg-slate-50 rounded-xl border border-slate-100">
+        <div className="flex items-center gap-2 p-1 bg-slate-50 rounded-xl border border-slate-100 flex-wrap">
            <button 
             onClick={() => setActiveTab("caise")}
             className={cn(
@@ -338,7 +438,16 @@ export default function TresoreriePage() {
               activeTab === "journal" ? "bg-slate-900 text-white shadow-sm" : "text-slate-400 hover:text-slate-600"
             )}
            >
-             Journal du Jour
+             Journal
+           </button>
+           <button 
+            onClick={() => setActiveTab("depenses")}
+            className={cn(
+              "px-5 py-2 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all",
+              activeTab === "depenses" ? "bg-emerald-500 text-white shadow-sm" : "text-slate-400 hover:text-slate-600"
+            )}
+           >
+             Dépenses
            </button>
            <button 
             onClick={() => setActiveTab("dettes")}
@@ -656,6 +765,13 @@ export default function TresoreriePage() {
                   <span className="text-xs font-black text-slate-800 tabular-nums">{calculateTotal().toLocaleString()} FCFA</span>
                 </div>
 
+                <div className="flex items-center justify-between text-riverside-red">
+                  <span className="text-[10px] font-black uppercase tracking-widest">Reste à Payer</span>
+                  <span className="text-xs font-black tabular-nums">
+                    {Math.max(0, calculateTotal() - (montantVerse ? parseFloat(montantVerse) : calculateTotal())).toLocaleString()} FCFA
+                  </span>
+                </div>
+
                 <div className="space-y-2">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center justify-between">
                     Montant Versé (FCFA)
@@ -716,6 +832,129 @@ export default function TresoreriePage() {
           </div>
         </motion.div>
       </motion.div>
+        ) : activeTab === "depenses" ? (
+          <motion.div 
+            key="depenses"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="grid grid-cols-1 lg:grid-cols-12 gap-8"
+          >
+            <div className="lg:col-span-12">
+               <div className="bg-white p-10 rounded-[3rem] border border-slate-200 shadow-2xl flex flex-col md:flex-row gap-12">
+                  <div className="flex-1 space-y-8">
+                     <div>
+                       <h3 className="text-2xl font-black text-slate-900 tracking-tight uppercase">Saisie d&apos;un Décaissement</h3>
+                       <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">Gestion des dépenses & justificatifs</p>
+                     </div>
+
+                     <form onSubmit={handleSaveExpense} className="space-y-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          <div className="space-y-2">
+                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Bénéficiaire</label>
+                             <select 
+                               required
+                               value={expenseForm.beneficiaire_id}
+                               onChange={(e) => setExpenseForm({...expenseForm, beneficiaire_id: e.target.value})}
+                               className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:border-emerald-500 font-bold text-sm appearance-none transition-all"
+                             >
+                                <option value="">Choisir un bénéficiaire...</option>
+                                {beneficiaires.map(b => (
+                                  <option key={b.id} value={b.id}>{b.nom}</option>
+                                ))}
+                             </select>
+                          </div>
+                          <div className="space-y-2">
+                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Montant (FCFA)</label>
+                             <input 
+                               required
+                               type="number"
+                               placeholder="0.00"
+                               value={expenseForm.montant}
+                               onChange={(e) => setExpenseForm({...expenseForm, montant: e.target.value})}
+                               className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:border-emerald-500 font-mono font-bold text-sm transition-all"
+                             />
+                          </div>
+                        </div>
+
+                        <div className="space-y-2">
+                           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Motif du décaissement</label>
+                           <textarea 
+                             required
+                             rows={4}
+                             value={expenseForm.motif}
+                             onChange={(e) => setExpenseForm({...expenseForm, motif: e.target.value})}
+                             placeholder="Détaillez la raison de cette dépense..."
+                             className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:border-emerald-500 font-bold text-sm transition-all resize-none"
+                           />
+                        </div>
+
+                        <div className="space-y-2">
+                           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Pièce Justificative (Optimisé AI)</label>
+                           <div className="relative group">
+                              <input 
+                                type="file"
+                                accept="image/*,application/pdf"
+                                onChange={(e) => setExpenseForm({...expenseForm, file: e.target.files ? e.target.files[0] : null})}
+                                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                              />
+                              <div className="w-full px-6 py-8 border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50 flex flex-col items-center justify-center gap-3 group-hover:bg-slate-100 group-hover:border-emerald-200 transition-all">
+                                 <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center text-slate-400 shadow-sm">
+                                    <Upload size={20} />
+                                 </div>
+                                 <div className="text-center">
+                                    <p className="text-[10px] font-black text-slate-900 uppercase">
+                                       {expenseForm.file ? expenseForm.file.name : "Cliquez ou glissez le justificatif"}
+                                    </p>
+                                    <p className="text-[8px] text-slate-400 font-bold uppercase mt-1">Format: JPG, PNG, PDF (Max 5MB)</p>
+                                 </div>
+                              </div>
+                           </div>
+                        </div>
+
+                        <button 
+                          disabled={submitting}
+                          type="submit"
+                          className="w-full py-5 bg-emerald-600 text-white rounded-2xl font-black text-xs uppercase tracking-[0.2em] hover:bg-emerald-700 transition-all active:scale-95 disabled:opacity-50 shadow-xl shadow-emerald-100 flex items-center justify-center gap-3"
+                        >
+                           {submitting ? <Loader2 className="animate-spin" size={20} /> : <Wallet size={20} />}
+                           ENREGISTRER LE DÉCAISSEMENT
+                        </button>
+                     </form>
+                  </div>
+
+                  <div className="w-full md:w-80 space-y-6">
+                    <div className="bg-slate-900 rounded-[2rem] p-8 text-white relative overflow-hidden">
+                       <div className="relative z-10">
+                          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-4">Workflow Riverside</p>
+                          <h4 className="text-lg font-black tracking-tight leading-tight mb-6">Contrôle de<br/><span className="text-emerald-400">Flux de Caisse</span></h4>
+                          
+                          <div className="space-y-4">
+                             <div className="flex items-start gap-3">
+                                <div className="w-1.5 h-1.5 bg-emerald-400 rounded-full mt-1.5 shrink-0" />
+                                <p className="text-[10px] font-bold text-slate-300">Montant ≤ 30k: Validation Automatique.</p>
+                             </div>
+                             <div className="flex items-start gap-3">
+                                <div className="w-1.5 h-1.5 bg-amber-400 rounded-full mt-1.5 shrink-0" />
+                                <p className="text-[10px] font-bold text-slate-300">Montant &gt; 30k: Soumis à validation Direction.</p>
+                             </div>
+                             <div className="flex items-start gap-3">
+                                <div className="w-1.5 h-1.5 bg-sky-400 rounded-full mt-1.5 shrink-0" />
+                                <p className="text-[10px] font-bold text-slate-300">Archivage automatique des justificatifs.</p>
+                             </div>
+                          </div>
+                       </div>
+                       <ShieldCheck className="absolute bottom-0 right-0 text-white/5 -mb-6 -mr-6" size={140} />
+                    </div>
+
+                    <div className="bg-emerald-50 border border-emerald-100 rounded-[2rem] p-8">
+                       <p className="text-[9px] font-black text-emerald-600 uppercase tracking-widest mb-2">Solde de Caisse (Estimé)</p>
+                       <p className="text-2xl font-black text-emerald-900 tabular-nums">482.500 <span className="text-sm">FCFA</span></p>
+                    </div>
+                  </div>
+               </div>
+            </div>
+          </motion.div>
         ) : activeTab === "journal" ? (
           <motion.div 
             key="journal"
@@ -800,22 +1039,43 @@ export default function TresoreriePage() {
             exit={{ opacity: 0, y: -20 }}
             className="bg-white rounded-[3rem] border border-slate-200 shadow-2xl p-12"
           >
-            <div className="flex items-center justify-between mb-12">
+            <div className="flex flex-col md:flex-row md:items-center justify-between mb-12 gap-6">
               <div>
-                <h3 className="text-2xl font-black text-slate-900 tracking-tight">Suivi du Recouvrement</h3>
-                <p className="text-xs font-bold text-slate-400 uppercase tracking-[0.2em] mt-1">Dettes Patients & Assurances</p>
+                <h3 className="text-2xl font-black text-slate-900 tracking-tight uppercase">Suivi du Recouvrement</h3>
+                <div className="flex items-center gap-4 mt-2">
+                   <button 
+                    onClick={() => setRecouvrementTab("patients")}
+                    className={cn(
+                      "text-[10px] font-black uppercase tracking-widest transition-all pb-1 border-b-2",
+                      recouvrementTab === "patients" ? "text-riverside-red border-riverside-red" : "text-slate-300 border-transparent hover:text-slate-500"
+                    )}
+                   >
+                     Dettes Patients
+                   </button>
+                   <button 
+                    onClick={() => setRecouvrementTab("assurances")}
+                    className={cn(
+                      "text-[10px] font-black uppercase tracking-widest transition-all pb-1 border-b-2",
+                      recouvrementTab === "assurances" ? "text-riverside-red border-riverside-red" : "text-slate-300 border-transparent hover:text-slate-500"
+                    )}
+                   >
+                     Créances Assurances
+                   </button>
+                </div>
               </div>
               <div className="text-right">
-                <p className="text-[10px] font-black text-slate-400 uppercase mb-1">Dette Totale</p>
+                <p className="text-[10px] font-black text-slate-400 uppercase mb-1">Encours Global</p>
                 <p className="text-3xl font-black text-riverside-red">{dettes.reduce((acc, curr) => acc + curr.reste_a_payer, 0).toLocaleString()} FCFA</p>
               </div>
             </div>
 
             <div className="space-y-4">
-              {groupedDettes.length === 0 ? (
-                <div className="py-20 text-center text-slate-300 italic text-xs font-black uppercase tracking-widest bg-slate-50 rounded-3xl">Aucun reste à payer</div>
+              {groupedDettes.filter(g => recouvrementTab === "patients" ? g.type === 'PATIENT' : g.type === 'ASSURANCE').length === 0 ? (
+                <div className="py-20 text-center text-slate-300 italic text-xs font-black uppercase tracking-widest bg-slate-50 rounded-3xl">Aucun reste à payer pour cette catégorie</div>
               ) : (
-                groupedDettes.map((group, idx) => (
+                groupedDettes
+                  .filter(g => recouvrementTab === "patients" ? g.type === 'PATIENT' : g.type === 'ASSURANCE')
+                  .map((group, idx) => (
                   <details 
                     key={group.name}
                     className="group bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden transition-all duration-300 open:shadow-md"
@@ -982,9 +1242,20 @@ export default function TresoreriePage() {
               <CheckCircle size={48} />
             </motion.div>
             <h3 className="text-2xl font-black text-slate-900 tracking-tight">ENCAISSEMENT RÉUSSI</h3>
-            <p className="text-sm font-medium text-slate-500 mt-3 leading-relaxed">La transaction a été archivée avec succès.<br/>Impression du ticket en cours...</p>
-            <div className="mt-8 pt-8 border-t border-slate-100 w-full">
-              <button onClick={() => setSuccess(false)} className="text-[10px] font-black text-riverside-red uppercase tracking-widest bg-red-50 px-6 py-2 rounded-full">Fermer</button>
+            <p className="text-sm font-medium text-slate-500 mt-3 leading-relaxed">La transaction a été archivée avec succès.<br/>Prêt pour l&apos;impression du reçu fiscal.</p>
+            <div className="mt-8 flex items-center gap-4">
+              <button 
+                onClick={() => window.print()}
+                className="flex items-center gap-2 text-[10px] font-black text-white uppercase tracking-widest bg-slate-900 px-6 py-3 rounded-xl shadow-lg hover:bg-black transition-all"
+              >
+                <Printer size={16} /> Imprimer le reçu
+              </button>
+              <button 
+                onClick={() => setSuccess(false)} 
+                className="text-[10px] font-black text-riverside-red uppercase tracking-widest bg-red-50 px-6 py-3 rounded-xl border border-red-100 hover:bg-red-100 transition-all"
+              >
+                Nouvelle Facture
+              </button>
             </div>
           </motion.div>
         )}

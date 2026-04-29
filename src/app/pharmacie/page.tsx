@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, FormEvent } from "react";
 import { supabase } from "../../lib/supabase";
 import { 
   Pill, 
@@ -135,7 +135,7 @@ export default function PharmaciePage() {
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
     try {
@@ -187,7 +187,7 @@ export default function PharmaciePage() {
     }
   };
 
-  const handleMovement = async (e: React.FormEvent) => {
+  const handleMovement = async (e: FormEvent) => {
     e.preventDefault();
     if (!selectedItem) return;
     setSubmitting(true);

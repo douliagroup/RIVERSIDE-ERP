@@ -62,13 +62,16 @@ export default function PlanningPage() {
   const [viewMode, setViewMode] = useState<'liste' | 'grille'>('grille');
   const [newAnnouncement, setNewAnnouncement] = useState("");
 
-  const [currentDate, setCurrentDate] = useState(new Date().toISOString().split('T')[0]);
+  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [viewDate, setViewDate] = useState(new Date()); // Used for month navigation
+
+  const formattedSelectedDate = selectedDate.toISOString().split('T')[0];
 
   // New RDV Form
   const [form, setForm] = useState({
     patient_name: "",
     medecin_name: physicians[0],
-    date_rdv: new Date().toISOString().split('T')[0],
+    date_rdv: formattedSelectedDate,
     heure_rdv: "08:00",
     motif: ""
   });
@@ -112,7 +115,7 @@ export default function PlanningPage() {
       const { data, error } = await supabase
         .from('rendez_vous')
         .select('*')
-        .eq('date_rdv', currentDate)
+        .eq('date_rdv', formattedSelectedDate)
         .order('heure_rdv', { ascending: true });
 
       if (error) throw error;
@@ -122,7 +125,7 @@ export default function PlanningPage() {
     } finally {
       setLoading(false);
     }
-  }, [currentDate]);
+  }, [formattedSelectedDate]);
 
   useEffect(() => {
     fetchAppointments();
@@ -137,18 +140,20 @@ export default function PlanningPage() {
         .from('rendez_vous')
         .insert([{
           ...form,
-          statut: "Planifié"
+          statut: "En attente"
         }]);
 
       if (error) {
-        alert(`Erreur de planification: ${error.message}`);
+        toast.error(`Erreur de planification: ${error.message}`);
         throw error;
       }
+      
+      toast.success("Rendez-vous planifié avec succès");
       setShowModal(false);
       setForm({
         patient_name: "",
         medecin_name: physicians[0],
-        date_rdv: new Date().toISOString().split('T')[0],
+        date_rdv: formattedSelectedDate,
         heure_rdv: "08:00",
         motif: ""
       });
@@ -232,15 +237,17 @@ export default function PlanningPage() {
              <div className="flex items-center gap-4">
                 <div className="flex items-center gap-2 bg-white border border-slate-100 px-3 py-1.5 rounded-xl shadow-sm">
                    <button onClick={() => {
-                     const d = new Date(currentDate);
+                     const d = new Date(selectedDate);
                      d.setDate(d.getDate() - 1);
-                     setCurrentDate(d.toISOString().split('T')[0]);
+                     setSelectedDate(d);
                    }} className="p-1 hover:bg-slate-50 rounded"><ChevronLeft size={14}/></button>
-                   <span className="text-[10px] font-black text-slate-900 uppercase min-w-[80px] text-center">{currentDate}</span>
+                   <span className="text-[10px] font-black text-slate-900 uppercase min-w-[120px] text-center">
+                     {selectedDate.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}
+                   </span>
                    <button onClick={() => {
-                     const d = new Date(currentDate);
+                     const d = new Date(selectedDate);
                      d.setDate(d.getDate() + 1);
-                     setCurrentDate(d.toISOString().split('T')[0]);
+                     setSelectedDate(d);
                    }} className="p-1 hover:bg-slate-50 rounded"><ChevronRight size={14}/></button>
                 </div>
              </div>
@@ -394,26 +401,57 @@ export default function PlanningPage() {
         {/* Calendar Widget section */}
         <div className="lg:col-span-4 bg-white p-8 rounded-2xl border border-slate-100 shadow-sm space-y-8">
            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-900">Agenda Avril</span>
+              <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-900">
+                Agenda {viewDate.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })}
+              </span>
               <div className="flex gap-1.5">
-                 <button className="w-6 h-6 flex items-center justify-center hover:bg-slate-50 rounded border border-slate-100 text-[10px] items-center justify-center transition-colors">&lt;</button>
-                 <button className="w-6 h-6 flex items-center justify-center hover:bg-slate-50 rounded border border-slate-100 text-[10px] items-center justify-center transition-colors">&gt;</button>
+                 <button 
+                  onClick={() => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() - 1, 1))}
+                  className="w-6 h-6 flex items-center justify-center hover:bg-slate-50 rounded border border-slate-100 text-[10px] transition-colors"
+                 >
+                   &lt;
+                 </button>
+                 <button 
+                  onClick={() => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 1))}
+                  className="w-6 h-6 flex items-center justify-center hover:bg-slate-50 rounded border border-slate-100 text-[10px] transition-colors"
+                 >
+                   &gt;
+                 </button>
               </div>
            </div>
            
            <div className="grid grid-cols-7 gap-2 text-center mb-4">
               {['L', 'M', 'M', 'J', 'V', 'S', 'D'].map(d => <span key={d} className="text-[9px] font-black text-slate-300 uppercase tracking-widest">{d}</span>)}
-              {Array.from({length: 30}).map((_, i) => (
-                <button 
-                  key={i} 
-                  className={cn(
-                    "w-full aspect-square rounded-lg text-[10px] font-black flex items-center justify-center transition-all",
-                    i + 1 === 26 ? "bg-riverside-red text-white shadow-lg shadow-red-100" : "text-slate-500 hover:bg-slate-50 border border-transparent hover:border-slate-100"
-                  )}
-                >
-                  {i + 1}
-                </button>
+              
+              {/* Empty slots for starting day */}
+              {Array.from({ length: (new Date(viewDate.getFullYear(), viewDate.getMonth(), 1).getDay() || 7) - 1 }).map((_, i) => (
+                <div key={`empty-${i}`} />
               ))}
+
+              {Array.from({ length: new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 0).getDate() }).map((_, i) => {
+                const day = i + 1;
+                const isToday = new Date().toDateString() === new Date(viewDate.getFullYear(), viewDate.getMonth(), day).toDateString();
+                const isSelected = selectedDate.toDateString() === new Date(viewDate.getFullYear(), viewDate.getMonth(), day).toDateString();
+
+                return (
+                  <button 
+                    key={day} 
+                    onClick={() => {
+                      const newDate = new Date(viewDate.getFullYear(), viewDate.getMonth(), day);
+                      setSelectedDate(newDate);
+                      setForm(prev => ({ ...prev, date_rdv: newDate.toISOString().split('T')[0] }));
+                    }}
+                    className={cn(
+                      "w-full aspect-square rounded-lg text-[10px] font-black flex items-center justify-center transition-all",
+                      isSelected ? "bg-riverside-red text-white shadow-lg shadow-red-100" : 
+                      isToday ? "bg-red-50 text-riverside-red border border-red-100" :
+                      "text-slate-500 hover:bg-slate-50 border border-transparent hover:border-slate-100"
+                    )}
+                  >
+                    {day}
+                  </button>
+                );
+              })}
            </div>
 
            <div className="pt-8 border-t border-slate-50 space-y-4">
@@ -503,6 +541,29 @@ export default function PlanningPage() {
                 </div>
                 
                 <form onSubmit={handleSubmit} className="space-y-5">
+                   <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Date RDV</label>
+                        <input 
+                          required
+                          type="date"
+                          value={form.date_rdv}
+                          onChange={e => setForm({...form, date_rdv: e.target.value})}
+                          className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl outline-none focus:border-riverside-red font-black text-xs transition-all"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Horaire</label>
+                        <input 
+                          required
+                          type="time"
+                          value={form.heure_rdv}
+                          onChange={e => setForm({...form, heure_rdv: e.target.value})}
+                          className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl outline-none focus:border-riverside-red font-black text-xs transition-all"
+                        />
+                      </div>
+                   </div>
+
                    <div className="space-y-2">
                       <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Identité Patient</label>
                       <input 
@@ -515,27 +576,15 @@ export default function PlanningPage() {
                       />
                    </div>
 
-                   <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Praticien</label>
-                        <select 
-                          value={form.medecin_name}
-                          onChange={e => setForm({...form, medecin_name: e.target.value})}
-                          className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl outline-none focus:border-riverside-red font-black text-xs uppercase tracking-tight appearance-none transition-all"
-                        >
-                           {physicians.map(d => <option key={d} value={d}>{d}</option>)}
-                        </select>
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Horaire</label>
-                        <input 
-                          required
-                          type="time"
-                          value={form.heure_rdv}
-                          onChange={e => setForm({...form, heure_rdv: e.target.value})}
-                          className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl outline-none focus:border-riverside-red font-black text-xs transition-all"
-                        />
-                      </div>
+                   <div className="space-y-2">
+                     <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Praticien</label>
+                     <select 
+                       value={form.medecin_name}
+                       onChange={e => setForm({...form, medecin_name: e.target.value})}
+                       className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl outline-none focus:border-riverside-red font-black text-xs uppercase tracking-tight appearance-none transition-all"
+                     >
+                        {physicians.map(d => <option key={d} value={d}>{d}</option>)}
+                     </select>
                    </div>
 
                    <div className="space-y-2">
