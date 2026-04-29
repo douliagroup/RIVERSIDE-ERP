@@ -2,13 +2,14 @@
 
 import "./globals.css";
 import React, { useState } from "react";
-import Sidebar from "@/src/components/Sidebar";
-import { cn } from "@/src/lib/utils";
-import { AuthProvider } from "@/src/context/AuthContext";
+import Sidebar from "../components/Sidebar";
+import { cn } from "../lib/utils";
+import { AuthProvider } from "../context/AuthContext";
 import { usePathname } from "next/navigation";
 import { Menu, ChevronLeft } from "lucide-react";
 
-import { Toaster, toast } from "sonner";
+import { Toaster as SonnerToaster } from "sonner";
+import { Toaster as HotToaster } from "react-hot-toast";
 
 import { motion, AnimatePresence } from "motion/react";
 
@@ -86,7 +87,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           
           {/* Zone de contenu principale */}
           <main className="flex-1 h-screen overflow-hidden bg-slate-50 relative flex flex-col">
-            <Toaster position="top-right" expand={true} richColors />
+            <SonnerToaster position="top-right" expand={true} richColors />
+            <HotToaster position="top-center" />
             <div className="flex-1 overflow-y-auto overflow-x-hidden scroll-smooth scrollbar-hide">
               <AnimatePresence mode="wait">
                 <motion.div

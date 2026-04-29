@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import Cookies from 'js-cookie';
-import { supabase } from '@/src/lib/supabase';
+import { supabase } from '../lib/supabase';
 import { User } from '@supabase/supabase-js';
 
 import { useRouter } from 'next/navigation';

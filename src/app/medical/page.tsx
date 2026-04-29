@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '../../lib/supabase';
 import toast from 'react-hot-toast'; // Ou l'outil de notification que vous utilisez
 
 export default function MedicalPage() {
@@ -89,7 +89,7 @@ export default function MedicalPage() {
         onClick={() => setSelectedPatientId('ID_DU_PATIENT_TEST')} 
         className="mb-4 bg-gray-200 p-2 rounded"
       >
-        Simuler la sélection d'un patient
+        Simuler la sélection d&apos;un patient
       </button>
 
       {/* Onglets */}
@@ -137,7 +137,7 @@ export default function MedicalPage() {
       {activeTab === 'HISTORIQUE' && (
         <div className="space-y-4">
           {isLoading ? (
-            <p>Chargement de l'historique...</p>
+            <p>Chargement de l&apos;historique...</p>
           ) : historique.length === 0 ? (
             <div className="bg-gray-50 text-center p-10 rounded-lg text-gray-500">
               AUCUN ANTÉCÉDENT TROUVÉ POUR CE PATIENT

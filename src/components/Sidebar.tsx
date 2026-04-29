@@ -21,9 +21,9 @@ import {
   MessageCircle
 } from "lucide-react";
 import Image from "next/image";
-import { cn } from "@/src/lib/utils";
+import { cn } from "../lib/utils";
 import { motion, AnimatePresence } from "motion/react";
-import { useAuth } from "@/src/context/AuthContext";
+import { useAuth } from "../context/AuthContext";
 
 const menuItems = [
   { icon: LayoutDashboard, label: "Dashboard", href: "/", roles: ['patron', 'comptable', 'major', 'caissier', 'personnel', 'communication', 'accueil'] },

@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { supabase } from "@/src/lib/supabase";
+import { useState, useEffect, useCallback } from "react";
+import { supabase } from "../../lib/supabase";
 import { 
   Pill, 
   FlaskConical, 
@@ -18,7 +18,7 @@ import {
   ChevronRight
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
-import { cn } from "@/src/lib/utils";
+import { cn } from "../../lib/utils";
 
 import { toast } from "sonner";
 
@@ -99,7 +99,7 @@ export default function PharmaciePage() {
     }
   };
 
-  const fetchStocks = React.useCallback(async () => {
+  const fetchStocks = useCallback(async () => {
     setLoading(true);
     try {
       const { data, error } = await supabase
