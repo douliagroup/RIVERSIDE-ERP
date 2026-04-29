@@ -30,14 +30,32 @@ interface StockItem {
   seuil_alerte: number;
   unite: string;
   prix_unitaire_vente: number;
+  date_peremption?: string;
+}
+
+interface CatalogueItem {
+  id: string;
+  designation: string;
+  prix_unitaire: number;
+  categorie: string;
 }
 
 export default function PharmaciePage() {
   const [activeTab, setActiveTab] = useState<'médicament' | 'intrant'>('médicament');
   const [stocks, setStocks] = useState<StockItem[]>([]);
+  const [catalogue, setCatalogue] = useState<CatalogueItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showMovementModal, setShowMovementModal] = useState(false);
+  const [selectedItem, setSelectedItem] = useState<StockItem | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  // Movement Form State
+  const [movementForm, setMovementForm] = useState({
+    type: 'Entrée' as 'Entrée' | 'Sortie',
+    quantite: "",
+    motif: ""
+  });
 
   // Form State
   const [form, setForm] = useState({
@@ -46,8 +64,21 @@ export default function PharmaciePage() {
     quantite: "",
     seuil_alerte: "10",
     unite: "Boîte",
-    prix_unitaire: ""
+    prix_unitaire: "",
+    date_peremption: ""
   });
+
+  const fetchCatalogue = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('catalogue_tarifs')
+        .select('*')
+        .in('categorie', ['Pharmacie', 'Laboratoire', 'médicament', 'intrant']);
+      if (!error) setCatalogue(data || []);
+    } catch (err) {
+      console.error("Error fetching catalogue:", err);
+    }
+  };
 
   const fetchStocks = React.useCallback(async () => {
     setLoading(true);
@@ -69,7 +100,21 @@ export default function PharmaciePage() {
 
   useEffect(() => {
     fetchStocks();
+    fetchCatalogue();
   }, [fetchStocks]);
+
+  const handleCatalogueSelect = (itemName: string) => {
+    const item = catalogue.find(c => c.designation === itemName);
+    if (item) {
+      setForm({
+        ...form,
+        nom: item.designation,
+        prix_unitaire: item.prix_unitaire.toString()
+      });
+    } else {
+      setForm({ ...form, nom: itemName });
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -82,7 +127,8 @@ export default function PharmaciePage() {
         quantite_stock: parseInt(form.quantite) || 0,
         seuil_alerte: parseInt(form.seuil_alerte) || 0,
         unite: form.unite,
-        prix_unitaire_vente: parseFloat(form.prix_unitaire) || 0
+        prix_unitaire_vente: parseFloat(form.prix_unitaire) || 0,
+        date_peremption: form.date_peremption
       };
 
       console.log("Flux Pharmacie - Tentative d'insertion:", insertData);
@@ -107,7 +153,8 @@ export default function PharmaciePage() {
         quantite: "",
         seuil_alerte: "10",
         unite: "Boîte",
-        prix_unitaire: ""
+        prix_unitaire: "",
+        date_peremption: ""
       });
       fetchStocks();
     } catch (err: any) {
@@ -121,16 +168,55 @@ export default function PharmaciePage() {
     }
   };
 
-  const updateQuantity = async (id: string, current: number, delta: number) => {
+  const handleMovement = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedItem) return;
+    setSubmitting(true);
     try {
-      await supabase
+      const qtyDelta = movementForm.type === 'Entrée' ? parseInt(movementForm.quantite) : -parseInt(movementForm.quantite);
+      const newQty = selectedItem.quantite_stock + qtyDelta;
+
+      if (newQty < 0) {
+        toast.error("Stock insuffisant pour cette sortie");
+        setSubmitting(false);
+        return;
+      }
+
+      const { error: updateError } = await supabase
         .from('stocks_pharmacie')
-        .update({ quantite_stock: current + delta })
-        .eq('id', id);
+        .update({ quantite_stock: newQty })
+        .eq('id', selectedItem.id);
+
+      if (updateError) throw updateError;
+
+      // Log movement history
+      await supabase.from('mouvements_stock').insert([{
+        article_id: selectedItem.id,
+        nom_article: selectedItem.nom_article,
+        type_mouvement: movementForm.type,
+        quantite: Math.abs(qtyDelta),
+        motif: movementForm.motif,
+        personnel: "Pharmacien Riverside" // To be replaced by actual user
+      }]);
+
+      toast.success("Mouvement de stock enregistré");
+      setShowMovementModal(false);
+      setMovementForm({ type: 'Entrée', quantite: "", motif: "" });
       fetchStocks();
-    } catch (err) {
-      console.error("Error updating quantity:", err);
+    } catch (err: any) {
+      toast.error(`Erreur: ${err.message}`);
+    } finally {
+      setSubmitting(false);
     }
+  };
+
+  const isExpiredSoon = (dateStr?: string) => {
+    if (!dateStr) return false;
+    const expiry = new Date(dateStr);
+    const today = new Date();
+    const diffTime = expiry.getTime() - today.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays <= 30;
   };
 
   return (
@@ -204,10 +290,10 @@ export default function PharmaciePage() {
                key={item.id}
                className={cn(
                  "bg-white p-6 rounded-2xl border transition-all hover:shadow-xl hover:border-slate-200 group relative overflow-hidden",
-                 item.quantite_stock <= item.seuil_alerte ? "border-red-100 bg-red-50/5" : "border-slate-100"
+                 item.quantite_stock <= item.seuil_alerte || isExpiredSoon(item.date_peremption) ? "border-red-100 bg-red-50/5" : "border-slate-100"
                )}
              >
-               {item.quantite_stock <= item.seuil_alerte && (
+               {(item.quantite_stock <= item.seuil_alerte || isExpiredSoon(item.date_peremption)) && (
                  <div className="absolute top-4 right-4 text-riverside-red">
                     <AlertTriangle size={14} className="animate-pulse" />
                  </div>
@@ -220,7 +306,17 @@ export default function PharmaciePage() {
                   
                   <div>
                      <h3 className="text-sm font-black text-slate-900 tracking-tight uppercase truncate leading-none">{item.nom_article}</h3>
-                     <p className="text-[9px] font-bold text-slate-400 mt-2 uppercase tracking-widest">{item.unite} • {item.prix_unitaire_vente.toLocaleString()} FCFA</p>
+                     <div className="flex flex-col gap-1 mt-2">
+                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{item.unite} • {item.prix_unitaire_vente.toLocaleString()} FCFA</p>
+                        {item.date_peremption && (
+                          <p className={cn(
+                            "text-[8px] font-black uppercase tracking-tighter",
+                            isExpiredSoon(item.date_peremption) ? "text-red-500 animate-pulse" : "text-slate-400"
+                          )}>
+                             Péremption: {new Date(item.date_peremption).toLocaleDateString('fr-FR')}
+                          </p>
+                        )}
+                     </div>
                   </div>
 
                   <div className="flex items-end justify-between border-t border-slate-50 pt-4">
@@ -231,20 +327,15 @@ export default function PharmaciePage() {
                         )}>{item.quantite_stock}</p>
                         <p className="text-[8px] font-black text-slate-300 uppercase tracking-widest">En Stock</p>
                      </div>
-                     <div className="flex items-center gap-1.5 bg-slate-50 p-1 rounded-lg border border-slate-100 shadow-inner">
-                        <button 
-                          onClick={() => updateQuantity(item.id, item.quantite_stock, -1)}
-                          className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-white hover:text-riverside-red transition-all shadow-sm border border-transparent hover:border-slate-100"
-                        >
-                          <ArrowDownRight size={12} />
-                        </button>
-                        <button 
-                          onClick={() => updateQuantity(item.id, item.quantite_stock, 1)}
-                          className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-white hover:text-emerald-500 transition-all shadow-sm border border-transparent hover:border-slate-100"
-                        >
-                          <Plus size={12} />
-                        </button>
-                     </div>
+                     <button 
+                        onClick={() => {
+                          setSelectedItem(item);
+                          setShowMovementModal(true);
+                        }}
+                        className="px-4 py-2 bg-slate-50 text-[9px] font-black uppercase tracking-widest text-slate-600 rounded-xl border border-slate-100 hover:bg-riverside-red hover:text-white hover:border-riverside-red transition-all shadow-sm"
+                     >
+                        Gérer le stock
+                     </button>
                   </div>
 
                  {item.quantite_stock <= item.seuil_alerte && (
@@ -291,15 +382,27 @@ export default function PharmaciePage() {
 
                    <form onSubmit={handleSubmit} className="space-y-5">
                       <div className="space-y-1.5">
-                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Désignation de l&apos;Article</label>
-                         <input 
-                           required
-                           type="text"
-                           value={form.nom}
-                           onChange={e => setForm({...form, nom: e.target.value})}
-                           className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:border-riverside-red font-bold text-sm tracking-tight"
-                           placeholder="ex: Paracétamol 500mg"
-                         />
+                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Sélectionner un Article (Catalogue Officiel)</label>
+                         <div className="relative">
+                            <select 
+                              required
+                              value={form.nom}
+                              onChange={e => handleCatalogueSelect(e.target.value)}
+                              className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:border-riverside-red font-bold text-sm tracking-tight appearance-none"
+                            >
+                               <option value="">-- Choisir dans le catalogue --</option>
+                               {catalogue.length > 0 ? (
+                                 catalogue.map(cat => (
+                                   <option key={cat.id} value={cat.designation}>{cat.designation} ({cat.prix_unitaire} FCFA)</option>
+                                 ))
+                               ) : (
+                                 <option disabled>Chargement du catalogue...</option>
+                               )}
+                            </select>
+                            <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                               <ChevronRight size={16} className="rotate-90" />
+                            </div>
+                         </div>
                       </div>
 
                       <div className="grid grid-cols-2 gap-4">
@@ -314,13 +417,11 @@ export default function PharmaciePage() {
                            />
                         </div>
                         <div className="space-y-1.5">
-                           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Prix Unitaire (FCFA)</label>
+                           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Prix Unitaire (Auto)</label>
                            <input 
-                             required
-                             type="number"
+                             readOnly
                              value={form.prix_unitaire}
-                             onChange={e => setForm({...form, prix_unitaire: e.target.value})}
-                             className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:border-riverside-red font-bold text-sm"
+                             className="w-full p-4 bg-slate-100 border border-slate-100 rounded-2xl outline-none font-black text-sm text-slate-500 cursor-not-allowed"
                            />
                         </div>
                       </div>
@@ -340,6 +441,19 @@ export default function PharmaciePage() {
                               <option>Kit</option>
                            </select>
                         </div>
+                        <div className="space-y-1.5">
+                           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Date de Péremption</label>
+                           <input 
+                             required
+                             type="date"
+                             value={form.date_peremption}
+                             onChange={e => setForm({...form, date_peremption: e.target.value})}
+                             className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:border-riverside-red font-bold text-sm"
+                           />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1">
                         <div className="space-y-1.5">
                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Seuil Alerte</label>
                            <input 
@@ -367,6 +481,95 @@ export default function PharmaciePage() {
                          >
                             {submitting ? <Loader2 size={18} className="animate-spin" /> : <CheckCircle2 size={18} />}
                             {submitting ? "Intégration..." : "Ajouter aux Stocks"}
+                         </button>
+                      </div>
+                   </form>
+                </div>
+             </motion.div>
+          </div>
+        )}
+
+        {showMovementModal && selectedItem && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+             <motion.div 
+               initial={{ opacity: 0 }}
+               animate={{ opacity: 1 }}
+               exit={{ opacity: 0 }}
+               onClick={() => setShowMovementModal(false)}
+               className="absolute inset-0 bg-slate-900/60 backdrop-blur-md"
+             />
+             <motion.div 
+               initial={{ opacity: 0, scale: 0.9, y: 20 }}
+               animate={{ opacity: 1, scale: 1, y: 0 }}
+               exit={{ opacity: 0, scale: 0.9, y: 20 }}
+               className="relative w-full max-w-md bg-white rounded-[2.5rem] shadow-2xl overflow-hidden"
+             >
+                <div className="p-8 space-y-6">
+                   <div className="flex items-center gap-4 border-b border-slate-50 pb-6">
+                      <div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-riverside-red">
+                         <History size={24} />
+                      </div>
+                      <div>
+                        <h2 className="text-xl font-black text-slate-900 uppercase tracking-tighter">Mouvement de Stock</h2>
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{selectedItem.nom_article}</p>
+                      </div>
+                   </div>
+
+                   <form onSubmit={handleMovement} className="space-y-4">
+                      <div className="grid grid-cols-2 gap-2 bg-slate-50 p-1 rounded-xl border border-slate-100">
+                         <button 
+                           type="button"
+                           onClick={() => setMovementForm({...movementForm, type: 'Entrée'})}
+                           className={cn(
+                             "py-3 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all",
+                             movementForm.type === 'Entrée' ? "bg-white text-emerald-600 shadow-sm border border-emerald-100" : "text-slate-400"
+                           )}
+                         >
+                            Entrée
+                         </button>
+                         <button 
+                           type="button"
+                           onClick={() => setMovementForm({...movementForm, type: 'Sortie'})}
+                           className={cn(
+                             "py-3 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all",
+                             movementForm.type === 'Sortie' ? "bg-white text-riverside-red shadow-sm border border-red-100" : "text-slate-400"
+                           )}
+                         >
+                            Sortie
+                         </button>
+                      </div>
+
+                      <div className="space-y-1.5">
+                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Quantité</label>
+                         <input 
+                           required
+                           type="number"
+                           value={movementForm.quantite}
+                           onChange={e => setMovementForm({...movementForm, quantite: e.target.value})}
+                           className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:border-riverside-red font-bold text-sm"
+                           placeholder="0"
+                         />
+                      </div>
+
+                      <div className="space-y-1.5">
+                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Motif / Justification</label>
+                         <textarea 
+                           required
+                           value={movementForm.motif}
+                           onChange={e => setMovementForm({...movementForm, motif: e.target.value})}
+                           className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:border-riverside-red font-bold text-sm min-h-[100px] resize-none"
+                           placeholder="Livraison fournisseur, casse, ajustement inventaire..."
+                         />
+                      </div>
+
+                      <div className="pt-4 flex gap-4">
+                         <button 
+                           type="submit"
+                           disabled={submitting}
+                           className="w-full bg-slate-900 text-white py-4 rounded-2xl font-black uppercase text-[10px] tracking-[0.2em] shadow-xl hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2"
+                         >
+                            {submitting ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}
+                            Valider le mouvement
                          </button>
                       </div>
                    </form>

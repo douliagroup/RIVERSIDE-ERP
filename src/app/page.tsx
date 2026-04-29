@@ -33,6 +33,9 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [caDuJour, setCaDuJour] = useState(0);
+  const [consultationsToday, setConsultationsToday] = useState(0);
+  const [urgencesCount, setUrgencesCount] = useState(0);
+  const [enAttenteCount, setEnAttenteCount] = useState(0);
   
   // New states for actions
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
@@ -42,8 +45,9 @@ export default function DashboardPage() {
   const fetchData = async () => {
     try {
       setLoading(true);
+      const today = new Date().toISOString().split('T')[0];
       
-      const [sejoursRes, transactionsRes] = await Promise.all([
+      const [sejoursRes, transactionsRes, consultsRes] = await Promise.all([
         supabase
           .from('sejours_actifs')
           .select(`
@@ -53,19 +57,33 @@ export default function DashboardPage() {
               type_assurance
             )
           `)
+          .neq('statut', 'Annulé') // On ne veut pas les annulés dans la file d'attente
           .order('created_at', { ascending: false }),
         supabase
           .from('transactions_caisse')
           .select('montant_verse, date_transaction')
-          .gte('date_transaction', new Date().toISOString().split('T')[0])
+          .gte('date_transaction', today),
+        supabase
+          .from('consultations')
+          .select('id', { count: 'exact', head: true })
+          .gte('created_at', today)
       ]);
 
       if (sejoursRes.error) throw sejoursRes.error;
-      setSejours(sejoursRes.data || []);
+      const allSejours = sejoursRes.data || [];
+      setSejours(allSejours);
+      
+      // Update stats counts
+      setEnAttenteCount(allSejours.filter(s => s.statut === 'En attente').length);
+      setUrgencesCount(allSejours.filter(s => s.priorite === 'Urgent' || s.statut === 'Urgent').length);
       
       if (transactionsRes.data) {
         const total = transactionsRes.data.reduce((acc, curr) => acc + (curr.montant_verse || 0), 0);
         setCaDuJour(total);
+      }
+
+      if (consultsRes.count !== null) {
+        setConsultationsToday(consultsRes.count);
       }
 
     } catch (err: any) {
@@ -128,15 +146,15 @@ export default function DashboardPage() {
   const stats = [
     { 
       label: "En Attente", 
-      value: sejours.filter(s => s.statut === "En attente").length.toString(), 
+      value: enAttenteCount.toString().padStart(2, '0'), 
       icon: Users, 
       color: "text-orange-500", 
       bg: "bg-orange-50",
-      link: "/tresorerie"
+      link: "/admission"
     },
     { 
       label: "Consultations", 
-      value: sejours.filter(s => s.statut === "En consultation" || s.statut === "En cours" || s.statut === "En Examen").length.toString(), 
+      value: consultationsToday.toString().padStart(2, '0'), 
       icon: Calendar, 
       color: "text-emerald-500", 
       bg: "bg-emerald-50",
@@ -152,7 +170,7 @@ export default function DashboardPage() {
     },
     { 
       label: "Urgences", 
-      value: sejours.filter(s => s.priorite === "Urgence" || s.statut === "Urgent").length.toString().padStart(2, '0'), 
+      value: urgencesCount.toString().padStart(2, '0'), 
       icon: AlertCircle, 
       color: "text-riverside-red", 
       bg: "bg-red-50",

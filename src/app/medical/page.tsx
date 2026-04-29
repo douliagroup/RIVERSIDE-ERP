@@ -325,10 +325,11 @@ export default function MedicalPage() {
       // C'EST AU CAISSIER DE SÉLECTIONNER LES ACTES DEPUIS LE CATALOGUE.
 
       console.log("Flux Médical - Opération terminée. Prêt pour facturation caisse.");
+      toast.success("Consultation enregistrée avec succès !");
       setSuccess(true);
+      
       setTimeout(() => {
         setSuccess(false);
-        setSelectedPatient(null);
         setFormData({
           tension: "",
           temperature: "",
@@ -337,12 +338,13 @@ export default function MedicalPage() {
           diagnostic: "",
           ordonnance: "",
         });
+        setSelectedPatient(null);
         fetchWaitingPatients();
       }, 2000);
 
     } catch (err: any) {
       console.error("Flux Médical - ERREUR GLOBALE:", err);
-      alert(err.message || "Une erreur est survenue.");
+      toast.error(err.message || "Une erreur est survenue lors de l'enregistrement.");
     } finally {
       setSubmitting(false);
     }
@@ -588,7 +590,7 @@ export default function MedicalPage() {
                               value={formData.notes_cliniques}
                               onChange={e => setFormData({...formData, notes_cliniques: e.target.value})}
                               placeholder="Détaillez le motif de la visite et les premières observations..."
-                              className="w-full p-6 bg-slate-50 border border-slate-100 rounded-[2rem] focus:border-riverside-red outline-none font-bold text-sm resize-none transition-all shadow-inner placeholder:text-slate-300"
+                              className="w-full p-6 bg-slate-50 border border-slate-100 rounded-[2rem] focus:border-riverside-red outline-none font-bold text-sm resize-y min-h-[120px] transition-all shadow-inner placeholder:text-slate-300"
                             />
                           </div>
 
@@ -646,7 +648,7 @@ export default function MedicalPage() {
                                  value={formData.diagnostic}
                                  onChange={e => setFormData({...formData, diagnostic: e.target.value})}
                                  placeholder="Saisissez le diagnostic final..."
-                                 className="w-full p-6 bg-slate-50 border border-slate-100 rounded-3xl focus:border-riverside-red outline-none font-bold text-sm resize-y min-h-[150px] transition-all"
+                                 className="w-full p-6 bg-slate-50 border border-slate-100 rounded-3xl focus:border-riverside-red outline-none font-bold text-sm resize-y min-h-[180px] transition-all shadow-inner"
                                />
                             </div>
 
@@ -660,7 +662,7 @@ export default function MedicalPage() {
                                  value={formData.ordonnance}
                                  onChange={e => setFormData({...formData, ordonnance: e.target.value})}
                                  placeholder="Prescription médicamenteuse..."
-                                 className="w-full p-6 bg-emerald-50/30 border border-emerald-100 rounded-3xl focus:border-emerald-500 outline-none font-bold text-sm font-mono resize-y min-h-[150px] text-emerald-800 transition-all shadow-sm"
+                                 className="w-full p-6 bg-emerald-50/30 border border-emerald-100 rounded-3xl focus:border-emerald-500 outline-none font-bold text-sm font-mono resize-y min-h-[180px] text-emerald-800 transition-all shadow-sm"
                                />
                             </div>
                           </div>
