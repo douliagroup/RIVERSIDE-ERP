@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
+import { supabase } from "@/src/lib/supabase";
 import { 
   Pill, 
   FlaskConical, 
@@ -17,7 +18,6 @@ import {
   ChevronRight
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
-import { supabase } from "@/src/lib/supabase";
 import { cn } from "@/src/lib/utils";
 
 import { toast } from "sonner";
@@ -43,7 +43,25 @@ interface CatalogueItem {
 export default function PharmaciePage() {
   const [activeTab, setActiveTab] = useState<'médicament' | 'intrant'>('médicament');
   const [stocks, setStocks] = useState<StockItem[]>([]);
-  const [catalogue, setCatalogue] = useState<CatalogueItem[]>([]);
+  
+  // --- DÉBUT DE L'AJOUT DU CATALOGUE ---
+  const [catalogue, setCatalogue] = useState<any[]>([]);
+
+  useEffect(() => {
+    const fetchCatalogue = async () => {
+      const { data, error } = await supabase
+        .from('catalogue_tarifs')
+        .select('*')
+        .in('categorie', ['Pharmacie', 'Laboratoire']); 
+
+      if (!error && data) {
+        setCatalogue(data);
+      }
+    };
+    fetchCatalogue();
+  }, []);
+  // --- FIN DE L'AJOUT DU CATALOGUE ---
+
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showMovementModal, setShowMovementModal] = useState(false);
@@ -105,11 +123,11 @@ export default function PharmaciePage() {
   }, [fetchStocks]);
 
   const handleCatalogueSelect = (itemName: string) => {
-    const item = catalogue.find(c => c.designation === itemName);
+    const item = catalogue.find(c => c.nom_prestation === itemName || c.designation === itemName);
     if (item) {
       setForm({
         ...form,
-        nom: item.designation,
+        nom: item.nom_prestation || item.designation,
         prix_unitaire: item.prix_unitaire.toString()
       });
     } else {
@@ -389,16 +407,14 @@ export default function PharmaciePage() {
                               required
                               value={form.nom}
                               onChange={e => handleCatalogueSelect(e.target.value)}
-                              className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:border-riverside-red font-bold text-sm tracking-tight appearance-none"
+                              className="w-full border border-gray-200 p-3 rounded-lg text-gray-700 focus:outline-none focus:ring-2 focus:ring-red-500"
                             >
-                               <option value="">-- Choisir dans le catalogue --</option>
-                               {catalogue.length > 0 ? (
-                                 catalogue.map(cat => (
-                                   <option key={cat.id} value={cat.designation}>{cat.designation} ({cat.prix_unitaire} FCFA)</option>
-                                 ))
-                               ) : (
-                                 <option disabled>Chargement du catalogue...</option>
-                               )}
+                              <option value="">Sélectionnez un article officiel...</option>
+                              {catalogue.map((item) => (
+                                <option key={item.id} value={item.nom_prestation || item.designation}>
+                                  {item.nom_prestation || item.designation} - {item.prix_unitaire} FCFA
+                                </option>
+                              ))}
                             </select>
                             <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
                                <ChevronRight size={16} className="rotate-90" />
