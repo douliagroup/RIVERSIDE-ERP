@@ -73,7 +73,8 @@ export default function PharmaciePage() {
       const { data, error } = await supabase
         .from('catalogue_tarifs')
         .select('*')
-        .in('categorie', ['Pharmacie', 'Laboratoire', 'médicament', 'intrant']);
+        .eq('categorie', 'Pharmacie')
+        .order('designation');
       if (!error) setCatalogue(data || []);
     } catch (err) {
       console.error("Error fetching catalogue:", err);

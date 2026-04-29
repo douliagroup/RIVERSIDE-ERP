@@ -275,14 +275,18 @@ export default function MedicalPage() {
     try {
       if (!user) throw new Error("Authentification requise pour cette opération.");
 
-      // 1. Sauvegarde de la Consultation (SANS MONTANT)
-      console.log("Flux Médical - 1. Enregistrement Consultation (Logic Refactor)...");
+      // 1. Sauvegarde de la Consultation
+      console.log("Flux Médical - 1. Enregistrement Consultation...");
       
-      const { data: personnelData } = await supabase
+      const { data: personnelData, error: personnelError } = await supabase
           .from('personnel')
           .select('id')
           .eq('email', user.email)
           .single();
+      
+      if (personnelError) {
+        console.warn("Utilisateur non trouvé dans la table personnel, utilisation de l'ID par défaut.");
+      }
       
       const realMedecinId = personnelData?.id || null;
 
@@ -304,30 +308,20 @@ export default function MedicalPage() {
         .select()
         .single();
 
-      if (consultError) {
-        console.error("Erreur Médical (Consultation):", consultError.message, consultError.details);
-        throw new Error(`Échec enregistrement consultation: ${consultError.message}`);
-      }
+      if (consultError) throw consultError;
 
-      console.log("Flux Médical - 2. Consultation sauvegardée. Transfert en caisse pour facturation externe.");
-      
-      // 2. Mise à jour du statut du séjour -> Le patient va en caisse pour que le caissier facture selon le catalogue
+      // 2. Mise à jour du statut du séjour
       const { error: updateError } = await supabase
         .from('sejours_actifs')
         .update({ statut: 'En caisse' }) 
         .eq('id', selectedPatient.id);
 
-      if (updateError) {
-        console.error("Erreur Médical (Statut Séjour):", updateError.message);
-      }
+      if (updateError) throw updateError;
 
-      // NOTE: PLUS DE CRÉATION DE TRANSACTION ICI. 
-      // C'EST AU CAISSIER DE SÉLECTIONNER LES ACTES DEPUIS LE CATALOGUE.
-
-      console.log("Flux Médical - Opération terminée. Prêt pour facturation caisse.");
       toast.success("Consultation enregistrée avec succès !");
       setSuccess(true);
       
+      // Reset after delay
       setTimeout(() => {
         setSuccess(false);
         setFormData({
@@ -338,13 +332,16 @@ export default function MedicalPage() {
           diagnostic: "",
           ordonnance: "",
         });
+        setAiAnalysis(null);
+        setTranscription("");
         setSelectedPatient(null);
+        setActiveSubTab('consultation');
         fetchWaitingPatients();
-      }, 2000);
+      }, 1500);
 
     } catch (err: any) {
-      console.error("Flux Médical - ERREUR GLOBALE:", err);
-      toast.error(err.message || "Une erreur est survenue lors de l'enregistrement.");
+      console.error("Flux Médical - ERREUR:", err);
+      toast.error(err.message || "Erreur lors de l'enregistrement.");
     } finally {
       setSubmitting(false);
     }
@@ -585,6 +582,7 @@ export default function MedicalPage() {
                                </label>
                             </div>
                             <textarea 
+                              id="motif_visite_textarea"
                               required
                               rows={3}
                               value={formData.notes_cliniques}
@@ -593,7 +591,7 @@ export default function MedicalPage() {
                               className="w-full p-6 bg-slate-50 border border-slate-100 rounded-[2rem] focus:border-riverside-red outline-none font-bold text-sm resize-y min-h-[120px] transition-all shadow-inner placeholder:text-slate-300"
                             />
                           </div>
-
+ 
                           {/* 2. Constantes */}
                           <div className="space-y-4 bg-slate-50/50 p-8 rounded-[2rem] border border-slate-100">
                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-2 mb-2">
@@ -603,6 +601,7 @@ export default function MedicalPage() {
                               <div className="space-y-2">
                                  <p className="text-[9px] font-black text-slate-400 uppercase ml-1">Tension (mmHg)</p>
                                  <input 
+                                   id="tension_input"
                                    required
                                    type="text"
                                    value={formData.tension}
@@ -614,6 +613,7 @@ export default function MedicalPage() {
                               <div className="space-y-2">
                                  <p className="text-[9px] font-black text-slate-400 uppercase ml-1">Température (°C)</p>
                                  <input 
+                                   id="temp_input"
                                    required
                                    type="text"
                                    value={formData.temperature}
@@ -625,6 +625,7 @@ export default function MedicalPage() {
                               <div className="space-y-2">
                                  <p className="text-[9px] font-black text-slate-400 uppercase ml-1">Poids (kg)</p>
                                  <input 
+                                   id="poids_input"
                                    required
                                    type="text"
                                    value={formData.poids}
@@ -635,7 +636,7 @@ export default function MedicalPage() {
                               </div>
                             </div>
                           </div>
-
+ 
                           {/* 3. Diagnostic & Ordonnance */}
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                             <div className="space-y-3">
@@ -643,6 +644,7 @@ export default function MedicalPage() {
                                   <Sparkles size={14} className="text-amber-500" /> Diagnostic Établi
                                </label>
                                <textarea 
+                                 id="diagnostic_textarea"
                                  required
                                  rows={4}
                                  value={formData.diagnostic}
@@ -651,12 +653,13 @@ export default function MedicalPage() {
                                  className="w-full p-6 bg-slate-50 border border-slate-100 rounded-3xl focus:border-riverside-red outline-none font-bold text-sm resize-y min-h-[180px] transition-all shadow-inner"
                                />
                             </div>
-
+ 
                             <div className="space-y-3">
                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-2">
                                   <Pill size={14} className="text-emerald-500" /> Ordonnance Riverside
                                </label>
                                <textarea 
+                                 id="ordonnance_textarea"
                                  required
                                  rows={4}
                                  value={formData.ordonnance}
@@ -666,10 +669,11 @@ export default function MedicalPage() {
                                />
                             </div>
                           </div>
-
+ 
                           {/* Action */}
                           <div className="pt-10 border-t border-slate-100 flex items-center justify-between">
                              <button 
+                               id="abandon_session_btn"
                                type="button"
                                onClick={() => setSelectedPatient(null)}
                                className="text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-slate-600 transition-colors"
@@ -678,6 +682,7 @@ export default function MedicalPage() {
                              </button>
                              
                              <button 
+                               id="valider_consultation_btn"
                                disabled={submitting}
                                className="px-12 py-5 bg-riverside-red text-white rounded-2xl font-black uppercase tracking-tighter text-sm shadow-2xl shadow-red-200 hover:scale-[1.02] transition-all active:scale-95 disabled:opacity-50 flex items-center gap-4"
                              >
