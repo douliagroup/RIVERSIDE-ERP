@@ -27,7 +27,7 @@ import {
   Heart,
   MoreHorizontal
 } from "lucide-react";
-import { supabase } from "@/src/lib/supabase";
+import NewPatientModal from "@/src/components/NewPatientModal";
 import { cn } from "@/src/lib/utils";
 import { motion, AnimatePresence } from "motion/react";
 import { useRouter } from "next/navigation";
@@ -76,6 +76,23 @@ export default function PatientsEMRPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [activeTab, setActiveTab ] = useState<"medical" | "finance">("medical");
+  const [isPatientModalOpen, setIsPatientModalOpen] = useState(false);
+
+  const handleCreateSuccess = (patientId: string) => {
+    fetchPatients();
+    // Optionally select the new patient
+    supabase
+      .from('patients')
+      .select('*')
+      .eq('id', patientId)
+      .single()
+      .then(({ data }) => {
+        if (data) {
+          setSelectedPatient(data);
+          fetchPatientDetails(data);
+        }
+      });
+  };
 
   // Related data for selected patient
   const [consultations, setConsultations] = useState<Consultation[]>([]);
@@ -223,12 +240,18 @@ export default function PatientsEMRPage() {
         </div>
 
         <button 
-          onClick={() => router.push("/admission")}
+          onClick={() => setIsPatientModalOpen(true)}
           className="bg-slate-900 text-white px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 hover:bg-riverside-red transition-all shadow-md active:scale-95"
         >
           <UserPlus size={16} /> Nouveau Patient
         </button>
       </div>
+
+      <NewPatientModal 
+        isOpen={isPatientModalOpen}
+        onClose={() => setIsPatientModalOpen(false)}
+        onSuccess={handleCreateSuccess}
+      />
 
       <div className="flex flex-1 overflow-hidden">
         

@@ -23,7 +23,7 @@ import {
   Zap,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
-import { supabase } from "@/src/lib/supabase";
+import NewPatientModal from "@/src/components/NewPatientModal";
 import { cn } from "@/src/lib/utils";
 import { toast } from "react-hot-toast";
 import { useRouter } from "next/navigation";
@@ -61,7 +61,24 @@ function AdmissionDashboard() {
   const [searching, setSearching] = useState(false);
   const [foundPatients, setFoundPatients] = useState<Patient[]>([]);
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
-  const [showCreateForm, setShowCreateForm] = useState(false);
+  // Modal state
+  const [isPatientModalOpen, setIsPatientModalOpen] = useState(false);
+  const [initialNameForModal, setInitialNameForModal] = useState("");
+
+  const handleCreateSuccess = (patientId: string) => {
+    // Refresh patient data or select it
+    supabase
+      .from('patients')
+      .select('*')
+      .eq('id', patientId)
+      .single()
+      .then(({ data }) => {
+        if (data) {
+          setSelectedPatient(data);
+          setShowTriageModal(true);
+        }
+      });
+  };
 
   // Queue Data
   const [waitingList, setWaitingList] = useState<QueueEntry[]>([]);
@@ -326,6 +343,7 @@ function AdmissionDashboard() {
             <div className="relative mb-6">
               <input 
                 type="text"
+                autoFocus
                 value={searchTerm}
                 onChange={(e) => handleSearch(e.target.value)}
                 placeholder="Rechercher (Nom ou Téléphone)..."
@@ -365,15 +383,18 @@ function AdmissionDashboard() {
                 <motion.button 
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  onClick={() => setShowCreateForm(true)}
-                  className="w-full p-8 border-2 border-dashed border-red-100 rounded-[2.5rem] flex flex-col items-center justify-center gap-4 text-riverside-red hover:bg-red-50 transition-all"
+                  onClick={() => {
+                    setInitialNameForModal(searchTerm);
+                    setIsPatientModalOpen(true);
+                  }}
+                  className="w-full p-8 border-2 border-dashed border-red-100 rounded-[2.5rem] flex flex-col items-center justify-center gap-4 text-riverside-red hover:bg-red-50 transition-all font-sans"
                 >
                   <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center">
                     <UserPlus size={28} />
                   </div>
                   <div className="text-center">
-                    <p className="text-xs font-black uppercase tracking-widest">Nouveau Patient</p>
-                    <p className="text-[9px] font-bold opacity-60 mt-1 uppercase tracking-tight">Aucun résultat pour &quot;{searchTerm}&quot;</p>
+                    <p className="text-xs font-black uppercase tracking-widest">Créer le dossier pour</p>
+                    <p className="text-sm font-black mt-1 uppercase tracking-tight text-slate-900">&quot;{searchTerm}&quot;</p>
                   </div>
                 </motion.button>
               )}
@@ -604,113 +625,12 @@ function AdmissionDashboard() {
         )}
       </AnimatePresence>
 
-      {/* Create Patient Form */}
-      <AnimatePresence>
-        {showCreateForm && (
-          <>
-            <motion.div 
-              initial={{ opacity: 0 }} 
-              animate={{ opacity: 1 }} 
-              exit={{ opacity: 0 }} 
-              onClick={() => setShowCreateForm(false)}
-              className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[1001]" 
-            />
-            <motion.div 
-              initial={{ scale: 0.9, opacity: 0, x: "-50%", y: "-50%" }} 
-              animate={{ scale: 1, opacity: 1, x: "-50%", y: "-50%" }} 
-              exit={{ scale: 0.9, opacity: 0, x: "-50%", y: "-50%" }} 
-              className="fixed top-1/2 left-1/2 w-[95%] max-w-2xl bg-white rounded-[40px] z-[1002] p-10 md:p-12 shadow-2xl overflow-y-auto max-h-[90vh]"
-            >
-               <div className="flex items-center justify-between mb-10 border-b border-slate-50 pb-8">
-                 <div>
-                    <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter">Nouveau Dossier Patient</h3>
-                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">Enregistrement initial dans la base de données</p>
-                 </div>
-                 <div className="w-16 h-16 bg-slate-950 rounded-[24px] flex items-center justify-center text-white">
-                    <UserPlus size={28} />
-                 </div>
-               </div>
-
-               <form onSubmit={handleCreatePatient} className="space-y-8">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="space-y-1.5 md:col-span-2">
-                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nom Complet</label>
-                       <input 
-                         required
-                         className="w-full p-5 bg-slate-50 border border-slate-100 rounded-2xl text-sm font-bold uppercase outline-none focus:border-riverside-red"
-                         placeholder="JEAN PIERRE MOKO"
-                         value={newPatient.nom_complet}
-                         onChange={e => setNewPatient({...newPatient, nom_complet: e.target.value})}
-                       />
-                    </div>
-                    <div className="space-y-1.5">
-                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Téléphone</label>
-                       <input 
-                         required
-                         className="w-full p-5 bg-slate-50 border border-slate-100 rounded-2xl text-sm font-bold outline-none focus:border-riverside-red"
-                         placeholder="6XXXXXXXX"
-                         value={newPatient.telephone}
-                         onChange={e => setNewPatient({...newPatient, telephone: e.target.value})}
-                       />
-                    </div>
-                    <div className="space-y-1.5">
-                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Date de Naissance</label>
-                       <input 
-                         type="date"
-                         required
-                         className="w-full p-5 bg-slate-50 border border-slate-100 rounded-2xl text-sm font-bold outline-none focus:border-riverside-red"
-                         value={newPatient.date_naissance}
-                         onChange={e => setNewPatient({...newPatient, date_naissance: e.target.value})}
-                       />
-                    </div>
-                    <div className="space-y-1.5">
-                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Sexe</label>
-                       <select 
-                         className="w-full p-5 bg-slate-50 border border-slate-100 rounded-2xl text-[11px] font-black uppercase tracking-widest outline-none focus:border-riverside-red"
-                         value={newPatient.sexe}
-                         onChange={e => setNewPatient({...newPatient, sexe: e.target.value})}
-                       >
-                         <option value="M">Masculin</option>
-                         <option value="F">Féminin</option>
-                       </select>
-                    </div>
-                    <div className="space-y-1.5">
-                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Type Assurance</label>
-                       <select 
-                         className="w-full p-5 bg-slate-50 border border-slate-100 rounded-2xl text-[11px] font-black uppercase tracking-widest outline-none focus:border-riverside-red"
-                         value={newPatient.type_assurance}
-                         onChange={e => setNewPatient({...newPatient, type_assurance: e.target.value})}
-                       >
-                         <option value="Cash">Cash / Privé</option>
-                         <option value="ASCOMA">ASCOMA</option>
-                         <option value="AXA">AXA</option>
-                         <option value="Sunu">Sunu</option>
-                       </select>
-                    </div>
-                  </div>
-
-                  <div className="flex gap-4 pt-6">
-                    <button 
-                      type="button"
-                      onClick={() => setShowCreateForm(false)}
-                      className="flex-1 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-slate-600 transition-colors"
-                    >
-                      Annuler
-                    </button>
-                    <button 
-                      type="submit"
-                      disabled={searching}
-                      className="flex-[2] py-5 bg-riverside-red text-white rounded-[20px] text-[10px] font-black uppercase tracking-[0.2em] shadow-xl shadow-red-100 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-3 disabled:opacity-50"
-                    >
-                      {searching ? <Loader2 className="animate-spin" size={18} /> : <CheckCircle2 size={18} />}
-                      Enregistrer & Passer au Triage
-                    </button>
-                  </div>
-               </form>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
+      <NewPatientModal 
+        isOpen={isPatientModalOpen}
+        onClose={() => setIsPatientModalOpen(false)}
+        initialName={initialNameForModal}
+        onSuccess={handleCreateSuccess}
+      />
     </div>
   );
 }
