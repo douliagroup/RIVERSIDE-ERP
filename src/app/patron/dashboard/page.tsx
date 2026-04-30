@@ -28,9 +28,11 @@ import { cn } from "@/src/lib/utils";
 import ReactMarkdown from "react-markdown";
 import { supabase } from "@/src/lib/supabase";
 import { useAuth } from "@/src/context/AuthContext";
+import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 
 export default function PatronDashboard() {
+  const router = useRouter();
   const { user } = useAuth();
   const [query, setQuery] = useState("");
   const [analyzing, setAnalyzing] = useState(false);
@@ -213,7 +215,14 @@ export default function PatronDashboard() {
           <p className="text-slate-500 mt-2 max-w-md">Pilotage stratégique assisté par IA pour Riverside Medical Center.</p>
         </div>
         
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-6">
+          <button 
+            onClick={() => router.push("/admission")}
+            className="hidden md:flex items-center gap-2 bg-riverside-red text-white px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-red-500/20 hover:scale-105 transition-all"
+          >
+            <Zap size={16} /> Nouvelle Admission
+          </button>
+          
           <div className="h-10 w-[1px] bg-slate-800 hidden md:block" />
           <div className="text-right">
              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Statut Systèmes</p>

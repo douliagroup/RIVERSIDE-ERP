@@ -542,6 +542,8 @@ function AdmissionDashboard() {
                  <div className="w-16 h-16 bg-red-50 rounded-2xl flex items-center justify-center text-riverside-red">
                     <Stethoscope size={28} />
                  </div>
+               </div>
+
                <div className="space-y-6">
                   <div className="grid grid-cols-2 gap-4">
                     <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
@@ -601,8 +603,6 @@ function AdmissionDashboard() {
                         onChange={e => setTriageData({...triageData, motif: e.target.value})}
                       />
                     </div>
-                  </div>
->
                   </div>
 
                   <div className="grid grid-cols-3 gap-4">
