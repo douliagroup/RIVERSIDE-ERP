@@ -28,6 +28,7 @@ import {
 import { motion, AnimatePresence } from "motion/react";
 import { cn } from "../../lib/utils";
 import { useAuth } from "../../context/AuthContext";
+import ReactMarkdown from "react-markdown";
 
 // Type definitions for SpeechRecognition
 const MEDICAMENTS_PEDIATRIQUES = [
@@ -538,9 +539,21 @@ export default function MedicalPage() {
                               </div>
                             )}
                             {aiAnalysis && (
-                              <div className="space-y-2 border-t border-white/5 pt-2">
-                                <p className="text-[10px] font-black text-red-400 uppercase">Aide au Diagnostic:</p>
-                                <p className="text-xs text-white/90 leading-relaxed font-bold italic">&quot;{aiAnalysis.diagnostic_suggere}&quot;</p>
+                              <div className="space-y-4 border-t border-white/5 pt-4">
+                                <div>
+                                  <p className="text-[10px] font-black text-red-400 uppercase mb-2">Aide au Diagnostic:</p>
+                                  <div className="text-xs text-white/90 leading-relaxed font-bold italic prose prose-invert prose-sm max-w-none whitespace-pre-wrap">
+                                    <ReactMarkdown>{aiAnalysis.diagnostic_suggere}</ReactMarkdown>
+                                  </div>
+                                </div>
+                                {aiAnalysis.ordonnance_proposee && (
+                                  <div>
+                                    <p className="text-[10px] font-black text-emerald-400 uppercase mb-2">Saisie Ordonnance:</p>
+                                    <div className="text-xs text-white/90 leading-relaxed prose prose-invert prose-sm max-w-none whitespace-pre-wrap">
+                                      <ReactMarkdown>{aiAnalysis.ordonnance_proposee}</ReactMarkdown>
+                                    </div>
+                                  </div>
+                                )}
                               </div>
                             )}
                           </div>
@@ -864,7 +877,9 @@ export default function MedicalPage() {
                                   <Stethoscope size={14} className="text-red-600" />
                                 </div>
                               )}
-                              <p>{msg.content}</p>
+                              <div className="whitespace-pre-wrap prose prose-sm max-w-none prose-p:leading-relaxed prose-strong:text-red-600 prose-ul:list-decimal">
+                                <ReactMarkdown>{msg.content}</ReactMarkdown>
+                              </div>
                             </div>
                           </div>
                         ))}

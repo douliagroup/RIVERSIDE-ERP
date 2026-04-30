@@ -2,13 +2,26 @@ import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/src/lib/supabaseAdmin';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
+export const maxDuration = 60;
+
 export async function POST(req: Request) {
   try {
     const { query } = await req.json();
+    const apiKey = process.env.GEMINI_API_KEY; // Using standardized key
+
+    if (!apiKey) {
+      console.error("[ANALYZE API] Clé API GEMINI_API_KEY manquante.");
+      return NextResponse.json({ error: 'Configuration IA incomplète' }, { status: 500 });
+    }
+
+    const formattingDirectives = `
+DIRECTIVES STRICTES DE FORMATAGE DE LA RÉPONSE : 
+1. INTERDICTION ABSOLUE d'utiliser des balises HTML (pas de <p>, <ul>, <li>, <strong>, etc.). 
+2. Utilise UNIQUEMENT des listes avec des puces numériques (1., 2., 3.) pour énumérer les étapes ou les niveaux. 
+3. Mets les titres et les mots-clés importants en gras (avec des doubles astérisques markdown). 
+4. Sépare chaque paragraphe par un double saut de ligne pour bien aérer le texte.`;
 
     // 1. Récupération des données Supabase (KPIs internes)
-    // On simule ici la récupération de données réelles pour l'exemple
-    // Dans un vrai cas, on ferait des agrégations SQL sur les tables factures, patients, etc.
     const { data: stats, error: statsError } = await supabaseAdmin
       .from('statistiques_mensuelles')
       .select('*')
@@ -23,31 +36,34 @@ export async function POST(req: Request) {
     };
 
     // 2. Recherche Tavily (Contexte externe)
-    const tavilyResponse = await fetch('https://api.tavily.com/search', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        api_key: process.env.TAVILY_API_KEY,
-        query: query ? `Marché santé Douala 2024: ${query}` : "Tendances santé Douala Cameroun 2024 et tarifs cliniques",
-        search_depth: "advanced"
-      })
-    });
-    
-    const externalData = await tavilyResponse.json();
-    const searchContext = externalData.results?.map((r: any) => r.content).join('\n') || "Pas de données externes trouvées.";
-
-    // 3. Synthèse Gemini
-    const apiKey = process.env.RIVERSIDE_GEMINI_API_KEY;
-    
-    if (!apiKey) {
-      return NextResponse.json({ error: 'Clé manquante' }, { status: 500 });
+    let searchContext = "Pas de données externes trouvées.";
+    if (process.env.TAVILY_API_KEY) {
+      try {
+        const tavilyResponse = await fetch('https://api.tavily.com/search', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            api_key: process.env.TAVILY_API_KEY,
+            query: query ? `Marché santé Douala 2024: ${query}` : "Tendances santé Douala Cameroun 2024 et tarifs cliniques",
+            search_depth: "advanced"
+          })
+        });
+        
+        const externalData = await tavilyResponse.json();
+        searchContext = externalData.results?.map((r: any) => r.content).join('\n') || searchContext;
+      } catch (err) {
+        console.error("Tavily Error:", err);
+      }
     }
 
+    // 3. Synthèse Gemini
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
+    const model = genAI.getGenerativeModel({ 
+      model: "gemini-3-flash-preview",
+      systemInstruction: "Tu es un expert en stratégie hospitalière pour Riverside Medical Center à Douala. " + formattingDirectives 
+    });
 
     const prompt = `
-      Tu es un expert en stratégie hospitalière pour Riverside Medical Center à Douala.
       Analyse les données internes suivantes et croise-les avec les informations du marché externe.
 
       DONNÉES INTERNES (Riverside):
@@ -62,7 +78,7 @@ export async function POST(req: Request) {
       QUESTION DU PATRON:
       ${query || "Génère un rapport stratégique global pour Riverside."}
 
-      FORMAT DE RÉPONSE:
+      FORMAT DE RÉPONSE ATTENDU :
       - Titre frappant
       - Résumé exécutif (3 lignes)
       - Analyse SWOT rapide

@@ -1,18 +1,27 @@
 import { NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
+export const maxDuration = 60; // Prevent timeouts
+
 export async function POST(req: Request) {
   try {
     const { transcription } = await req.json();
     const apiKey = process.env.GEMINI_API_KEY;
 
     if (!apiKey) {
-      console.error("[IA ROUTE] ERREUR : Clé API manquante (GEMINI_API_KEY) dans les secrets/environnement.");
-      return NextResponse.json({ error: "Service IA temporairement indisponible (clé manquante), saisie manuelle requise" }, { status: 500 });
+      console.error("[IA ROUTE] ERREUR : Clé API manquante (GEMINI_API_KEY).");
+      return NextResponse.json({ error: "Configuration IA incomplète. Contactez l'administrateur." }, { status: 500 });
     }
 
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
+
+    const formattingDirectives = `
+DIRECTIVES STRICTES DE FORMATAGE DE LA RÉPONSE : 
+1. INTERDICTION ABSOLUE d'utiliser des balises HTML (pas de <p>, <ul>, <li>, <strong>, etc.). 
+2. Utilise UNIQUEMENT des listes avec des puces numériques (1., 2., 3.) pour énumérer les étapes ou les niveaux. 
+3. Mets les titres et les mots-clés importants en gras (avec des doubles astérisques markdown). 
+4. Sépare chaque paragraphe par un double saut de ligne pour bien aérer le texte.`;
 
     const prompt = `
       Tu es un copilote médical expert pour Riverside Medical Center à Douala.
@@ -25,9 +34,12 @@ export async function POST(req: Request) {
         "constantes": "résumé des constantes si mentionnées sinon vide",
         "notes_cliniques": "résumé clair et professionnel des observations",
         "diagnostic_suggere": "diagnostic probable basé sur les notes",
-        "examens_recommandes": "examens complémetaires à prévoir",
+        "examens_recommandes": "examens complémentaires à prévoir",
         "ordonnance_proposee": "médicaments et posologie suggérés"
       }
+
+      Chaque champ textuel à l'intérieur du JSON doit respecter ces consignes :
+      ${formattingDirectives}
     `;
 
     try {
@@ -42,15 +54,15 @@ export async function POST(req: Request) {
 
       const analysis = JSON.parse(jsonMatch[0]);
       return NextResponse.json(analysis);
-    } catch (apiError) {
+    } catch (apiError: any) {
       console.error("Gemini API Call Failed:", apiError);
       return NextResponse.json({ 
-        error: "Service IA temporairement indisponible, saisie manuelle requise" 
-      }, { status: 503 });
+        error: "Le service IA a rencontré une erreur : " + apiError.message 
+      }, { status: 500 });
     }
 
-  } catch (error) {
+  } catch (error: any) {
     console.error("AI Consultation Error:", error);
-    return NextResponse.json({ error: "Erreur lors de l'analyse IA" }, { status: 500 });
+    return NextResponse.json({ error: "Erreur lors de l'analyse IA : " + error.message }, { status: 500 });
   }
 }

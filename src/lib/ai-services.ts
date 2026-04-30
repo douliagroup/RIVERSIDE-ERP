@@ -4,6 +4,13 @@ const ai = new GoogleGenAI({
   apiKey: process.env.NEXT_PUBLIC_GEMINI_API_KEY || "",
 });
 
+const formattingDirectives = `
+DIRECTIVES STRICTES DE FORMATAGE DE LA RÉPONSE : 
+1. INTERDICTION ABSOLUE d'utiliser des balises HTML (pas de <p>, <ul>, <li>, <strong>, etc.). 
+2. Utilise UNIQUEMENT des listes avec des puces numériques (1., 2., 3.) pour énumérer les étapes ou les niveaux. 
+3. Mets les titres et les mots-clés importants en gras (avec des doubles astérisques markdown). 
+4. Sépare chaque paragraphe par un double saut de ligne pour bien aérer le texte.`;
+
 export async function generateDouliaMessage(patientName: string, motif: string, diagnostic: string) {
   const response = await ai.models.generateContent({
     model: "gemini-3-flash-preview",
@@ -14,7 +21,9 @@ Le ton doit être attentionné mais respectueux.
 Propose de contacter la clinique en cas de besoin. 
 NE DONNE PAS d'avis médical ou de conseils thérapeutiques spécifiques.
 Garde le message en français.
-Ajoute des emojis pertinents.`,
+Ajoute des emojis pertinents.
+
+${formattingDirectives}`,
   });
 
   return response.text;
@@ -30,7 +39,9 @@ Analyse ces tendances et rédige un post Facebook engageant de prévention sanit
 L'objectif est d'éduquer la population locale de Douala tout en promouvant les services de la clinique.
 Inclus un Call-to-Action invitant à venir faire un check-up ou prendre rendez-vous.
 Ajoute des emojis pertinents et des hashtags comme #RiversideMedical #SanteDouala #Prevention.
-Le post doit être professionnel, dynamique et rassurant.`,
+Le post doit être professionnel, dynamique et rassurant.
+
+${formattingDirectives}`,
   });
 
   return response.text;
