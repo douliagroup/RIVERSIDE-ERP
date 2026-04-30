@@ -21,6 +21,11 @@ import {
   Thermometer,
   Scale,
   Zap,
+  X,
+  MoreVertical,
+  Edit2,
+  Eye,
+  Trash2,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { supabase } from "@/src/lib/supabase";
@@ -47,6 +52,9 @@ interface Patient {
 interface QueueEntry {
   id: string;
   patient_id: string;
+  spo2?: string;
+  pouls?: string;
+  personne_confiance?: string;
   heure_arrivee: string;
   motif: string;
   orientation?: string;
@@ -67,11 +75,27 @@ function AdmissionDashboard() {
   const [searching, setSearching] = useState(false);
   const [foundPatients, setFoundPatients] = useState<Patient[]>([]);
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
-  // Modal state
+  
+  // Registry Modals state
   const [isPatientModalOpen, setIsPatientModalOpen] = useState(false);
   const [initialNameForModal, setInitialNameForModal] = useState("");
+  const [isEditPatientMode, setIsEditPatientMode] = useState(false);
+  const [editingPatientData, setEditingPatientData] = useState<Patient | null>(null);
+
+  // Triage state
+  const [isEditTriageMode, setIsEditTriageMode] = useState(false);
+  const [editingQueueEntry, setEditingQueueEntry] = useState<QueueEntry | null>(null);
+
+  const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
 
   const handleCreateSuccess = (patientId: string) => {
+    fetchWaitingList();
+    if (isEditPatientMode) {
+      setIsEditPatientMode(false);
+      setEditingPatientData(null);
+      handleSearch(searchTerm);
+      return;
+    }
     // Refresh patient data or select it
     supabase
       .from('patients')
@@ -86,6 +110,51 @@ function AdmissionDashboard() {
       });
   };
 
+  const handleEditPatient = (p: Patient) => {
+    setEditingPatientData(p);
+    setIsEditPatientMode(true);
+    setIsPatientModalOpen(true);
+    setActiveDropdown(null);
+  };
+
+  const handleCancelVisit = async (entry: QueueEntry) => {
+    if (!confirm(`Voulez-vous annuler l'attente de ${entry.patients?.nom_complet} ?`)) return;
+    
+    try {
+      const { error } = await supabase
+        .from('file_attente')
+        .update({ statut: 'Annulé' })
+        .eq('id', entry.id);
+      
+      if (error) throw error;
+      toast.success("Visite annulée 🗑️");
+      fetchWaitingList();
+    } catch (err: any) {
+      toast.error("Erreur annulation: " + err.message);
+    }
+    setActiveDropdown(null);
+  };
+
+  const handleEditTriage = (entry: QueueEntry) => {
+    setEditingQueueEntry(entry);
+    setIsEditTriageMode(true);
+    setSelectedPatient(entry.patients || null);
+    setTriageData({
+      motif: entry.motif || "",
+      orientation: entry.orientation || "Consultation",
+      service: entry.service || "Médecine Générale",
+      urgence: entry.urgence ? "Urgence Vitale" : "Normale",
+      personne_confiance: entry.personne_confiance || "",
+      tension: entry.tension || "",
+      temperature: entry.temperature || "",
+      poids: entry.poids || "",
+      pouls: entry.pouls || "",
+      spo2: entry.spo2 || ""
+    });
+    setShowTriageModal(true);
+    setActiveDropdown(null);
+  };
+
   // Queue Data
   const [waitingList, setWaitingList] = useState<QueueEntry[]>([]);
   const [loadingQueue, setLoadingQueue] = useState(true);
@@ -95,24 +164,17 @@ function AdmissionDashboard() {
   const [triageData, setTriageData] = useState({
     motif: "",
     orientation: "Consultation",
-    service: "Généraliste",
+    service: "Médecine Générale",
+    urgence: "Normale",
+    personne_confiance: "",
     tension: "",
     temperature: "",
     poids: "",
-    urgence: false
+    pouls: "",
+    spo2: ""
   });
 
-  // New Patient Form
-  const [newPatient, setNewPatient] = useState({
-    nom_complet: "",
-    telephone: "",
-    sexe: "M",
-    date_naissance: "",
-    type_assurance: "Cash",
-    numero_assurance: ""
-  });
-
-  const services = ["Généraliste", "Pédiatre", "Gynécologue", "Cardiologue", "Ophtalmologue", "Chirurgien"];
+  const services = ["Médecine Générale", "Pédiatrie", "Gynécologie", "Infirmerie/Soins", "Laboratoire", "Chirurgie"];
 
   useEffect(() => {
     // Check for query params
@@ -122,7 +184,7 @@ function AdmissionDashboard() {
     }
 
     fetchWaitingList();
-    // Realtime subscription (using sejours_actifs as fallback if file_attente fails)
+    // Realtime subscription
     const subscription = supabase
       .channel('file_attente_changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'file_attente' }, () => {
@@ -148,13 +210,13 @@ function AdmissionDashboard() {
         .order('heure_arrivee', { ascending: true });
       
       if (error) {
-          // Si file_attente n'existe pas, on tente sejours_actifs
+          // Fallback sejours_actifs
           const { data: altData } = await supabase
             .from('sejours_actifs')
             .select('*, patients(*)')
             .gte('created_at', today.toISOString())
             .order('created_at', { ascending: true });
-          setWaitingList(altData?.map(d => ({...d, heure_arrivee: d.created_at, motif: d.motif_visite, service: d.service || "Généraliste", urgence: d.urgence || false})) || []);
+          setWaitingList(altData?.map(d => ({...d, heure_arrivee: d.created_at, motif: d.motif_visite, service: d.service || "Médecine Générale", urgence: d.urgence || false})) || []);
       } else {
           setWaitingList(data || []);
       }
@@ -187,34 +249,13 @@ function AdmissionDashboard() {
     }
   };
 
-  const handleCreatePatient = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSearching(true);
-    try {
-      const { data, error } = await supabase
-        .from('patients')
-        .insert([{
-          ...newPatient,
-          nom_complet: newPatient.nom_complet.toUpperCase()
-        }])
-        .select()
-        .single();
-      
-      if (error) throw error;
-      
-      toast.success("Patient créé avec succès !");
-      setSelectedPatient(data);
-      setShowCreateForm(false);
-      setShowTriageModal(true);
-    } catch (err: any) {
-      toast.error("Erreur creation: " + err.message);
-    } finally {
-      setSearching(false);
-    }
-  };
-
   const handleAddToQueue = async () => {
     if (!selectedPatient) return;
+    
+    // Validation
+    if (!triageData.motif) return toast.error("Le motif est obligatoire");
+    if (!triageData.service) return toast.error("Le service est obligatoire");
+
     setSearching(true);
     
     const payload = {
@@ -225,39 +266,59 @@ function AdmissionDashboard() {
         tension: triageData.tension,
         temperature: triageData.temperature,
         poids: triageData.poids,
-        urgence: triageData.urgence,
-        heure_arrivee: new Date().toISOString(),
-        statut: "En attente"
+        urgence: triageData.urgence === "Urgence Vitale", 
+        heure_arrivee: isEditTriageMode ? editingQueueEntry?.heure_arrivee : new Date().toISOString(),
+        statut: isEditTriageMode ? editingQueueEntry?.statut : "En attente",
+        pouls: triageData.pouls,
+        spo2: triageData.spo2,
+        personne_confiance: triageData.personne_confiance
     };
 
     try {
-      // Input validation
-      if (!triageData.motif) return toast.error("Le motif est obligatoire");
-      if (!triageData.orientation) return toast.error("L'orientation est obligatoire");
-
-      // On tente file_attente, puis sejours_actifs
-      const { error } = await supabase.from('file_attente').insert([payload]);
-      
-      if (error) {
-          console.error("file_attente_error", error);
-          // Fallback sejours_actifs (structure differente)
-          const { error: altError } = await supabase.from('sejours_actifs').insert([{
-            patient_id: selectedPatient.id,
-            motif_visite: triageData.motif,
-            statut: "En attente",
-            urgence: triageData.urgence
-          }]);
-          if (altError) {
-            console.error("sejours_actifs_error", altError);
-            throw new Error(`Erreur Supabase: ${error.message} (Fallback: ${altError.message})`);
-          }
+      if (isEditTriageMode && editingQueueEntry) {
+         const { error } = await supabase
+          .from('file_attente')
+          .update(payload)
+          .eq('id', editingQueueEntry.id);
+         if (error) throw error;
+         toast.success("Triage mis à jour ! 🔄");
+      } else {
+        // On tente file_attente
+        const { error } = await supabase.from('file_attente').insert([payload]);
+        
+        if (error) {
+            console.error("file_attente_error", error);
+            // Fallback sejours_actifs
+            const { error: altError } = await supabase.from('sejours_actifs').insert([{
+              patient_id: selectedPatient.id,
+              motif_visite: triageData.motif,
+              statut: "En attente",
+              urgence: triageData.urgence === "Urgence Vitale"
+            }]);
+            if (altError) throw altError;
+        }
+        toast.success(`${selectedPatient.nom_complet} ajouté à la file d'attente ! ✨`);
       }
       
-      toast.success(`${selectedPatient.nom_complet} ajouté à la file d'attente !`);
       setShowTriageModal(false);
       setSelectedPatient(null);
       setSearchTerm("");
       setFoundPatients([]);
+      setIsEditTriageMode(false);
+      setEditingQueueEntry(null);
+      // Reset triage data
+      setTriageData({
+        motif: "",
+        orientation: "Consultation",
+        service: "Médecine Générale",
+        urgence: "Normale",
+        personne_confiance: "",
+        tension: "",
+        temperature: "",
+        poids: "",
+        pouls: "",
+        spo2: ""
+      });
       fetchWaitingList();
     } catch (err: any) {
       toast.error("Erreur admission: " + err.message);
@@ -267,6 +328,7 @@ function AdmissionDashboard() {
   };
 
   const printTicket = (entry: QueueEntry) => {
+    // ... no changes to print ticket logic requested
     const printWindow = window.open('', '_blank');
     if (!printWindow) return;
 
@@ -378,20 +440,62 @@ function AdmissionDashboard() {
 
             <div className="space-y-3">
               {foundPatients.map(p => (
-                <button 
-                  key={p.id}
-                  onClick={() => {
-                    setSelectedPatient(p);
-                    setShowTriageModal(true);
-                  }}
-                  className="w-full p-5 bg-white border border-slate-50 rounded-2xl flex items-center justify-between hover:border-riverside-red hover:bg-red-50/10 transition-all group"
-                >
-                  <div className="text-left">
-                    <p className="text-sm font-black text-slate-900 group-hover:text-riverside-red transition-colors uppercase">{p.nom_complet}</p>
-                    <p className="text-[10px] text-slate-400 font-bold mt-1 uppercase tracking-widest">{p.telephone || 'Aucun Tel'} • {p.type_assurance}</p>
+                <div key={p.id} className="relative">
+                  <div className="w-full p-5 bg-white border border-slate-50 rounded-2xl flex items-center justify-between hover:border-riverside-red hover:shadow-lg hover:shadow-red-500/5 transition-all group">
+                    <div className="flex-1 text-left">
+                      <p className="text-sm font-black text-slate-900 uppercase">{p.nom_complet}</p>
+                      <p className="text-[10px] text-slate-400 font-bold mt-1 uppercase tracking-widest">{p.telephone || 'Aucun Tel'} • {p.type_assurance}</p>
+                    </div>
+                    
+                    <div className="flex items-center gap-2">
+                       <button 
+                         onClick={() => {
+                           setSelectedPatient(p);
+                           setIsEditTriageMode(false);
+                           setShowTriageModal(true);
+                         }}
+                         className="px-4 py-2 bg-slate-900 text-white text-[9px] font-black uppercase rounded-xl hover:bg-riverside-red transition-all"
+                       >
+                         Triage
+                       </button>
+                       <div className="relative">
+                         <button 
+                           onClick={() => setActiveDropdown(activeDropdown === p.id ? null : p.id)}
+                           className="w-10 h-10 bg-slate-50 text-slate-400 rounded-xl flex items-center justify-center hover:bg-slate-100 transition-all border border-slate-100"
+                         >
+                           <MoreVertical size={16} />
+                         </button>
+
+                         <AnimatePresence>
+                           {activeDropdown === p.id && (
+                             <>
+                               <motion.div 
+                                 initial={{ opacity: 0, scale: 0.9, y: -10 }}
+                                 animate={{ opacity: 1, scale: 1, y: 0 }}
+                                 exit={{ opacity: 0, scale: 0.9, y: -10 }}
+                                 className="absolute right-0 top-12 w-48 bg-white rounded-2xl shadow-2xl border border-slate-100 z-50 overflow-hidden"
+                               >
+                                  <button 
+                                    onClick={() => router.push(`/patients?id=${p.id}`)}
+                                    className="w-full p-4 flex items-center gap-3 text-[10px] font-black text-slate-600 hover:bg-slate-50 transition-all uppercase"
+                                  >
+                                    <Eye size={14} className="text-blue-500" /> Voir Dossier
+                                  </button>
+                                  <button 
+                                    onClick={() => handleEditPatient(p)}
+                                    className="w-full p-4 flex items-center gap-3 text-[10px] font-black text-slate-600 hover:bg-slate-50 transition-all uppercase border-t border-slate-50"
+                                  >
+                                    <Edit2 size={14} className="text-amber-500" /> Modifier Identité
+                                  </button>
+                               </motion.div>
+                               <div className="fixed inset-0 z-40" onClick={() => setActiveDropdown(null)} />
+                             </>
+                           )}
+                         </AnimatePresence>
+                       </div>
+                    </div>
                   </div>
-                  <Plus size={20} className="text-slate-200 group-hover:text-riverside-red" />
-                </button>
+                </div>
               ))}
 
               {!searchTerm && !searching && foundPatients.length === 0 && (
@@ -458,11 +562,12 @@ function AdmissionDashboard() {
                         key={entry.id} 
                         className={cn(
                           "group hover:bg-slate-50/30 transition-all",
-                          entry.urgence && "bg-red-50/30 border-l-4 border-l-riverside-red"
+                          entry.urgence && "bg-red-50/30 border-l-4 border-l-riverside-red",
+                          entry.statut === "Annulé" && "opacity-40 grayscale"
                         )}
                       >
                         <td className="px-8 py-6">
-                           <span className="text-xs font-black text-slate-900 italic" suppressHydrationWarning>
+                           <span className="text-xs font-black text-slate-400 italic font-mono uppercase" suppressHydrationWarning>
                              {new Date(entry.heure_arrivee).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                            </span>
                         </td>
@@ -470,7 +575,7 @@ function AdmissionDashboard() {
                           <div>
                             <p className={cn("text-sm font-black text-slate-900 uppercase", entry.urgence && "text-riverside-red")}>{entry.patients?.nom_complet}</p>
                             <div className="flex items-center gap-2 mt-1">
-                               {entry.urgence && <div className="w-2 h-2 bg-riverside-red animate-ping rounded-full" />}
+                               {entry.urgence && entry.statut !== "Annulé" && <div className="w-2 h-2 bg-riverside-red animate-ping rounded-full" />}
                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tight italic">
                                  {entry.patients?.type_assurance}
                                </p>
@@ -493,19 +598,58 @@ function AdmissionDashboard() {
                         <td className="px-8 py-6 text-center">
                           <span className={cn(
                             "px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest",
-                            entry.statut === "En attente" ? "bg-slate-100 text-slate-500" : "bg-blue-100 text-blue-600"
+                            entry.statut === "En attente" ? "bg-slate-100 text-slate-500" : 
+                            entry.statut === "Annulé" ? "bg-red-100 text-red-600" : "bg-blue-100 text-blue-600"
                           )}>
                             {entry.statut}
                           </span>
                         </td>
                         <td className="px-8 py-6">
-                          <div className="flex items-center justify-center">
+                          <div className="flex items-center justify-center gap-2">
                             <button 
                               onClick={() => printTicket(entry)}
-                              className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center text-slate-400 hover:bg-slate-900 hover:text-white transition-all shadow-sm shadow-slate-100"
+                              className="w-10 h-10 rounded-xl bg-white border border-slate-100 flex items-center justify-center text-slate-400 hover:bg-slate-900 hover:text-white transition-all shadow-sm group-hover:shadow-lg disabled:opacity-0"
+                              disabled={entry.statut === "Annulé"}
                             >
                               <Printer size={16} />
                             </button>
+
+                            <div className="relative">
+                              <button 
+                                onClick={() => setActiveDropdown(activeDropdown === entry.id ? null : entry.id)}
+                                disabled={entry.statut === "Annulé"}
+                                className="w-10 h-10 bg-white border border-slate-100 text-slate-400 rounded-xl flex items-center justify-center hover:bg-slate-100 transition-all shadow-sm disabled:opacity-0"
+                              >
+                                <MoreVertical size={16} />
+                              </button>
+
+                              <AnimatePresence>
+                                {activeDropdown === entry.id && (
+                                  <>
+                                    <motion.div 
+                                      initial={{ opacity: 0, scale: 0.9, y: 10 }}
+                                      animate={{ opacity: 1, scale: 1, y: 0 }}
+                                      exit={{ opacity: 0, scale: 0.9, y: 10 }}
+                                      className="absolute right-0 bottom-12 w-48 bg-white rounded-2xl shadow-2xl border border-slate-100 z-50 overflow-hidden"
+                                    >
+                                       <button 
+                                         onClick={() => handleEditTriage(entry)}
+                                         className="w-full p-4 flex items-center gap-3 text-[10px] font-black text-slate-600 hover:bg-slate-50 transition-all uppercase"
+                                       >
+                                         <Edit2 size={14} className="text-amber-500" /> Modifier Triage
+                                       </button>
+                                       <button 
+                                         onClick={() => handleCancelVisit(entry)}
+                                         className="w-full p-4 flex items-center gap-3 text-[10px] font-black text-red-500 hover:bg-red-50 transition-all uppercase border-t border-slate-50"
+                                       >
+                                         <Trash2 size={14} /> Annuler Visite
+                                       </button>
+                                    </motion.div>
+                                    <div className="fixed inset-0 z-40" onClick={() => setActiveDropdown(null)} />
+                                  </>
+                                )}
+                              </AnimatePresence>
+                            </div>
                           </div>
                         </td>
                       </tr>
@@ -536,140 +680,190 @@ function AdmissionDashboard() {
               animate={{ opacity: 1 }} 
               exit={{ opacity: 0 }} 
               onClick={() => setShowTriageModal(false)}
-              className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[1001]" 
+              className="fixed inset-0 bg-slate-950/40 backdrop-blur-md z-[1001]" 
             />
             <motion.div 
-              initial={{ scale: 0.9, opacity: 0, x: "-50%", y: "-50%" }} 
+              initial={{ scale: 0.95, opacity: 0, x: "-50%", y: "-40%" }} 
               animate={{ scale: 1, opacity: 1, x: "-50%", y: "-50%" }} 
-              exit={{ scale: 0.9, opacity: 0, x: "-50%", y: "-50%" }} 
-              className="fixed top-1/2 left-1/2 w-[95%] max-w-xl bg-white rounded-[40px] z-[1002] p-10 shadow-2xl overflow-y-auto max-h-[90vh]"
+              exit={{ scale: 0.95, opacity: 0, x: "-50%", y: "-40%" }} 
+              className="fixed top-1/2 left-1/2 w-[95%] max-w-2xl bg-white rounded-[3rem] z-[1002] p-0 shadow-2xl overflow-hidden max-h-[90vh] flex flex-col"
             >
-               <div className="flex items-center justify-between mb-8 border-b border-slate-50 pb-6">
-                 <div>
-                    <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tighter">Fiche de Triage</h3>
-                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">Admission de {selectedPatient.nom_complet}</p>
+               <div className="p-8 md:p-10 border-b border-slate-50 flex items-center justify-between bg-slate-50/50">
+                 <div className="flex items-center gap-4">
+                    <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center text-riverside-red shadow-sm border border-slate-100">
+                       {isEditTriageMode ? <Edit2 size={28} /> : <Stethoscope size={28} />}
+                    </div>
+                    <div>
+                       <h3 className="text-xl font-black text-slate-900 uppercase tracking-tighter">
+                         {isEditTriageMode ? "Mise à jour du Triage" : "Placement en File d'Attente"}
+                       </h3>
+                       <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">
+                         Dossier : {selectedPatient.nom_complet}
+                       </p>
+                    </div>
                  </div>
-                 <div className="w-16 h-16 bg-red-50 rounded-2xl flex items-center justify-center text-riverside-red">
-                    <Stethoscope size={28} />
-                 </div>
+                 <button 
+                   onClick={() => {
+                     setShowTriageModal(false);
+                     setIsEditTriageMode(false);
+                     setEditingQueueEntry(null);
+                   }}
+                   className="w-10 h-10 bg-white text-slate-400 rounded-xl flex items-center justify-center hover:bg-red-50 hover:text-riverside-red transition-all shadow-sm border border-slate-100"
+                 >
+                   <X size={20} />
+                 </button>
                </div>
 
-               <div className="space-y-6">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                      <div className="flex items-center gap-3">
-                         <AlertTriangle className={cn(triageData.urgence ? "text-riverside-red" : "text-slate-300")} size={20} />
-                         <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Urgence</span>
+               <div className="flex-1 overflow-y-auto p-8 md:p-10 space-y-10">
+                 {/* Section A : La Visite */}
+                 <div className="space-y-6">
+                    <div className="flex items-center gap-2">
+                       <div className="w-1.5 h-6 bg-riverside-red rounded-full" />
+                       <h4 className="text-[11px] font-black text-slate-900 uppercase tracking-widest">Section A : Détails de la Visite</h4>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="space-y-1.5 md:col-span-2">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Motif de la visite *</label>
+                        <textarea 
+                          required
+                          className="w-full p-5 bg-slate-50 border border-slate-100 rounded-2xl text-sm font-bold outline-none focus:border-riverside-red focus:bg-white transition-all resize-none"
+                          rows={3}
+                          placeholder="Décrivez brièvement le motif..."
+                          value={triageData.motif}
+                          onChange={e => setTriageData({...triageData, motif: e.target.value})}
+                        />
                       </div>
-                      <button 
-                        onClick={() => setTriageData({...triageData, urgence: !triageData.urgence})}
-                        className={cn(
-                          "px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all",
-                          triageData.urgence ? "bg-riverside-red text-white shadow-lg shadow-red-200" : "bg-white text-slate-400 border border-slate-100"
-                        )}
-                      >
-                        {triageData.urgence ? "URGENT" : "NORMAL"}
-                      </button>
-                    </div>
 
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Orientation (Cible)</label>
-                      <select 
-                        required
-                        className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl text-[10px] font-black uppercase tracking-widest outline-none focus:border-riverside-red transition-all"
-                        value={triageData.orientation}
-                        onChange={e => setTriageData({...triageData, orientation: e.target.value})}
-                      >
-                        <option value="Consultation">Consultation</option>
-                        <option value="Hospitalisation">Hospitalisation</option>
-                        <option value="Infirmerie">Infirmerie</option>
-                        <option value="Chirurgie">Chirurgie</option>
-                        <option value="Laboratoire">Laboratoire</option>
-                        <option value="Sortie">Sortie</option>
-                      </select>
-                    </div>
-                  </div>
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Service de destination *</label>
+                        <select 
+                          required
+                          className="w-full p-5 bg-slate-50 border border-slate-100 rounded-2xl text-[11px] font-black uppercase outline-none focus:border-riverside-red focus:bg-white appearance-none cursor-pointer"
+                          value={triageData.service}
+                          onChange={e => setTriageData({...triageData, service: e.target.value})}
+                        >
+                          {services.map(s => <option key={s} value={s}>{s}</option>)}
+                        </select>
+                      </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Service / Spécialité</label>
-                      <select 
-                        className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl text-[10px] font-black uppercase tracking-widest outline-none focus:border-riverside-red transition-all"
-                        value={triageData.service}
-                        onChange={e => setTriageData({...triageData, service: e.target.value})}
-                      >
-                        {services.map(s => <option key={s} value={s}>{s}</option>)}
-                      </select>
-                    </div>
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Niveau d&apos;Urgence</label>
+                        <select 
+                          className={cn(
+                            "w-full p-5 border rounded-2xl text-[11px] font-black uppercase outline-none transition-all cursor-pointer appearance-none",
+                            triageData.urgence === "Urgence Vitale" ? "bg-red-50 border-red-200 text-riverside-red" : "bg-slate-50 border-slate-100 text-slate-900"
+                          )}
+                          value={triageData.urgence}
+                          onChange={e => setTriageData({...triageData, urgence: e.target.value})}
+                        >
+                          <option value="Normale">Normale</option>
+                          <option value="Prioritaire">Prioritaire</option>
+                          <option value="Urgence Vitale">Urgence Vitale</option>
+                        </select>
+                      </div>
 
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Motif de la visite *</label>
-                      <textarea 
-                        required
-                        className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl text-xs font-bold outline-none focus:border-riverside-red transition-all resize-none"
-                        rows={2}
-                        placeholder="Pourquoi le patient consulte ?"
-                        value={triageData.motif}
-                        onChange={e => setTriageData({...triageData, motif: e.target.value})}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-4">
-                    <div className="space-y-1.5">
-                      <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Tension (mmHg)</label>
-                      <div className="relative group">
-                        <Activity className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={14} />
+                      <div className="space-y-1.5 md:col-span-2">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Personne de confiance du jour (Optionnel)</label>
                         <input 
-                          className="w-full pl-10 pr-4 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-xs font-bold outline-none focus:border-riverside-red"
+                          className="w-full p-5 bg-slate-50 border border-slate-100 rounded-2xl text-sm font-bold outline-none focus:border-riverside-red focus:bg-white transition-all uppercase"
+                          placeholder="Nom & Contact de l'accompagnateur"
+                          value={triageData.personne_confiance}
+                          onChange={e => setTriageData({...triageData, personne_confiance: e.target.value})}
+                        />
+                      </div>
+                    </div>
+                 </div>
+
+                 {/* Section B : Constantes Vitales */}
+                 <div className="space-y-6">
+                    <div className="flex items-center gap-2">
+                       <div className="w-1.5 h-6 bg-slate-900 rounded-full" />
+                       <h4 className="text-[11px] font-black text-slate-900 uppercase tracking-widest">Section B : Constantes Vitales</h4>
+                    </div>
+
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
+                      <div className="space-y-1.5">
+                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-1">
+                          <Activity size={10} /> Tension (mmHg)
+                        </label>
+                        <input 
+                          className="w-full p-5 bg-slate-50 border border-slate-100 rounded-2xl text-sm font-black text-center outline-none focus:border-riverside-red focus:bg-white"
                           placeholder="12/8"
                           value={triageData.tension}
                           onChange={e => setTriageData({...triageData, tension: e.target.value})}
                         />
                       </div>
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Temp. (°C)</label>
-                      <div className="relative group">
-                        <Thermometer className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={14} />
+                      
+                      <div className="space-y-1.5">
+                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-1">
+                          <Thermometer size={10} /> Temp. (°C)
+                        </label>
                         <input 
-                          className="w-full pl-10 pr-4 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-xs font-bold outline-none focus:border-riverside-red"
+                          className="w-full p-5 bg-slate-50 border border-slate-100 rounded-2xl text-sm font-black text-center outline-none focus:border-riverside-red focus:bg-white"
                           placeholder="37.5"
                           value={triageData.temperature}
                           onChange={e => setTriageData({...triageData, temperature: e.target.value})}
                         />
                       </div>
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Poids (Kg)</label>
-                      <div className="relative group">
-                        <Scale className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={14} />
+
+                      <div className="space-y-1.5">
+                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-1">
+                          <Scale size={10} /> Poids (Kg)
+                        </label>
                         <input 
-                          className="w-full pl-10 pr-4 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-xs font-bold outline-none focus:border-riverside-red"
+                          className="w-full p-5 bg-slate-50 border border-slate-100 rounded-2xl text-sm font-black text-center outline-none focus:border-riverside-red focus:bg-white"
                           placeholder="75"
                           value={triageData.poids}
                           onChange={e => setTriageData({...triageData, poids: e.target.value})}
                         />
                       </div>
-                    </div>
-                  </div>
 
-                  <div className="flex gap-4 pt-6">
-                    <button 
-                      onClick={() => setShowTriageModal(false)}
-                      className="flex-1 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-slate-600 transition-colors"
-                    >
-                      Annuler
-                    </button>
-                    <button 
-                      disabled={searching}
-                      onClick={handleAddToQueue}
-                      className="flex-[2] py-5 bg-slate-950 text-white rounded-[20px] text-[10px] font-black uppercase tracking-[0.2em] shadow-xl hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-3 disabled:opacity-50"
-                    >
-                      {searching ? <Loader2 className="animate-spin" size={18} /> : <CheckCircle2 size={18} />}
-                      Confirmer l&apos;Arrivée
-                    </button>
-                  </div>
+                      <div className="space-y-1.5">
+                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-1">
+                          <Activity size={10} className="text-red-400" /> Pouls (bpm)
+                        </label>
+                        <input 
+                          className="w-full p-5 bg-slate-50 border border-slate-100 rounded-2xl text-sm font-black text-center outline-none focus:border-riverside-red focus:bg-white"
+                          placeholder="80"
+                          value={triageData.pouls}
+                          onChange={e => setTriageData({...triageData, pouls: e.target.value})}
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-1">
+                          <Zap size={10} className="text-blue-400" /> SpO2 (%)
+                        </label>
+                        <input 
+                          className="w-full p-5 bg-slate-50 border border-slate-100 rounded-2xl text-sm font-black text-center outline-none focus:border-riverside-red focus:bg-white"
+                          placeholder="98"
+                          value={triageData.spo2}
+                          onChange={e => setTriageData({...triageData, spo2: e.target.value})}
+                        />
+                      </div>
+                    </div>
+                 </div>
+               </div>
+
+               <div className="p-8 md:p-10 bg-slate-50 border-t border-slate-100 flex gap-6">
+                 <button 
+                   onClick={() => {
+                      setShowTriageModal(false);
+                      setIsEditTriageMode(false);
+                   }}
+                   className="flex-1 py-5 bg-white border border-slate-200 text-[10px] font-black text-slate-400 uppercase tracking-widest rounded-2xl hover:bg-slate-50 transition-all"
+                 >
+                   Annuler
+                 </button>
+                 <button 
+                   disabled={searching}
+                   onClick={handleAddToQueue}
+                   className="flex-[2] py-5 bg-slate-900 text-white rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] shadow-xl shadow-slate-200 hover:bg-riverside-red transition-all flex items-center justify-center gap-3 disabled:opacity-50"
+                 >
+                   {searching ? <Loader2 className="animate-spin" size={20} /> : <CheckCircle2 size={20} />}
+                   {isEditTriageMode ? "Modifier le Triage" : "Confirmer l'Arrivée"}
+                 </button>
                </div>
             </motion.div>
           </>
@@ -678,7 +872,13 @@ function AdmissionDashboard() {
 
       <NewPatientModal 
         isOpen={isPatientModalOpen}
-        onClose={() => setIsPatientModalOpen(false)}
+        onClose={() => {
+          setIsPatientModalOpen(false);
+          setIsEditPatientMode(false);
+          setEditingPatientData(null);
+        }}
+        isEditMode={isEditPatientMode}
+        initialData={editingPatientData}
         initialName={initialNameForModal}
         onSuccess={handleCreateSuccess}
       />
