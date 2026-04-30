@@ -116,6 +116,12 @@ interface PatientWaiting {
 
 export default function MedicalPage() {
   const { user } = useAuth();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   const [selectedPatient, setSelectedPatient] = useState<PatientWaiting | null>(null);
   const [activeTab, setActiveTab] = useState<'CONSULTATION' | 'HISTORIQUE' | 'OUTILS' | 'IA_INSIGHT'>('CONSULTATION');
   const [medicalView, setMedicalView] = useState<'QUEUE' | 'DATABASE'>('QUEUE');
@@ -278,29 +284,35 @@ export default function MedicalPage() {
   };
 
   useEffect(() => {
-    fetchWaitingPatients();
+    if (mounted && user) {
+      fetchWaitingPatients();
+    }
 
     // Activation du Temps Réel pour la file d'attente
-    const channel = supabase
-      .channel('sejours-actifs-realtime')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'sejours_actifs'
-        },
-        () => {
-          console.log("Changement détecté dans sejours_actifs, rafraîchissement...");
-          fetchWaitingPatients();
-        }
-      )
-      .subscribe();
+    let channel: any;
+    
+    if (mounted && user) {
+      channel = supabase
+        .channel('sejours-actifs-realtime')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'sejours_actifs'
+          },
+          () => {
+            console.log("Changement détecté dans sejours_actifs, rafraîchissement...");
+            fetchWaitingPatients();
+          }
+        )
+        .subscribe();
+    }
 
     return () => {
-      supabase.removeChannel(channel);
+      if (channel) supabase.removeChannel(channel);
     };
-  }, [fetchWaitingPatients]);
+  }, [fetchWaitingPatients, mounted, user]);
 
   const chargerHistorique = async (patientId: string) => {
     setLoadingHistory(true);
@@ -470,6 +482,8 @@ export default function MedicalPage() {
   };
 
   // --- RENDU UI ---
+  if (!mounted) return null;
+
   return (
     <div className="p-8 max-w-7xl mx-auto space-y-8 min-h-screen pb-20">
       {/* Header */}

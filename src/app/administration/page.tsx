@@ -98,6 +98,12 @@ interface StockItem {
 
 export default function AdministrationPage() {
   const { user } = useAuth();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   const [activeTab, setActiveTab] = useState<TabType>("taches");
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
@@ -379,7 +385,7 @@ export default function AdministrationPage() {
       const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
       
       pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, pdfHeight);
-      pdf.save(`Rapport_Riverside_${rapport.type_rapport}_${new Date(rapport.created_at).toLocaleDateString()}.pdf`);
+      pdf.save(`Rapport_Riverside_${rapport.type_rapport}_${rapport.created_at ? new Date(rapport.created_at).toLocaleDateString() : 'N/A'}.pdf`);
       toast.dismiss();
       toast.success("Document prêt !");
     } catch (err) {
@@ -390,6 +396,8 @@ export default function AdministrationPage() {
       setPrintingRapport(null);
     }
   };
+
+  if (!mounted) return null;
 
   return (
     <div className="w-full max-w-full overflow-x-hidden space-y-6 pb-32 px-4 md:px-8 bg-slate-50/20 min-h-screen">
@@ -601,7 +609,7 @@ export default function AdministrationPage() {
                         <td className="px-8 py-4 text-[11px] font-black text-slate-900 uppercase">
                           <div className="flex items-center gap-2">
                             <Calendar size={12} className="text-slate-300" />
-                            {new Date(r.created_at).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })}
+                            {r.created_at ? new Date(r.created_at).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' }) : 'N/A'}
                           </div>
                         </td>
                         <td className="px-8 py-4 text-[11px] font-bold text-slate-600 uppercase flex items-center gap-2">
@@ -647,7 +655,7 @@ export default function AdministrationPage() {
                  <tbody className="divide-y divide-slate-50">
                    {auditLogs.map(log => (
                      <tr key={log.id}>
-                       <td className="px-4 py-2 text-slate-400">{new Date(log.created_at).toLocaleString()}</td>
+                       <td className="px-4 py-2 text-slate-400">{log.created_at ? new Date(log.created_at).toLocaleString() : 'N/A'}</td>
                        <td className="px-4 py-2 font-black uppercase text-amber-600">{log.action}</td>
                        <td className="px-4 py-2 text-slate-500">{log.details}</td>
                      </tr>

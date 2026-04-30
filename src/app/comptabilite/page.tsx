@@ -51,14 +51,19 @@ const DEFAULT_MONTHS = [
 ];
 
 export default function AccountingPage() {
-  const { userRole } = useAuth();
+  const { userRole, user } = useAuth();
   const router = useRouter();
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    if (userRole !== 'patron' && userRole !== 'comptable') {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (mounted && userRole !== 'patron' && userRole !== 'comptable') {
       router.push('/');
     }
-  }, [userRole, router]);
+  }, [userRole, router, mounted]);
 
   const [entries, setEntries] = useState<Entry[]>([]);
   const [categories, setCategories] = useState<CategoryOption[]>([]);
@@ -173,7 +178,7 @@ export default function AccountingPage() {
 
   useEffect(() => {
     fetchData();
-  }, [selectedMonth, selectedYear]);
+  }, [selectedMonth, selectedYear, fetchData]);
 
   const handleCreateBudgetLine = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -267,6 +272,8 @@ export default function AccountingPage() {
   };
 
   const gap = stats.entrees - systemCashTotal;
+
+  if (!mounted) return null;
 
   return (
     <div className="min-h-screen bg-slate-50 p-4 md:p-10 font-sans print:bg-white print:p-0 overflow-x-hidden">
@@ -518,7 +525,7 @@ export default function AccountingPage() {
                            <ArrowDownRight size={16} />}
                         </div>
                         <div>
-                          <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">{new Date(item.date_operation).toLocaleDateString()} • {item.categorie}</p>
+                          <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">{item.date_operation ? new Date(item.date_operation).toLocaleDateString() : 'N/A'} • {item.categorie}</p>
                           <p className="text-xs font-bold text-slate-700">{item.libelle || item.categorie}</p>
                         </div>
                       </div>
@@ -527,7 +534,7 @@ export default function AccountingPage() {
                           "text-sm font-black tabular-nums",
                           item.flux === "ENTREE" ? "text-emerald-600" : "text-red-600"
                         )}>
-                           {item.flux === "ENTREE" ? "+" : "-"} {item.montant.toLocaleString()}
+                           {item.flux === "ENTREE" ? "+" : "-"} {(item.montant || 0).toLocaleString()}
                         </p>
                         <p className="text-[7px] font-black text-slate-300 uppercase tracking-widest italic">FCFA</p>
                       </div>
@@ -614,9 +621,9 @@ export default function AccountingPage() {
                 <tbody>
                   {items.map(e => (
                     <tr key={e.id}>
-                      <td className="border p-3 text-xs">{new Date(e.date_operation).toLocaleDateString()}</td>
+                      <td className="border p-3 text-xs">{e.date_operation ? new Date(e.date_operation).toLocaleDateString() : 'N/A'}</td>
                       <td className="border p-3 text-xs">{e.libelle || e.categorie}</td>
-                      <td className="border p-3 text-right text-xs font-black tabular-nums">{e.montant.toLocaleString()}</td>
+                      <td className="border p-3 text-right text-xs font-black tabular-nums">{(e.montant || 0).toLocaleString()}</td>
                     </tr>
                   ))}
                   <tr className="bg-emerald-50/50">
@@ -657,9 +664,9 @@ export default function AccountingPage() {
                 <tbody>
                   {items.map(e => (
                     <tr key={e.id}>
-                      <td className="border p-3 text-xs">{new Date(e.date_operation).toLocaleDateString()}</td>
+                      <td className="border p-3 text-xs">{e.date_operation ? new Date(e.date_operation).toLocaleDateString() : 'N/A'}</td>
                       <td className="border p-3 text-xs">{e.libelle || e.categorie}</td>
-                      <td className="border p-3 text-right text-xs font-black tabular-nums">{e.montant.toLocaleString()}</td>
+                      <td className="border p-3 text-right text-xs font-black tabular-nums">{(e.montant || 0).toLocaleString()}</td>
                     </tr>
                   ))}
                   <tr className="bg-red-50/50">
@@ -709,7 +716,7 @@ export default function AccountingPage() {
                 <tr key={idx}>
                   <td className="border p-2 text-[10px]">{inv.methode_paiement || "Standard"}</td>
                   <td className="border p-2 text-xs">{inv.patients?.nom_complet || "Externe"}</td>
-                  <td className="border p-2 text-right text-[10px] font-black tabular-nums">{(inv.part_assurance || inv.montant_total).toLocaleString()} FCFA</td>
+                  <td className="border p-2 text-right text-[10px] font-black tabular-nums">{(inv.part_assurance || inv.montant_total || 0).toLocaleString()} FCFA</td>
                 </tr>
               ))}
               {insuranceInvoices.length === 0 && (

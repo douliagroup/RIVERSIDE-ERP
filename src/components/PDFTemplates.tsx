@@ -10,6 +10,14 @@ interface PDFTemplateProps {
 }
 
 export const PDFTemplates = ({ id, type, data }: PDFTemplateProps) => {
+  const [isMounted, setIsMounted] = React.useState(false);
+
+  React.useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
+  if (!isMounted) return null;
+
   return (
     <div 
       id={id} 
@@ -150,27 +158,27 @@ export const PDFTemplates = ({ id, type, data }: PDFTemplateProps) => {
            <div className="grid grid-cols-2 gap-8">
              <div className="p-6 bg-emerald-50 border border-emerald-100 rounded-3xl">
                 <h3 className="text-xs font-black text-emerald-600 uppercase mb-4">Total Recettes</h3>
-                <p className="text-3xl font-black text-emerald-700">{data?.recettes?.toLocaleString()} <span className="text-xs">FCFA</span></p>
+                <p className="text-3xl font-black text-emerald-700">{(data?.recettes || 0).toLocaleString()} <span className="text-xs">FCFA</span></p>
              </div>
              <div className="p-6 bg-red-50 border border-red-100 rounded-3xl">
                 <h3 className="text-xs font-black text-red-600 uppercase mb-4">Total Dépenses</h3>
-                <p className="text-3xl font-black text-red-700">{data?.depenses?.toLocaleString()} <span className="text-xs">FCFA</span></p>
+                <p className="text-3xl font-black text-red-700">{(data?.depenses || 0).toLocaleString()} <span className="text-xs">FCFA</span></p>
              </div>
            </div>
 
            <div className="mt-10 border border-slate-200 rounded-[2rem] overflow-hidden">
              <div className="bg-slate-900 text-white p-6 flex justify-between items-center">
                <h3 className="text-sm font-black uppercase tracking-widest">Résultat Net (Solde)</h3>
-               <p className="text-3xl font-black underline">{(data?.recettes - data?.depenses).toLocaleString()} FCFA</p>
+               <p className="text-3xl font-black underline">{((data?.recettes || 0) - (data?.depenses || 0)).toLocaleString()} FCFA</p>
              </div>
              <div className="p-8 space-y-4">
                <div className="flex justify-between items-center border-b pb-2">
                  <span className="text-xs font-bold text-slate-500 uppercase">Part en Banque</span>
-                 <span className="text-sm font-black text-slate-900">{data?.banque?.toLocaleString()} FCFA</span>
+                 <span className="text-sm font-black text-slate-900">{(data?.banque || 0).toLocaleString()} FCFA</span>
                </div>
                <div className="flex justify-between items-center border-b pb-2">
                  <span className="text-xs font-bold text-slate-500 uppercase">Trésorerie Disponible</span>
-                 <span className="text-sm font-black text-emerald-600">{(data?.recettes - data?.depenses - data?.banque).toLocaleString()} FCFA</span>
+                 <span className="text-sm font-black text-emerald-600">{((data?.recettes || 0) - (data?.depenses || 0) - (data?.banque || 0)).toLocaleString()} FCFA</span>
                </div>
              </div>
            </div>
@@ -190,9 +198,9 @@ export const PDFTemplates = ({ id, type, data }: PDFTemplateProps) => {
                  {data?.lignes?.map((l: any, i: number) => (
                    <tr key={i}>
                      <td className="p-3 font-bold uppercase">{l.titre}</td>
-                     <td className="p-3 text-right">{l.prevu?.toLocaleString()}</td>
-                     <td className="p-3 text-right">{l.reel?.toLocaleString()}</td>
-                     <td className="p-3 text-right font-black">{(l.prevu - l.reel).toLocaleString()}</td>
+                     <td className="p-3 text-right">{(l.prevu || 0).toLocaleString()}</td>
+                     <td className="p-3 text-right">{(l.reel || 0).toLocaleString()}</td>
+                     <td className="p-3 text-right font-black">{((l.prevu || 0) - (l.reel || 0)).toLocaleString()}</td>
                    </tr>
                  ))}
                </tbody>

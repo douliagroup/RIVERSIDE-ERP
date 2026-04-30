@@ -310,14 +310,14 @@ export default function PatronDashboard() {
                                 <p className="text-[10px] text-slate-500 font-bold uppercase">{exp.liste_beneficiaires?.nom || "Inconnu"}</p>
                                 <span className="text-slate-700">•</span>
                                 <p className="text-[10px] text-slate-600 font-mono tracking-tighter" suppressHydrationWarning>
-                                  {new Date(exp.date_depense).toLocaleDateString()}
+                                  {exp.date_depense ? new Date(exp.date_depense).toLocaleDateString() : 'N/A'}
                                 </p>
                               </div>
                             </div>
                           </td>
                           <td className="px-8 py-6">
                             <span className="text-sm font-black text-white tabular-nums">
-                              {exp.montant.toLocaleString()} <span className="text-[10px] text-slate-500">FCFA</span>
+                              {(exp.montant || 0).toLocaleString()} <span className="text-[10px] text-slate-500">FCFA</span>
                             </span>
                           </td>
                           <td className="px-8 py-6">
@@ -439,7 +439,7 @@ export default function PatronDashboard() {
                           <div className="flex items-center gap-2 mt-1.5">
                             <span className="text-[9px] font-bold text-slate-500 bg-slate-800 px-1.5 py-0.5 rounded uppercase">{log.utilisateur}</span>
                             <span className="text-[9px] text-slate-600 font-mono italic" suppressHydrationWarning>
-                              {new Date(log.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              {log.created_at ? new Date(log.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'N/A'}
                             </span>
                           </div>
                           {log.details && (

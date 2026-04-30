@@ -39,13 +39,18 @@ import toast from "react-hot-toast";
 export default function PatronInsight() {
   const { userRole } = useAuth();
   const router = useRouter();
+  const [mounted, setMounted] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (userRole !== 'patron') {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (mounted && userRole !== 'patron') {
       router.push('/');
     }
-  }, [userRole, router]);
+  }, [userRole, router, mounted]);
 
   const [stats, setStats] = useState({
     ca_jour: 0,
@@ -245,7 +250,7 @@ export default function PatronInsight() {
     }
   };
 
-  if (loading) {
+  if (!mounted || loading) {
     return (
       <div className="min-h-screen bg-[#020617] flex flex-col items-center justify-center gap-4">
         <Loader2 className="animate-spin text-red-600" size={48} />

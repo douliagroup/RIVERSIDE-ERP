@@ -359,7 +359,7 @@ function AdmissionDashboard() {
             <span class="value">${entry.patients?.nom_complet}</span>
             
             <span class="label">Heure Arrivée</span>
-            <span class="value">${new Date(entry.heure_arrivee).toLocaleTimeString()}</span>
+            <span class="value">${entry.heure_arrivee ? new Date(entry.heure_arrivee).toLocaleTimeString() : 'N/A'}</span>
             
             <span class="label">Service</span>
             <span class="value">${entry.service}</span>
@@ -568,7 +568,7 @@ function AdmissionDashboard() {
                       >
                         <td className="px-8 py-6">
                            <span className="text-xs font-black text-slate-400 italic font-mono uppercase" suppressHydrationWarning>
-                             {new Date(entry.heure_arrivee).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                             {entry.heure_arrivee ? new Date(entry.heure_arrivee).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'N/A'}
                            </span>
                         </td>
                         <td className="px-8 py-6">

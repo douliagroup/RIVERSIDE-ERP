@@ -356,7 +356,7 @@ export default function DashboardPage() {
                       </span>
                     </td>
                     <td className="px-8 py-5 text-slate-400 text-[10px] font-black tracking-widest tabular-nums">
-                      {new Date(sejour.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                      {sejour.created_at ? new Date(sejour.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : 'N/A'}
                     </td>
                     <td className="px-8 py-5 text-center">
                       <StatusBadge status={sejour.statut} />

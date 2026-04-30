@@ -504,7 +504,7 @@ export default function PatientsEMRPage() {
                                     </div>
                                     <div>
                                       <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1" suppressHydrationWarning>
-                                        {new Date(consult.created_at).toLocaleDateString()} • {new Date(consult.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                        {consult.created_at ? new Date(consult.created_at).toLocaleDateString() : 'N/A'} • {consult.created_at ? new Date(consult.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'N/A'}
                                       </p>
                                       <p className="text-xs font-black text-slate-900 uppercase">Consultation Générale</p>
                                     </div>
@@ -589,17 +589,17 @@ export default function PatientsEMRPage() {
                               {factures.map(f => (
                                 <tr key={f.id} className="group hover:bg-slate-50/50 transition-colors">
                                   <td className="py-4">
-                                    <p className="text-xs font-bold text-slate-800" suppressHydrationWarning>{new Date(f.created_at).toLocaleDateString()}</p>
+                                    <p className="text-xs font-bold text-slate-800" suppressHydrationWarning>{f.created_at ? new Date(f.created_at).toLocaleDateString() : 'N/A'}</p>
                                     <p className="text-[8px] font-black text-slate-300 uppercase italic">#FAC-{f.id.substring(0, 8)}</p>
                                   </td>
                                   <td className="py-4 text-right">
-                                    <p className="text-xs font-black text-slate-900 tabular-nums">{f.montant_total.toLocaleString()} FCFA</p>
+                                    <p className="text-xs font-black text-slate-900 tabular-nums">{(f.montant_total || 0).toLocaleString()} FCFA</p>
                                   </td>
                                   <td className="py-4 text-right">
                                     <p className={cn(
                                       "text-xs font-black tabular-nums",
                                       f.reste_a_payer > 0 ? "text-red-600" : "text-slate-400"
-                                    )}>{f.reste_a_payer.toLocaleString()} FCFA</p>
+                                    )}>{(f.reste_a_payer || 0).toLocaleString()} FCFA</p>
                                   </td>
                                   <td className="py-4 text-right">
                                     <span className={cn(
