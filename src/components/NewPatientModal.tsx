@@ -31,7 +31,11 @@ export default function NewPatientModal({ isOpen, onClose, onSuccess, initialNam
     sexe: "M",
     date_naissance: "",
     age: "",
-    type_assurance: "Cash"
+    type_assurance: "Cash",
+    profession: "",
+    societe: "",
+    quartier: "",
+    accompagnateur: ""
   });
 
   React.useEffect(() => {
@@ -68,7 +72,11 @@ export default function NewPatientModal({ isOpen, onClose, onSuccess, initialNam
         sexe: "M",
         date_naissance: "",
         age: "",
-        type_assurance: "Cash"
+        type_assurance: "Cash",
+        profession: "",
+        societe: "",
+        quartier: "",
+        accompagnateur: ""
       });
     } catch (err: any) {
       console.error("Error creating patient:", err);
@@ -87,12 +95,12 @@ export default function NewPatientModal({ isOpen, onClose, onSuccess, initialNam
           initial={{ opacity: 0, scale: 0.95, y: 20 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95, y: 20 }}
-          className="bg-white w-full max-w-lg rounded-[2.5rem] shadow-2xl relative overflow-hidden"
+          className="bg-white w-full max-w-2xl rounded-[2.5rem] shadow-2xl relative overflow-hidden"
         >
           {/* Accent Line */}
           <div className="absolute top-0 left-0 w-full h-2 bg-riverside-red" />
           
-          <div className="p-8 md:p-10">
+          <div className="p-8 md:p-10 max-h-[90vh] overflow-y-auto scrollbar-hide">
             <div className="flex items-center justify-between mb-8">
               <div className="flex items-center gap-4">
                 <div className="w-12 h-12 bg-red-50 rounded-2xl flex items-center justify-center text-riverside-red">
@@ -112,19 +120,19 @@ export default function NewPatientModal({ isOpen, onClose, onSuccess, initialNam
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-6">
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nom Complet du Patient</label>
-                <input 
-                  autoFocus
-                  required
-                  value={form.nom_complet}
-                  onChange={(e) => setForm({...form, nom_complet: e.target.value})}
-                  placeholder="Ex: TCHOKOUTE Jean Philippe"
-                  className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl text-xs font-bold outline-none focus:border-riverside-red focus:bg-white transition-all uppercase"
-                />
-              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-1.5 md:col-span-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nom Complet du Patient *</label>
+                  <input 
+                    autoFocus
+                    required
+                    value={form.nom_complet}
+                    onChange={(e) => setForm({...form, nom_complet: e.target.value})}
+                    placeholder="Ex: TCHOKOUTE Jean Philippe"
+                    className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl text-xs font-bold outline-none focus:border-riverside-red focus:bg-white transition-all uppercase"
+                  />
+                </div>
 
-              <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Téléphone</label>
                   <div className="relative">
@@ -137,6 +145,7 @@ export default function NewPatientModal({ isOpen, onClose, onSuccess, initialNam
                     />
                   </div>
                 </div>
+
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Assurance / Couverture</label>
                   <div className="relative">
@@ -158,9 +167,7 @@ export default function NewPatientModal({ isOpen, onClose, onSuccess, initialNam
                     </select>
                   </div>
                 </div>
-              </div>
 
-              <div className="grid grid-cols-3 gap-4">
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Sexe</label>
                   <select 
@@ -172,22 +179,63 @@ export default function NewPatientModal({ isOpen, onClose, onSuccess, initialNam
                     <option value="F">Féminin</option>
                   </select>
                 </div>
-                <div className="space-y-1.5 col-span-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Date de Naissance ou Âge</label>
+
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Âge (ou Date de Naissance)</label>
                   <div className="flex gap-2">
+                    <input 
+                      placeholder="Âge"
+                      value={form.age}
+                      onChange={(e) => setForm({...form, age: e.target.value})}
+                      className="w-20 p-4 bg-slate-50 border border-slate-100 rounded-2xl text-xs font-bold text-center outline-none focus:border-riverside-red focus:bg-white"
+                    />
                     <input 
                       type="date"
                       value={form.date_naissance}
                       onChange={(e) => setForm({...form, date_naissance: e.target.value})}
                       className="flex-1 p-4 bg-slate-50 border border-slate-100 rounded-2xl text-xs font-bold outline-none focus:border-riverside-red focus:bg-white"
                     />
-                    <input 
-                      placeholder="Ou Âge"
-                      value={form.age}
-                      onChange={(e) => setForm({...form, age: e.target.value})}
-                      className="w-24 p-4 bg-slate-50 border border-slate-100 rounded-2xl text-xs font-bold text-center outline-none focus:border-riverside-red focus:bg-white"
-                    />
                   </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Profession</label>
+                  <input 
+                    value={form.profession}
+                    onChange={(e) => setForm({...form, profession: e.target.value})}
+                    placeholder="Ex: Ingénieur"
+                    className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl text-xs font-bold outline-none focus:border-riverside-red focus:bg-white transition-all uppercase"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Société / Employeur</label>
+                  <input 
+                    value={form.societe}
+                    onChange={(e) => setForm({...form, societe: e.target.value})}
+                    placeholder="Ex: Riverside Corp"
+                    className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl text-xs font-bold outline-none focus:border-riverside-red focus:bg-white transition-all uppercase"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Quartier de Résidence</label>
+                  <input 
+                    value={form.quartier}
+                    onChange={(e) => setForm({...form, quartier: e.target.value})}
+                    placeholder="Ex: Bonapriso"
+                    className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl text-xs font-bold outline-none focus:border-riverside-red focus:bg-white transition-all uppercase"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Accompagnateur / Confiance</label>
+                  <input 
+                    value={form.accompagnateur}
+                    onChange={(e) => setForm({...form, accompagnateur: e.target.value})}
+                    placeholder="Nom & Tél"
+                    className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl text-xs font-bold outline-none focus:border-riverside-red focus:bg-white transition-all uppercase"
+                  />
                 </div>
               </div>
 

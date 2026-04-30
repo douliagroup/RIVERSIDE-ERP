@@ -27,6 +27,7 @@ import {
   Heart,
   MoreHorizontal
 } from "lucide-react";
+import { supabase } from "@/src/lib/supabase";
 import NewPatientModal from "@/src/components/NewPatientModal";
 import { cn } from "@/src/lib/utils";
 import { motion, AnimatePresence } from "motion/react";
@@ -43,6 +44,8 @@ interface Patient {
   age?: number;
   profession?: string;
   societe?: string;
+  quartier?: string;
+  accompagnateur?: string;
   numero_assurance?: string;
   alertes_medicales?: string;
   groupe_sanguin?: string;

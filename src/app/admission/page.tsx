@@ -23,6 +23,7 @@ import {
   Zap,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
+import { supabase } from "@/src/lib/supabase";
 import NewPatientModal from "@/src/components/NewPatientModal";
 import { cn } from "@/src/lib/utils";
 import { toast } from "react-hot-toast";
@@ -35,6 +36,10 @@ interface Patient {
   sexe: string;
   date_naissance?: string;
   age?: number;
+  profession?: string;
+  societe?: string;
+  quartier?: string;
+  accompagnateur?: string;
   type_assurance: string;
   numero_assurance?: string;
 }
@@ -44,6 +49,7 @@ interface QueueEntry {
   patient_id: string;
   heure_arrivee: string;
   motif: string;
+  orientation?: string;
   service: string;
   tension?: string;
   temperature?: string;
@@ -88,6 +94,7 @@ function AdmissionDashboard() {
   const [showTriageModal, setShowTriageModal] = useState(false);
   const [triageData, setTriageData] = useState({
     motif: "",
+    orientation: "Consultation",
     service: "Généraliste",
     tension: "",
     temperature: "",
@@ -207,6 +214,7 @@ function AdmissionDashboard() {
     const payload = {
         patient_id: selectedPatient.id,
         motif: triageData.motif,
+        orientation: triageData.orientation,
         service: triageData.service,
         tension: triageData.tension,
         temperature: triageData.temperature,
@@ -217,17 +225,22 @@ function AdmissionDashboard() {
     };
 
     try {
+      // Input validation
+      if (!triageData.motif) return toast.error("Le motif est obligatoire");
+      if (!triageData.orientation) return toast.error("L'orientation est obligatoire");
+
       // On tente file_attente, puis sejours_actifs
       const { error } = await supabase.from('file_attente').insert([payload]);
       
       if (error) {
           // Fallback sejours_actifs (structure differente)
-          await supabase.from('sejours_actifs').insert([{
+          const { error: altError } = await supabase.from('sejours_actifs').insert([{
             patient_id: selectedPatient.id,
             motif_visite: triageData.motif,
             statut: "En attente",
             urgence: triageData.urgence
           }]);
+          if (altError) throw altError;
       }
       
       toast.success(`${selectedPatient.nom_complet} ajouté à la file d'attente !`);
@@ -456,8 +469,15 @@ function AdmissionDashboard() {
                         </td>
                         <td className="px-8 py-6">
                           <div>
-                            <p className="text-[11px] font-black text-slate-900 uppercase leading-none">{entry.service}</p>
-                            <p className="text-[10px] text-slate-500 font-bold mt-2 uppercase tracking-tight line-clamp-1 italic">{entry.motif}</p>
+                            <div className="flex items-center gap-2 mb-1">
+                               <span className="px-2 py-0.5 bg-slate-900 text-white text-[8px] font-black rounded uppercase">
+                                 {entry.orientation || "Consultation"}
+                               </span>
+                               <span className="text-[10px] font-black text-slate-900 uppercase">
+                                 {entry.service}
+                               </span>
+                            </div>
+                            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-tight line-clamp-1 italic">{entry.motif}</p>
                           </div>
                         </td>
                         <td className="px-8 py-6 text-center">
@@ -522,46 +542,67 @@ function AdmissionDashboard() {
                  <div className="w-16 h-16 bg-red-50 rounded-2xl flex items-center justify-center text-riverside-red">
                     <Stethoscope size={28} />
                  </div>
-               </div>
-
                <div className="space-y-6">
-                  <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                    <div className="flex items-center gap-3">
-                       <AlertTriangle className={cn(triageData.urgence ? "text-riverside-red" : "text-slate-300")} size={20} />
-                       <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Niveau d&apos;Urgence</span>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                      <div className="flex items-center gap-3">
+                         <AlertTriangle className={cn(triageData.urgence ? "text-riverside-red" : "text-slate-300")} size={20} />
+                         <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Urgence</span>
+                      </div>
+                      <button 
+                        onClick={() => setTriageData({...triageData, urgence: !triageData.urgence})}
+                        className={cn(
+                          "px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all",
+                          triageData.urgence ? "bg-riverside-red text-white shadow-lg shadow-red-200" : "bg-white text-slate-400 border border-slate-100"
+                        )}
+                      >
+                        {triageData.urgence ? "URGENT" : "NORMAL"}
+                      </button>
                     </div>
-                    <button 
-                      onClick={() => setTriageData({...triageData, urgence: !triageData.urgence})}
-                      className={cn(
-                        "px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all",
-                        triageData.urgence ? "bg-riverside-red text-white shadow-lg shadow-red-200" : "bg-white text-slate-400 border border-slate-100"
-                      )}
-                    >
-                      {triageData.urgence ? "URGENT" : "NORMAL"}
-                    </button>
+
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Orientation (Cible)</label>
+                      <select 
+                        required
+                        className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl text-[10px] font-black uppercase tracking-widest outline-none focus:border-riverside-red transition-all"
+                        value={triageData.orientation}
+                        onChange={e => setTriageData({...triageData, orientation: e.target.value})}
+                      >
+                        <option value="Consultation">Consultation</option>
+                        <option value="Hospitalisation">Hospitalisation</option>
+                        <option value="Infirmerie">Infirmerie</option>
+                        <option value="Chirurgie">Chirurgie</option>
+                        <option value="Laboratoire">Laboratoire</option>
+                        <option value="Sortie">Sortie</option>
+                      </select>
+                    </div>
                   </div>
 
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Service / Spécialité</label>
-                    <select 
-                      className="w-full p-5 bg-slate-50 border border-slate-100 rounded-2xl text-[11px] font-black uppercase tracking-widest outline-none focus:border-riverside-red transition-all"
-                      value={triageData.service}
-                      onChange={e => setTriageData({...triageData, service: e.target.value})}
-                    >
-                      {services.map(s => <option key={s} value={s}>{s}</option>)}
-                    </select>
-                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Service / Spécialité</label>
+                      <select 
+                        className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl text-[10px] font-black uppercase tracking-widest outline-none focus:border-riverside-red transition-all"
+                        value={triageData.service}
+                        onChange={e => setTriageData({...triageData, service: e.target.value})}
+                      >
+                        {services.map(s => <option key={s} value={s}>{s}</option>)}
+                      </select>
+                    </div>
 
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Motif de consultation</label>
-                    <textarea 
-                      required
-                      className="w-full p-5 bg-slate-50 border border-slate-100 rounded-2xl text-sm font-bold outline-none focus:border-riverside-red transition-all resize-none"
-                      rows={3}
-                      placeholder="Douleurs abdominales, Fièvre, Contrôle..."
-                      value={triageData.motif}
-                      onChange={e => setTriageData({...triageData, motif: e.target.value})}
-                    />
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Motif de la visite *</label>
+                      <textarea 
+                        required
+                        className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl text-xs font-bold outline-none focus:border-riverside-red transition-all resize-none"
+                        rows={2}
+                        placeholder="Pourquoi le patient consulte ?"
+                        value={triageData.motif}
+                        onChange={e => setTriageData({...triageData, motif: e.target.value})}
+                      />
+                    </div>
+                  </div>
+>
                   </div>
 
                   <div className="grid grid-cols-3 gap-4">
