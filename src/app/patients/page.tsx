@@ -503,7 +503,7 @@ export default function PatientsEMRPage() {
                                       {consultations.length - idx}
                                     </div>
                                     <div>
-                                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">
+                                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1" suppressHydrationWarning>
                                         {new Date(consult.created_at).toLocaleDateString()} • {new Date(consult.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                       </p>
                                       <p className="text-xs font-black text-slate-900 uppercase">Consultation Générale</p>
@@ -589,7 +589,7 @@ export default function PatientsEMRPage() {
                               {factures.map(f => (
                                 <tr key={f.id} className="group hover:bg-slate-50/50 transition-colors">
                                   <td className="py-4">
-                                    <p className="text-xs font-bold text-slate-800">{new Date(f.created_at).toLocaleDateString()}</p>
+                                    <p className="text-xs font-bold text-slate-800" suppressHydrationWarning>{new Date(f.created_at).toLocaleDateString()}</p>
                                     <p className="text-[8px] font-black text-slate-300 uppercase italic">#FAC-{f.id.substring(0, 8)}</p>
                                   </td>
                                   <td className="py-4 text-right">

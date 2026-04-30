@@ -115,6 +115,12 @@ function AdmissionDashboard() {
   const services = ["Généraliste", "Pédiatre", "Gynécologue", "Cardiologue", "Ophtalmologue", "Chirurgien"];
 
   useEffect(() => {
+    // Check for query params
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('new') === 'true') {
+      setIsPatientModalOpen(true);
+    }
+
     fetchWaitingList();
     // Realtime subscription (using sejours_actifs as fallback if file_attente fails)
     const subscription = supabase
@@ -233,6 +239,7 @@ function AdmissionDashboard() {
       const { error } = await supabase.from('file_attente').insert([payload]);
       
       if (error) {
+          console.error("file_attente_error", error);
           // Fallback sejours_actifs (structure differente)
           const { error: altError } = await supabase.from('sejours_actifs').insert([{
             patient_id: selectedPatient.id,
@@ -240,7 +247,10 @@ function AdmissionDashboard() {
             statut: "En attente",
             urgence: triageData.urgence
           }]);
-          if (altError) throw altError;
+          if (altError) {
+            console.error("sejours_actifs_error", altError);
+            throw new Error(`Erreur Supabase: ${error.message} (Fallback: ${altError.message})`);
+          }
       }
       
       toast.success(`${selectedPatient.nom_complet} ajouté à la file d'attente !`);
@@ -330,12 +340,12 @@ function AdmissionDashboard() {
           <div className="bg-white/80 backdrop-blur-md p-4 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-4 px-6">
             <div className="text-right">
               <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Aujourd&apos;hui</p>
-              <p className="text-xl font-black text-slate-900">{waitingList.length} Patients</p>
+              <p className="text-xl font-black text-slate-900" suppressHydrationWarning>{waitingList.length} Patients</p>
             </div>
             <div className="w-px h-10 bg-slate-100" />
             <div className="text-right">
               <p className="text-[9px] font-black text-red-400 uppercase tracking-widest">Urgences</p>
-              <p className="text-xl font-black text-riverside-red">{waitingList.filter(e => e.urgence).length}</p>
+              <p className="text-xl font-black text-riverside-red" suppressHydrationWarning>{waitingList.filter(e => e.urgence).length}</p>
             </div>
           </div>
         </div>
@@ -421,7 +431,7 @@ function AdmissionDashboard() {
               <div className="p-8 border-b border-slate-50 flex items-center justify-between bg-white">
                 <div>
                   <h2 className="text-sm font-black text-slate-900 uppercase tracking-widest">Salle d&apos;Attente</h2>
-                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">File active du {new Date().toLocaleDateString()}</p>
+                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1" suppressHydrationWarning>File active du {new Date().toLocaleDateString()}</p>
                 </div>
                 <button 
                   onClick={fetchWaitingList}
@@ -452,7 +462,7 @@ function AdmissionDashboard() {
                         )}
                       >
                         <td className="px-8 py-6">
-                           <span className="text-xs font-black text-slate-900 italic">
+                           <span className="text-xs font-black text-slate-900 italic" suppressHydrationWarning>
                              {new Date(entry.heure_arrivee).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                            </span>
                         </td>

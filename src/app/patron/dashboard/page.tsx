@@ -217,7 +217,7 @@ export default function PatronDashboard() {
         
         <div className="flex items-center gap-6">
           <button 
-            onClick={() => router.push("/admission")}
+            onClick={() => router.push("/admission?new=true")}
             className="hidden md:flex items-center gap-2 bg-riverside-red text-white px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-red-500/20 hover:scale-105 transition-all"
           >
             <Zap size={16} /> Nouvelle Admission
@@ -309,7 +309,7 @@ export default function PatronDashboard() {
                               <div className="flex items-center gap-2 mt-1.5">
                                 <p className="text-[10px] text-slate-500 font-bold uppercase">{exp.liste_beneficiaires?.nom || "Inconnu"}</p>
                                 <span className="text-slate-700">•</span>
-                                <p className="text-[10px] text-slate-600 font-mono tracking-tighter">
+                                <p className="text-[10px] text-slate-600 font-mono tracking-tighter" suppressHydrationWarning>
                                   {new Date(exp.date_depense).toLocaleDateString()}
                                 </p>
                               </div>
@@ -438,7 +438,7 @@ export default function PatronDashboard() {
                           <p className="text-[10px] font-black text-white uppercase tracking-tight leading-none">{log.action}</p>
                           <div className="flex items-center gap-2 mt-1.5">
                             <span className="text-[9px] font-bold text-slate-500 bg-slate-800 px-1.5 py-0.5 rounded uppercase">{log.utilisateur}</span>
-                            <span className="text-[9px] text-slate-600 font-mono italic">
+                            <span className="text-[9px] text-slate-600 font-mono italic" suppressHydrationWarning>
                               {new Date(log.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                             </span>
                           </div>
