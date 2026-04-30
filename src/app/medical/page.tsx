@@ -24,11 +24,26 @@ import {
   History,
   Send,
   MessageSquare,
+  Search,
+  ExternalLink,
+  Edit,
+  Baby,
+  Calendar,
+  Phone,
+  MapPin,
+  X,
+  Building2, 
+  Briefcase, 
+  Shield,
+  MoreVertical,
+  Trash
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { cn } from "../../lib/utils";
 import { useAuth } from "../../context/AuthContext";
 import ReactMarkdown from "react-markdown";
+
+import NewPatientModal from "@/src/components/NewPatientModal";
 
 // Type definitions for SpeechRecognition
 const MEDICAMENTS_PEDIATRIQUES = [
@@ -79,6 +94,7 @@ interface PatientWaiting {
   id: string;
   patient_id: string;
   motif_visite: string;
+  statut: string;
   created_at: string;
   patients: {
     id: string;
@@ -88,6 +104,13 @@ interface PatientWaiting {
     age: number;
     quartier: string;
     alertes_medicales: string;
+    date_naissance?: string;
+    groupe_sanguin?: string;
+    type_assurance?: string;
+    numero_assurance?: string;
+    profession?: string;
+    societe?: string;
+    accompagnateur?: string;
   };
 }
 
@@ -95,6 +118,13 @@ export default function MedicalPage() {
   const { user } = useAuth();
   const [selectedPatient, setSelectedPatient] = useState<PatientWaiting | null>(null);
   const [activeTab, setActiveTab] = useState<'CONSULTATION' | 'HISTORIQUE' | 'OUTILS' | 'IA_INSIGHT'>('CONSULTATION');
+  const [medicalView, setMedicalView] = useState<'QUEUE' | 'DATABASE'>('QUEUE');
+  const [patientSearchQuery, setPatientSearchQuery] = useState("");
+  const [dbPatients, setDbPatients] = useState<any[]>([]);
+  const [isPatientModalOpen, setIsPatientModalOpen] = useState(false);
+  const [viewingPatient, setViewingPatient] = useState<any>(null);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [patientToEdit, setPatientToEdit] = useState<any>(null);
   
   // States for list
   const [waitingPatients, setWaitingPatients] = useState<PatientWaiting[]>([]);
@@ -170,6 +200,7 @@ export default function MedicalPage() {
           id,
           patient_id,
           motif_visite,
+          statut,
           created_at,
           patients (
             id,
@@ -178,10 +209,12 @@ export default function MedicalPage() {
             sexe,
             age,
             quartier,
-            alertes_medicales
+            alertes_medicales,
+            date_naissance,
+            groupe_sanguin
           )
         `)
-        .eq('statut', 'En attente')
+        .neq('statut', 'Sortie (Terminé)')
         .order('created_at', { ascending: true });
 
       if (error) throw error;
@@ -193,8 +226,80 @@ export default function MedicalPage() {
     }
   }, []);
 
+  const searchPatients = async (query: string) => {
+    if (query.length < 2) {
+      setDbPatients([]);
+      return;
+    }
+    try {
+      const { data, error } = await supabase
+        .from('patients')
+        .select('*')
+        .ilike('nom_complet', `%${query}%`)
+        .limit(20);
+      if (error) throw error;
+      setDbPatients(data || []);
+    } catch (err) {
+      console.error("Search error:", err);
+      toast.error("Erreur lors de la recherche");
+    }
+  };
+
+  const handleUpdateStatus = async (sejourId: string, newStatus: string) => {
+    try {
+      const { error } = await supabase
+        .from('sejours_actifs')
+        .update({ statut: newStatus })
+        .eq('id', sejourId);
+      
+      if (error) throw error;
+      toast.success(`Statut mis à jour : ${newStatus}`);
+      fetchWaitingPatients();
+    } catch (err) {
+      console.error("Status update error:", err);
+      toast.error("Échec de la mise à jour du statut");
+    }
+  };
+
+  const handleCancelStay = async (sejourId: string) => {
+    if (!confirm("Voulez-vous vraiment annuler ce séjour ?")) return;
+    try {
+      const { error } = await supabase
+        .from('sejours_actifs')
+        .delete()
+        .eq('id', sejourId);
+      
+      if (error) throw error;
+      toast.success("Séjour annulé");
+      fetchWaitingPatients();
+    } catch (err: any) {
+      toast.error(`Erreur: ${err.message}`);
+    }
+  };
+
   useEffect(() => {
     fetchWaitingPatients();
+
+    // Activation du Temps Réel pour la file d'attente
+    const channel = supabase
+      .channel('sejours-actifs-realtime')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'sejours_actifs'
+        },
+        () => {
+          console.log("Changement détecté dans sejours_actifs, rafraîchissement...");
+          fetchWaitingPatients();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [fetchWaitingPatients]);
 
   const chargerHistorique = async (patientId: string) => {
@@ -326,6 +431,19 @@ export default function MedicalPage() {
 
       if (error) throw error;
 
+      // --- LIAISON PHARMACIE ---
+      if (ordonnance.trim().length > 0) {
+        const { error: prescrError } = await supabase
+          .from('prescriptions')
+          .insert([{
+            patient_id: selectedPatient.patient_id,
+            medecin: user?.email || "Médecin Riverside",
+            contenu: ordonnance,
+            statut_pharmacie: 'Non servie'
+          }]);
+        if (prescrError) console.error("Erreur Liaison Pharmacie:", prescrError);
+      }
+
       // Update sejour status
       await supabase
         .from('sejours_actifs')
@@ -372,55 +490,211 @@ export default function MedicalPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-        {/* Sidebar: Patients en attente */}
+        {/* Sidebar: Patients en attente ou Recherche DB */}
         <div className="lg:col-span-4 space-y-6">
-          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-            <div className="p-4 border-b border-slate-50 flex items-center justify-between bg-slate-50/30">
-              <h2 className="text-[10px] font-black text-slate-900 uppercase tracking-widest flex items-center gap-2">
-                <Users size={12} className="text-red-600" />
-                Liste d&apos;Attente
-              </h2>
-              <span className="bg-red-50 text-red-600 px-2 py-0.5 rounded text-[9px] font-black">{waitingPatients.length} PV</span>
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden flex flex-col">
+            <div className="flex border-b border-slate-100">
+              <button 
+                onClick={() => setMedicalView('QUEUE')}
+                className={cn(
+                  "flex-1 py-4 text-[10px] font-black uppercase tracking-widest transition-all border-b-2",
+                  medicalView === 'QUEUE' ? "border-red-600 text-red-600 bg-red-50/30" : "border-transparent text-slate-400 hover:text-slate-600"
+                )}
+              >
+                File d&apos;Attente
+              </button>
+              <button 
+                onClick={() => setMedicalView('DATABASE')}
+                className={cn(
+                  "flex-1 py-4 text-[10px] font-black uppercase tracking-widest transition-all border-b-2",
+                  medicalView === 'DATABASE' ? "border-red-600 text-red-600 bg-red-50/30" : "border-transparent text-slate-400 hover:text-slate-600"
+                )}
+              >
+                Base Patients
+              </button>
             </div>
-            
-            <div className="max-h-[600px] overflow-y-auto p-3 space-y-2">
-              {loadingPatients ? (
-                <div className="p-10 flex flex-col items-center justify-center gap-3 opacity-30">
-                  <Loader2 className="animate-spin text-red-600" size={20} />
-                  <p className="text-[9px] font-black uppercase text-slate-400">Sync...</p>
-                </div>
-              ) : waitingPatients.length === 0 ? (
-                <div className="p-10 text-center py-20">
-                   <Users className="mx-auto mb-3 text-slate-100" size={40} />
-                   <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest">File vide</p>
-                </div>
-              ) : (
-                waitingPatients.map((p) => (
-                  <button
-                    key={p.id}
-                    onClick={() => {
-                      setSelectedPatient(p);
-                      setActiveTab('CONSULTATION');
+
+            {medicalView === 'DATABASE' && (
+              <div className="p-4 border-b border-slate-50 bg-slate-50/30">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                  <input 
+                    type="text"
+                    placeholder="Nom du patient..."
+                    value={patientSearchQuery}
+                    onChange={(e) => {
+                      setPatientSearchQuery(e.target.value);
+                      searchPatients(e.target.value);
                     }}
-                    className={cn(
-                      "w-full text-left p-4 rounded-xl transition-all border flex flex-col gap-2 group active:scale-[0.98]",
-                      selectedPatient?.id === p.id 
-                        ? "bg-red-600 border-red-600 text-white shadow-lg shadow-red-100" 
-                        : "bg-white border-transparent hover:bg-slate-50 text-slate-700"
-                    )}
-                  >
-                    <div className="flex items-center justify-between">
-                       <span className="text-sm font-black tracking-tight">{p.patients.nom_complet}</span>
-                       <Clock size={12} className={selectedPatient?.id === p.id ? "text-white/50" : "text-slate-300"} />
+                    className="w-full bg-white border border-slate-200 pl-10 pr-4 py-2 rounded-xl text-xs font-bold outline-none focus:border-red-600 transition-all"
+                  />
+                </div>
+              </div>
+            )}
+            
+            <div className="max-h-[650px] overflow-y-auto p-3 space-y-2">
+              {medicalView === 'QUEUE' ? (
+                loadingPatients ? (
+                  <div className="p-10 flex flex-col items-center justify-center gap-3 opacity-30">
+                    <Loader2 className="animate-spin text-red-600" size={20} />
+                    <p className="text-[9px] font-black uppercase text-slate-400">Sync...</p>
+                  </div>
+                ) : waitingPatients.length === 0 ? (
+                  <div className="p-10 text-center py-20">
+                     <Users className="mx-auto mb-3 text-slate-100" size={40} />
+                     <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest">File vide</p>
+                  </div>
+                ) : (
+                  waitingPatients.map((p) => (
+                    <div
+                      key={p.id}
+                      className={cn(
+                        "w-full text-left p-4 rounded-xl transition-all border flex flex-col gap-3 group relative overflow-hidden",
+                        selectedPatient?.id === p.id 
+                          ? "bg-red-50 border-red-200 shadow-sm" 
+                          : "bg-white border-transparent hover:bg-slate-50",
+                        p.statut === 'Sortie (Terminé)' && "opacity-50 grayscale bg-slate-100"
+                      )}
+                    >
+                      <div className="flex items-center justify-between relative z-10">
+                         <button 
+                           onClick={() => {
+                             setSelectedPatient(p);
+                             setActiveTab('CONSULTATION');
+                           }}
+                           className="text-sm font-black tracking-tight text-slate-900 text-left flex-1"
+                         >
+                           {p.patients.nom_complet}
+                         </button>
+                         <div className="flex items-center gap-1">
+                           <button 
+                             onClick={() => {
+                               setViewingPatient(p.patients);
+                               setIsPatientModalOpen(true);
+                             }}
+                             className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                             title="Dossier Médical"
+                           >
+                             <FileText size={16} />
+                           </button>
+                           
+                           {/* Contextual Menu Dropdown */}
+                           <div className="relative group/menu">
+                             <button className="p-2 text-slate-300 hover:text-slate-600 rounded-lg transition-all">
+                               <MoreVertical size={16} />
+                             </button>
+                             <div className="absolute right-0 top-full mt-2 w-48 bg-white border border-slate-100 rounded-2xl shadow-xl z-50 py-2 opacity-0 invisible group-hover/menu:opacity-100 group-hover/menu:visible transition-all">
+                                <button 
+                                  onClick={() => {
+                                    setViewingPatient(p.patients);
+                                    setIsPatientModalOpen(true);
+                                  }}
+                                  className="w-full text-left px-4 py-3 text-[10px] font-black uppercase tracking-widest text-slate-600 hover:bg-red-50 hover:text-red-600 flex items-center gap-3"
+                                >
+                                  <FileText size={14} /> Dossier Complet
+                                </button>
+                                <button 
+                                  onClick={() => {
+                                    setPatientToEdit(p.patients);
+                                    setIsEditModalOpen(true);
+                                  }}
+                                  className="w-full text-left px-4 py-3 text-[10px] font-black uppercase tracking-widest text-slate-600 hover:bg-red-50 hover:text-red-600 flex items-center gap-3"
+                                >
+                                  <Edit size={14} /> Modifier Identité
+                                </button>
+                                <div className="h-px bg-slate-50 my-1" />
+                                <button 
+                                  onClick={() => handleCancelStay(p.id)}
+                                  className="w-full text-left px-4 py-3 text-[10px] font-black uppercase tracking-widest text-red-600 hover:bg-red-100 flex items-center gap-3"
+                                >
+                                  <Trash size={14} /> Annuler Séjour
+                                </button>
+                             </div>
+                           </div>
+                         </div>
+                      </div>
+
+                      <div className="flex items-center justify-between gap-2 relative z-10">
+                        <select 
+                          value={p.statut}
+                          onChange={(e) => handleUpdateStatus(p.id, e.target.value)}
+                          className="bg-slate-50 border border-slate-100 rounded-lg px-2 py-1 text-[9px] font-black uppercase tracking-wider text-slate-500 outline-none focus:border-red-600 transition-all w-full"
+                        >
+                          <option value="En attente">En attente</option>
+                          <option value="Consultation">Consultation</option>
+                          <option value="Laboratoire">Laboratoire</option>
+                          <option value="Hospitalisation">Hospitalisation</option>
+                          <option value="Chirurgie">Chirurgie</option>
+                          <option value="Sortie (Terminé)">Sortie (Terminé)</option>
+                        </select>
+                        <span className="text-[10px] font-bold text-slate-400 whitespace-nowrap">{p.motif_visite}</span>
+                      </div>
                     </div>
-                    <span className={cn(
-                      "text-[9px] font-black px-1.5 py-0.5 rounded uppercase tracking-widest w-fit",
-                      selectedPatient?.id === p.id ? "bg-white/20 text-white" : "bg-slate-100 text-slate-500"
-                    )}>
-                      {p.motif_visite}
-                    </span>
-                  </button>
-                ))
+                  ))
+                )
+              ) : (
+                dbPatients.length === 0 ? (
+                  <div className="p-10 text-center py-20 text-slate-300">
+                    <Search className="mx-auto mb-3" size={40} />
+                    <p className="text-[9px] font-black uppercase tracking-widest">Recherchez un patient</p>
+                  </div>
+                ) : (
+                  dbPatients.map((patient) => (
+                    <div
+                      key={patient.id}
+                      className="w-full text-left p-4 rounded-xl bg-white border border-transparent hover:border-slate-100 hover:bg-slate-50 transition-all flex items-center justify-between group"
+                    >
+                      <button 
+                        onClick={() => {
+                          setViewingPatient(patient);
+                          setIsPatientModalOpen(true);
+                        }}
+                        className="flex-1 text-left"
+                      >
+                        <p className="text-sm font-black text-slate-900 tracking-tight">{patient.nom_complet}</p>
+                        <p className="text-[9px] font-bold text-slate-400 uppercase mt-1">{patient.telephone} • {patient.sexe}</p>
+                      </button>
+                      
+                      <div className="flex items-center gap-1">
+                        <button 
+                          onClick={() => {
+                            setViewingPatient(patient);
+                            setIsPatientModalOpen(true);
+                          }}
+                          className="p-2 text-slate-300 hover:text-red-600 rounded-lg transition-all"
+                        >
+                          <ExternalLink size={14} />
+                        </button>
+                        
+                        <div className="relative group/menu">
+                          <button className="p-2 text-slate-200 hover:text-slate-600 rounded-lg transition-all">
+                             <MoreVertical size={16} />
+                          </button>
+                          <div className="absolute right-0 top-full mt-2 w-48 bg-white border border-slate-100 rounded-2xl shadow-xl z-50 py-2 opacity-0 invisible group-hover/menu:opacity-100 group-hover/menu:visible transition-all">
+                             <button 
+                               onClick={() => {
+                                 setViewingPatient(patient);
+                                 setIsPatientModalOpen(true);
+                               }}
+                               className="w-full text-left px-4 py-3 text-[10px] font-black uppercase tracking-widest text-slate-600 hover:bg-red-50 hover:text-red-600 flex items-center gap-3"
+                             >
+                               <FileText size={14} /> Dossier Complet
+                             </button>
+                             <button 
+                               onClick={() => {
+                                 setPatientToEdit(patient);
+                                 setIsEditModalOpen(true);
+                               }}
+                               className="w-full text-left px-4 py-3 text-[10px] font-black uppercase tracking-widest text-slate-600 hover:bg-red-50 hover:text-red-600 flex items-center gap-3"
+                             >
+                               <Edit size={14} /> Modifier Identité
+                             </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )
               )}
             </div>
           </div>
@@ -922,6 +1196,140 @@ export default function MedicalPage() {
             )}
           </AnimatePresence>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// Modal for full information
+function PatientDossierModal({ 
+  isOpen, 
+  onClose, 
+  patient,
+  onEdit
+}: { 
+  isOpen: boolean, 
+  onClose: () => void, 
+  patient: any,
+  onEdit: (patient: any) => void
+}) {
+  if (!patient || !isOpen) return null;
+
+  return (
+    <AnimatePresence>
+      <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xl">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95, y: 20 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.95, y: 20 }}
+          className="bg-white w-full max-w-4xl rounded-[3rem] shadow-2xl relative overflow-hidden flex flex-col md:flex-row max-h-[90vh]"
+        >
+          {/* Left Hero Card */}
+          <div className="w-full md:w-1/3 bg-slate-950 p-10 text-white flex flex-col justify-between relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-64 h-64 bg-red-600/10 rounded-full -mr-32 -mt-32 blur-3xl" />
+            <div className="relative z-10">
+              <div className="w-20 h-20 bg-red-600 rounded-3xl flex items-center justify-center shadow-2xl shadow-red-500/20 mb-8 border border-red-500/30">
+                <User size={40} className="text-white" />
+              </div>
+              <h2 className="text-3xl font-black leading-tight uppercase tracking-tighter">Profil<br/>Complet</h2>
+              <p className="text-slate-500 text-[10px] font-black uppercase tracking-[0.2em] mt-4">Standard Riverside RMC</p>
+            </div>
+            
+            <div className="relative z-10 pt-8 border-t border-white/5 space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="w-1 h-1 bg-red-600 rounded-full" />
+                <p className="text-[10px] font-bold text-slate-400">ID Unique: {patient.id?.slice(0, 8)}</p>
+              </div>
+              <button 
+                onClick={() => onEdit(patient)}
+                className="w-full py-4 bg-white text-slate-950 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-red-600 hover:text-white transition-all shadow-xl flex items-center justify-center gap-2"
+              >
+                <Edit size={14} /> Modifier Identité
+              </button>
+            </div>
+          </div>
+
+          {/* Right Content Area */}
+          <div className="flex-1 p-8 md:p-12 overflow-y-auto bg-slate-50/30">
+            <div className="flex items-center justify-between mb-10">
+              <div>
+                <h3 className="text-2xl font-black text-slate-900 tracking-tighter uppercase">{patient.nom_complet}</h3>
+                <p className="text-[10px] font-black text-red-600 uppercase tracking-widest mt-1">Données Administratives & Médicales</p>
+              </div>
+              <button 
+                onClick={onClose}
+                className="w-12 h-12 bg-white text-slate-400 rounded-2xl flex items-center justify-center hover:bg-red-50 hover:text-red-600 transition-all border border-slate-100 shadow-sm"
+              >
+                <X size={24} />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              {/* Civil Status */}
+              <div className="space-y-6">
+                <div className="flex items-center gap-2 mb-4">
+                  <div className="w-1 h-4 bg-red-600 rounded-full" />
+                  <h4 className="text-[11px] font-black text-slate-900 uppercase tracking-widest">État Civil</h4>
+                </div>
+                <div className="space-y-4">
+                  <InfoItem label="Âge / Naissance" value={`${patient.age} ans (${patient.date_naissance || 'Non spécifiée'})`} icon={Calendar} />
+                  <InfoItem label="Sexe" value={patient.sexe === 'M' ? 'Masculin' : 'Féminin'} icon={User} />
+                  <InfoItem label="Groupe Sanguin" value={patient.groupe_sanguin || 'Inconnu'} icon={Activity} />
+                  <InfoItem label="Profession" value={patient.profession || 'Non renseignée'} icon={Briefcase} />
+                </div>
+              </div>
+
+              {/* Contact Information */}
+              <div className="space-y-6">
+                <div className="flex items-center gap-2 mb-4">
+                  <div className="w-1 h-4 bg-slate-900 rounded-full" />
+                  <h4 className="text-[11px] font-black text-slate-900 uppercase tracking-widest">Coordonnées</h4>
+                </div>
+                <div className="space-y-4">
+                  <InfoItem label="Téléphone" value={patient.telephone} icon={Phone} />
+                  <InfoItem label="Quartier" value={patient.quartier || 'Non spécifié'} icon={MapPin} />
+                  <InfoItem label="Accompagnateur" value={patient.accompagnateur || 'Non renseigné'} icon={Users} />
+                  <InfoItem label="Employeur" value={patient.societe || 'Néant'} icon={Building2} />
+                </div>
+              </div>
+
+              {/* Insurance */}
+              <div className="md:col-span-2 p-6 bg-red-50 rounded-[2rem] border border-red-100 flex items-center justify-between">
+                <div className="flex items-center gap-6">
+                  <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-red-600 shadow-sm border border-red-100">
+                    <Shield size={24} />
+                  </div>
+                  <div>
+                    <h5 className="text-[10px] font-black text-red-400 uppercase tracking-widest mb-1">Couverture Santé</h5>
+                    <p className="text-sm font-black text-slate-900 uppercase">{patient.type_assurance || 'Cash'}</p>
+                    {patient.numero_assurance && (
+                      <p className="text-[9px] font-bold text-slate-500 uppercase mt-1">Police: {patient.numero_assurance}</p>
+                    )}
+                  </div>
+                </div>
+                <div className="text-right">
+                  <span className="text-[10px] font-black bg-red-600 text-white px-3 py-1 rounded-full uppercase tracking-tighter shadow-lg shadow-red-200">
+                    Actif
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </motion.div>
+      </div>
+    </AnimatePresence>
+  );
+}
+
+function InfoItem({ label, value, icon: Icon }: { label: string, value: string, icon: any }) {
+  return (
+    <div className="flex items-start gap-4 p-3 bg-white border border-slate-100 rounded-2xl hover:border-red-100 transition-all group">
+      <div className="w-8 h-8 bg-slate-50 rounded-lg flex items-center justify-center text-slate-400 group-hover:text-red-600 transition-colors shrink-0">
+        <Icon size={14} />
+      </div>
+      <div>
+        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-0.5">{label}</p>
+        <p className="text-[11px] font-bold text-slate-700 uppercase tracking-tight">{value}</p>
       </div>
     </div>
   );

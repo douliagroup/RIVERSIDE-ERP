@@ -14,6 +14,16 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Configuration IA incomplète' }, { status: 500 });
     }
 
+    const appContext = `
+CONSTITUTION DE L'ECOSYSTÈME RIVERSIDE (VOTRE CONTEXTE GLOBAL) :
+1. **Module ADMISSION** (/admission) : Gestion critique du flux entrant. Triage avec score de gravité (IA), monitoring des temps d'attente, et orientation intelligente vers les box de soins.
+2. **Module MÉDICAL** (/medical) : Le cœur clinique. Système de consultation assisté par IA (Transcription et aide au diagnostic), calculateurs pédiatriques dynamiques, et assistant DOULIA Insight pour la pharmacovigilance.
+3. **Module TRÉSORERIE** (/tresorerie) : Centre névralgique financier. Encaissement des soins, facturation hospitalisation, suivi des flux de caisse en temps réel et réconciliation.
+4. **Module PATRON** (/patron) : Tour de contrôle stratégique. Intègre toutes les données pour une analyse SWOT multi-dimensionnelle (RH, Finance, Médical).
+5. **Module DOULIA LOVE** (/doulia-love) : Gestion de la relation patient et marketing communautaire. Génération de messages empathiques et éducation thérapeutique.
+6. **Module ADMINISTRATION/RH** : Gestion du planning des gardes, des stocks pharmacie et des archives.
+`;
+
     const formattingDirectives = `
 DIRECTIVES STRICTES DE FORMATAGE DE LA RÉPONSE : 
 1. INTERDICTION ABSOLUE d'utiliser des balises HTML (pas de <p>, <ul>, <li>, <strong>, etc.). 
@@ -60,17 +70,24 @@ DIRECTIVES STRICTES DE FORMATAGE DE LA RÉPONSE :
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({ 
       model: "gemini-3-flash-preview",
-      systemInstruction: "Tu es un expert en stratégie hospitalière pour Riverside Medical Center à Douala. " + formattingDirectives 
+      systemInstruction: `Tu es DOULIA Intelligence, le cerveau stratégique omniscient du Riverside Medical Center à Douala. 
+      Tu as une connaissance absolue de toutes les fonctionnalités et modules de l'application ERP Riverside. 
+      Ton rôle est d'analyser les performances de chaque page (Admission, Médical, Trésorerie) pour conseiller le Directeur (le Patron).
+      
+      ${appContext}
+      
+      ${formattingDirectives}`
     });
 
     const prompt = `
-      Analyse les données internes suivantes et croise-les avec les informations du marché externe.
-
-      DONNÉES INTERNES (Riverside):
+      ANALYSE STRATÉGIQUE TRANSVERSALE POUR LE PATRON.
+      
+      DONNÉES FINANCIÈRES & OPÉRATIONNELLES (Temps Réel):
       - Revenu mensuel: ${internalData.revenu} FCFA
       - Nombre de patients: ${internalData.patients}
       - Dépenses: ${internalData.depenses} FCFA
       - Taux de satisfaction: ${internalData.satisfaction}/5
+      - Goulot d'étranglement potentiel: Patient flux admission élevé.
 
       CONTEXTE MARCHE EXTERNE (Recherche Web):
       ${searchContext}

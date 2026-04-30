@@ -24,7 +24,8 @@ import {
   ArrowDownLeft,
   Bell,
   Box,
-  Scale
+  Scale,
+  Wallet
 } from "lucide-react";
 import { supabase } from "@/src/lib/supabase";
 import Link from "next/link";
@@ -33,6 +34,7 @@ import { motion, AnimatePresence } from "motion/react";
 import Markdown from "react-markdown";
 import { useAuth } from "@/src/context/AuthContext";
 import { useRouter } from "next/navigation";
+import toast from "react-hot-toast";
 
 export default function PatronInsight() {
   const { userRole } = useAuth();
@@ -63,130 +65,150 @@ export default function PatronInsight() {
   const [userInput, setUserInput] = useState("");
   const [chatLoading, setChatLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const [pendingExpenses, setPendingExpenses] = useState<any[]>([]);
 
-  useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  }, [chatMessages]);
+  const fetchPatronData = async () => {
+    try {
+      setLoading(true);
+      const today = new Date().toISOString().split('T')[0];
 
-  useEffect(() => {
-    async function fetchPatronData() {
-      try {
-        setLoading(true);
-        const today = new Date().toISOString().split('T')[0];
+      // 1. Chiffre d'Affaires du Jour (Système)
+      const { data: txJour, error: txErr } = await supabase
+        .from('transactions_caisse')
+        .select('montant_total, methode_paiement, reste_a_payer')
+        .gte('date_transaction', `${today}T00:00:00Z`)
+        .lte('date_transaction', `${today}T23:59:59Z`);
+      
+      const caToday = txJour?.reduce((acc, curr) => acc + (curr.montant_total || 0), 0) || 0;
 
-        // 1. Chiffre d'Affaires du Jour (Système)
-        const { data: txJour, error: txErr } = await supabase
-          .from('transactions_caisse')
-          .select('montant_total, methode_paiement, reste_a_payer')
-          .gte('date_transaction', `${today}T00:00:00Z`)
-          .lte('date_transaction', `${today}T23:59:59Z`);
-        
-        const caToday = txJour?.reduce((acc, curr) => acc + (curr.montant_total || 0), 0) || 0;
+      // 2. Chiffre d'Affaires du Jour (Manuel / Comptable)
+      const { data: manualData } = await supabase
+        .from('comptabilite_manuelle')
+        .select('montant')
+        .eq('date_operation', today)
+        .eq('flux', 'ENTREE');
+      
+      const caManual = manualData?.reduce((acc, curr) => acc + (curr.montant || 0), 0) || 0;
 
-        // 2. Chiffre d'Affaires du Jour (Manuel / Comptable)
-        const { data: manualData } = await supabase
-          .from('comptabilite_manuelle')
-          .select('montant')
-          .eq('date_operation', today)
-          .eq('flux', 'ENTREE');
-        
-        const caManual = manualData?.reduce((acc, curr) => acc + (curr.montant || 0), 0) || 0;
+      // 2b. Dépenses en attente
+      const { data: pendingExp } = await supabase
+        .from('comptabilite_manuelle')
+        .select('*')
+        .eq('statut', 'En attente')
+        .eq('flux', 'SORTIE');
+      
+      setPendingExpenses(pendingExp || []);
 
-        // 3. Dettes Totales & 30+ Days Alert
-        const { data: dettesData } = await supabase
-          .from('transactions_caisse')
-          .select('reste_a_payer, date_transaction')
-          .gt('reste_a_payer', 0);
-        
-        const totalDettes = dettesData?.reduce((acc, curr) => acc + (curr.reste_a_payer || 0), 0) || 0;
-        
-        // Check for 30+ days old debts
-        const thirtyDaysAgo = new Date();
-        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-        const oldDebts = dettesData?.filter(d => new Date(d.date_transaction) < thirtyDaysAgo) || [];
-        const oldDebtsAmount = oldDebts.reduce((acc, curr) => acc + (curr.reste_a_payer || 0), 0);
+      // 3. Dettes Totales & 30+ Days Alert
+      const { data: dettesData } = await supabase
+        .from('transactions_caisse')
+        .select('reste_a_payer, date_transaction')
+        .gt('reste_a_payer', 0);
+      
+      const totalDettes = dettesData?.reduce((acc, curr) => acc + (curr.reste_a_payer || 0), 0) || 0;
+      
+      // Check for 30+ days old debts
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      const oldDebts = dettesData?.filter(d => new Date(d.date_transaction) < thirtyDaysAgo) || [];
+      const oldDebtsAmount = oldDebts.reduce((acc, curr) => acc + (curr.reste_a_payer || 0), 0);
 
-        // 4. Occupation Chambres
-        const { data: chmData } = await supabase
-          .from('chambres')
-          .select('id, est_occupee');
-        
-        const totalChm = chmData?.length || 0;
-        const occChm = chmData?.filter(c => c.est_occupee).length || 0;
-        const tauxOcc = totalChm > 0 ? Math.round((occChm / totalChm) * 100) : 0;
+      // 4. Occupation Chambres
+      const { data: chmData } = await supabase
+        .from('chambres')
+        .select('id, est_occupee');
+      
+      const totalChm = chmData?.length || 0;
+      const occChm = chmData?.filter(c => c.est_occupee).length || 0;
+      const tauxOcc = totalChm > 0 ? Math.round((occChm / totalChm) * 100) : 0;
 
-        // 5. Stocks Alerte
-        const { data: stockData } = await supabase
-          .from('stocks')
-          .select('designation, quantite_actuelle, seuil_alerte');
-        
-        const lowStocksList = stockData?.filter(s => (s.quantite_actuelle || 0) <= (s.seuil_alerte || 0)) || [];
+      // 5. Stocks Alerte
+      const { data: stockData } = await supabase
+        .from('stocks')
+        .select('designation, quantite_actuelle, seuil_alerte');
+      
+      const lowStocksList = stockData?.filter(s => (s.quantite_actuelle || 0) <= (s.seuil_alerte || 0)) || [];
 
-        setStats({
-          ca_jour: caToday,
-          ca_manuel_jour: caManual,
-          methode_dominante: "Auto",
-          taux_occupation: tauxOcc,
-          articles_alerte: lowStocksList.length,
-          chambres_totales: totalChm,
-          chambres_occupees: occChm,
-          dettes_totales: totalDettes
+      setStats({
+        ca_jour: caToday,
+        ca_manuel_jour: caManual,
+        methode_dominante: "Auto",
+        taux_occupation: tauxOcc,
+        articles_alerte: lowStocksList.length,
+        chambres_totales: totalChm,
+        chambres_occupees: occChm,
+        dettes_totales: totalDettes
+      });
+
+      // Generate Alerts Logic
+      const newAlerts = [];
+      
+      // Finalcial Gap Alert (> 5%)
+      const variance = caToday > 0 ? Math.abs((caToday - caManual) / caToday) * 100 : 0;
+      if (variance > 5) {
+        newAlerts.push({
+          type: 'CRITICAL',
+          title: 'Écart Financier Suspect',
+          desc: `Écart de ${variance.toFixed(1)}% détecté entre caisse (${caToday.toLocaleString()}) et comptabilité (${caManual.toLocaleString()}).`,
+          icon: Scale
         });
-
-        // Generate Alerts Logic
-        const newAlerts = [];
-        
-        // Finalcial Gap Alert (> 5%)
-        const variance = caToday > 0 ? Math.abs((caToday - caManual) / caToday) * 100 : 0;
-        if (variance > 5) {
-          newAlerts.push({
-            type: 'CRITICAL',
-            title: 'Écart Financier Suspect',
-            desc: `Écart de ${variance.toFixed(1)}% détecté entre caisse (${caToday.toLocaleString()}) et comptabilité (${caManual.toLocaleString()}).`,
-            icon: Scale
-          });
-        }
-
-        // Stock Rupture Alerts
-        lowStocksList.slice(0, 3).forEach(s => {
-          newAlerts.push({
-            type: 'STOCK',
-            title: `Seuil Critique: ${s.designation}`,
-            desc: `Stock à ${s.quantite_actuelle} unités (Seuil: ${s.seuil_alerte}). Rupture imminente.`,
-            icon: Box
-          });
-        });
-
-        // 30 Days Debt Alert
-        if (oldDebtsAmount > 0) {
-          newAlerts.push({
-            type: 'CRITICAL',
-            title: 'Impayés Hors-Délai',
-            desc: `${oldDebtsAmount.toLocaleString()} FCFA d'impayés dépassent 30 jours d'ancienneté. Action recommandée.`,
-            icon: AlertTriangle
-          });
-        }
-
-        // Impayés (General volume)
-        if (totalDettes > 500000) {
-          newAlerts.push({
-            type: 'RECOVERY',
-            title: 'Volume Impayés Critique',
-            desc: `Le montant total des restes à payer dépasse 500,000 FCFA. Plan de recouvrement nécessaire.`,
-            icon: ArrowDownLeft
-          });
-        }
-
-        setAlerts(newAlerts);
-
-      } catch (err) {
-        console.error("[Patron] Error:", err);
-      } finally {
-        setLoading(false);
       }
+
+      // Stock Rupture Alerts
+      lowStocksList.slice(0, 3).forEach(s => {
+        newAlerts.push({
+          type: 'STOCK',
+          title: `Seuil Critique: ${s.designation}`,
+          desc: `Stock à ${s.quantite_actuelle} unités (Seuil: ${s.seuil_alerte}). Rupture imminente.`,
+          icon: Box
+        });
+      });
+
+      // 30 Days Debt Alert
+      if (oldDebtsAmount > 0) {
+        newAlerts.push({
+          type: 'CRITICAL',
+          title: 'Impayés Hors-Délai',
+          desc: `${oldDebtsAmount.toLocaleString()} FCFA d'impayés dépassent 30 jours d'ancienneté. Action recommandée.`,
+          icon: AlertTriangle
+        });
+      }
+
+      // Impayés (General volume)
+      if (totalDettes > 500000) {
+        newAlerts.push({
+          type: 'RECOVERY',
+          title: 'Volume Impayés Critique',
+          desc: `Le montant total des restes à payer dépasse 500,000 FCFA. Plan de recouvrement nécessaire.`,
+          icon: ArrowDownLeft
+        });
+      }
+
+      setAlerts(newAlerts);
+
+    } catch (err) {
+      console.error("[Patron] Error:", err);
+    } finally {
+      setLoading(false);
     }
+  };
+
+  const handleApproveExpense = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('comptabilite_manuelle')
+        .update({ statut: 'Approuvé' })
+        .eq('id', id);
+      
+      if (error) throw error;
+      toast.success("Dépense approuvée");
+      fetchPatronData();
+    } catch (err: any) {
+      toast.error(`Erreur d'approbation: ${err.message}`);
+    }
+  };
+
+  useEffect(() => {
     fetchPatronData();
   }, []);
 
@@ -377,6 +399,56 @@ export default function PatronInsight() {
                     </details>
                   ))}
               </div>
+            </div>
+          </div>
+
+          {/* Dépenses en attente d'approbation */}
+          <div className="bg-white border border-slate-100 p-8 rounded-[3rem] shadow-[0_12px_0_0_rgba(15,23,42,0.05)]">
+            <div className="flex items-center justify-between mb-8">
+              <h2 className="text-sm font-black text-slate-950 uppercase tracking-[0.3em] flex items-center gap-3">
+                <CreditCard size={18} className="text-riverside-red" /> Validation Dépenses
+              </h2>
+              <span className="text-[10px] bg-red-50 text-riverside-red px-3 py-1 rounded-full font-black uppercase">
+                {pendingExpenses.length} À VALIDER
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+              {pendingExpenses.length === 0 ? (
+                <div className="col-span-full py-12 text-center text-slate-300 font-bold uppercase tracking-widest text-xs">
+                  Aucune dépense en attente de validation
+                </div>
+              ) : (
+                pendingExpenses.map((exp) => (
+                  <motion.div 
+                    layout
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    key={exp.id}
+                    className="p-6 bg-slate-50 border border-slate-100 rounded-[2rem] hover:shadow-xl hover:shadow-slate-200/50 transition-all group"
+                  >
+                    <div className="flex justify-between items-start mb-4">
+                      <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-riverside-red shadow-sm">
+                        <Wallet size={20} />
+                      </div>
+                      <span className="text-[10px] font-mono font-black text-slate-400">#{exp.id.slice(0, 6)}</span>
+                    </div>
+                    
+                    <h4 className="text-lg font-black text-slate-950 mb-1">{exp.montant.toLocaleString()} FCFA</h4>
+                    <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mb-4 line-clamp-1">{exp.description}</p>
+                    
+                    <div className="flex items-center justify-between pt-4 border-t border-slate-200/60">
+                      <span className="text-[9px] font-bold text-slate-400 uppercase">{exp.date_operation}</span>
+                      <button 
+                        onClick={() => handleApproveExpense(exp.id)}
+                        className="px-4 py-2 bg-emerald-500 text-white text-[9px] font-black uppercase rounded-lg hover:bg-emerald-600 transition-all shadow-lg active:scale-95 flex items-center gap-2"
+                      >
+                        <ShieldCheck size={14} /> Approuver
+                      </button>
+                    </div>
+                  </motion.div>
+                ))
+              )}
             </div>
           </div>
         </div>

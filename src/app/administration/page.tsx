@@ -31,6 +31,12 @@ import { supabase } from "@/src/lib/supabase";
 import { cn } from "@/src/lib/utils";
 import { motion, AnimatePresence } from "motion/react";
 import { toast } from "sonner";
+import { useAuth } from "@/src/context/AuthContext";
+
+import { generatePDF } from "@/src/lib/pdfGenerator";
+import { PDFTemplates } from "@/src/components/PDFTemplates";
+import html2canvas from "html2canvas";
+import jsPDF from "jspdf";
 
 type TabType = "taches" | "personnel" | "rapports" | "archives" | "audit" | "stocks";
 
@@ -91,6 +97,7 @@ interface StockItem {
 }
 
 export default function AdministrationPage() {
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<TabType>("taches");
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
@@ -99,7 +106,6 @@ export default function AdministrationPage() {
   const [patientsHospitalises, setPatientsHospitalises] = useState<any[]>([]);
   const [stocks, setStocks] = useState<StockItem[]>([]);
   
-  // New States
   const [rapports, setRapports] = useState<RapportClinique[]>([]);
   const [archives, setArchives] = useState<ArchiveClinique[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
@@ -107,14 +113,14 @@ export default function AdministrationPage() {
   const [uploading, setUploading] = useState(false);
   const [archiveForm, setArchiveForm] = useState({ nom: "", categorie: "LÉGAL" as ArchiveClinique["categorie"] });
 
-  // Form states
   const [showTaskForm, setShowTaskForm] = useState(false);
   const [showStockForm, setShowStockForm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [newTask, setNewTask] = useState({ titre: "", priorite: "Normale" as Task["priorite"] });
   const [newStock, setNewStock] = useState({ designation: "", categorie: "", quantite_actuelle: 0, seuil_alerte: 10 });
+  const [printingRapport, setPrintingRapport] = useState<RapportClinique | null>(null);
+  const [rapportType, setRapportType] = useState<"GARDE" | "REUNION">("GARDE");
 
-  // Rapport de Garde State
   const [gardeForm, setGardeForm] = useState({
     medecin_id: "",
     soins: "",
@@ -129,6 +135,7 @@ export default function AdministrationPage() {
       
       const [
         { data: persData, error: persErr }, 
+        { data: rhData, error: rhErr },
         { data: chmData, error: chmErr }, 
         { data: patData, error: patErr },
         { data: stockData, error: stockErr },
@@ -137,6 +144,7 @@ export default function AdministrationPage() {
         { data: auditData, error: auditErr }
       ] = await Promise.all([
         supabase.from('personnel_clinique').select('*').order('nom_complet'),
+        supabase.from('dossiers_rh').select('*').order('nom_complet'),
         supabase.from('chambres').select('id, numero').order('numero'),
         supabase.from('patients').select('id, nom_complet'),
         supabase.from('stocks').select('*').order('designation'),
@@ -146,6 +154,7 @@ export default function AdministrationPage() {
       ]);
       
       if (persErr) console.error("Erreur personnel:", persErr);
+      if (rhErr) console.warn("Erreur dossiers_rh (possible table manquante):", rhErr);
       if (chmErr) console.error("Erreur chambres:", chmErr);
       if (patErr) console.error("Erreur patients:", patErr);
       if (stockErr) console.error("Erreur stocks:", stockErr);
@@ -153,7 +162,9 @@ export default function AdministrationPage() {
       if (archiveErr) console.error("Erreur archives:", archiveErr);
       if (auditErr) console.error("Erreur audit:", auditErr);
 
-      setPersonnel(persData || []);
+      // Fusionner ou préférer dossiers_rh si disponible
+      const finalPersonnel = rhData && rhData.length > 0 ? rhData : persData || [];
+      setPersonnel(finalPersonnel);
       setChambres(chmData || []);
       setPatientsHospitalises(patData || []);
       setStocks(stockData || []);
@@ -177,12 +188,7 @@ export default function AdministrationPage() {
     }
   }, [activeTab]);
 
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
-
   const recordAudit = async (action: string, details: string) => {
-    const { data: { user } } = await supabase.auth.getUser();
     await supabase.from('audit_logs').insert([{
       utilisateur: user?.email || 'Système',
       action,
@@ -295,14 +301,14 @@ export default function AdministrationPage() {
       const { error } = await supabase
         .from("rapports_clinique")
         .insert([{
-          type_rapport: "GARDE",
+          type_rapport: rapportType,
           auteur: personnel.find(p => p.id === gardeForm.medecin_id)?.nom_complet || "Inconnu",
-          contenu: gardeForm
+          contenu: { ...gardeForm, type_selection: rapportType }
         }]);
       
       if (error) throw error;
-      toast.success("Rapport de Garde Enregistré");
-      recordAudit("RAPPORT_GARDE", "Enregistrement d'un nouveau rapport de garde");
+      toast.success("Rapport Enregistré");
+      recordAudit(`RAPPORT_${rapportType}`, `Enregistrement d'un nouveau rapport de ${rapportType.toLowerCase()}`);
       setGardeForm({
         medecin_id: "",
         soins: "",
@@ -339,75 +345,78 @@ export default function AdministrationPage() {
     }
   };
 
-  const handleGenerateMonthlyReport = () => {
-    const printContent = `
-      <div class="p-12 font-sans">
-        <h1 class="text-3xl font-black uppercase text-slate-900 border-b-4 border-red-600 pb-4 mb-8">Rapport Mensuel Riverside • Douala</h1>
-        <div class="grid grid-cols-2 gap-8 mb-12">
-          <div class="bg-slate-50 p-6 rounded-2xl">
-            <p class="text-[10px] font-black uppercase text-slate-400 mb-2">Effectif Global</p>
-            <p class="text-2xl font-black text-slate-900">${personnel.length} Collaborateurs</p>
-          </div>
-          <div class="bg-slate-50 p-6 rounded-2xl">
-            <p class="text-[10px] font-black uppercase text-slate-400 mb-2">Alertes Stock</p>
-            <p class="text-2xl font-black text-red-600">${stocks.filter(s => s.quantite_actuelle <= s.seuil_alerte).length} Ruptures</p>
-          </div>
-        </div>
-        <div class="space-y-6">
-          <h2 class="text-xl font-black uppercase text-slate-800">Derniers Audit Logs</h2>
-          <table class="w-full text-xs">
-            <thead>
-              <tr class="bg-slate-900 text-white"><th class="p-2 text-left">Date</th><th class="p-2 text-left">Utilisateur</th><th class="p-2 text-left">Action</th></tr>
-            </thead>
-            <tbody>
-              ${auditLogs.slice(0, 10).map(log => `
-                <tr class="border-b border-slate-100">
-                  <td class="p-2">${new Date(log.created_at).toLocaleDateString()}</td>
-                  <td class="p-2">${log.utilisateur}</td>
-                  <td class="p-2 font-bold">${log.action}</td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
-        </div>
-        <p class="mt-20 text-[10px] font-bold text-center text-slate-400 uppercase tracking-widest">Document officiel Riverside Medical Center - Généré le ${new Date().toLocaleDateString()}</p>
-      </div>
-    `;
-    
-    const win = window.open('', '_blank');
-    if (win) {
-      win.document.write(`<html><head><title>Rapport Riverside</title><link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet"></head><body>${printContent}</body></html>`);
-      win.document.close();
-      setTimeout(() => win.print(), 500);
+  const handleGenerateMonthlyReport = async () => {
+    try {
+      toast.loading("Génération du rapport mensuel stratégique...");
+      // On utilise le hub-content pour capturer l'état actuel ou un élément spécifique
+      await generatePDF('admin-content', `Rapport_Mensuel_Riverside_${new Date().getMonth() + 1}_${new Date().getFullYear()}.pdf`);
+      toast.dismiss();
+      toast.success("Rapport exporté avec succès");
+    } catch (err) {
+      toast.dismiss();
+      toast.error("Échec de la génération du rapport");
+    }
+  };
+
+  const handleDownloadRapportPDF = async (rapport: RapportClinique) => {
+    const templateId = "admin-rapport-template";
+    const element = document.getElementById(templateId);
+    if (!element) {
+      toast.error("Template non trouvé");
+      return;
+    }
+
+    try {
+      toast.loading("Génération du document officiel...");
+      setPrintingRapport(rapport);
+      await new Promise(r => setTimeout(r, 150));
+
+      const canvas = await html2canvas(element, { scale: 2 });
+      const imgData = canvas.toDataURL("image/png");
+      const pdf = new jsPDF("p", "mm", "a4");
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const imgProps = pdf.getImageProperties(imgData);
+      const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+      
+      pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, pdfHeight);
+      pdf.save(`Rapport_Riverside_${rapport.type_rapport}_${new Date(rapport.created_at).toLocaleDateString()}.pdf`);
+      toast.dismiss();
+      toast.success("Document prêt !");
+    } catch (err) {
+      console.error(err);
+      toast.dismiss();
+      toast.error("Erreur de génération");
+    } finally {
+      setPrintingRapport(null);
     }
   };
 
   return (
-    <div className="w-full max-w-full overflow-x-hidden space-y-8 pb-32 px-4 md:px-8 bg-slate-50/20 min-h-screen">
+    <div className="w-full max-w-full overflow-x-hidden space-y-6 pb-32 px-4 md:px-8 bg-slate-50/20 min-h-screen">
       {/* Header */}
-      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-8 pt-8">
-        <div>
-          <div className="flex items-center gap-4 mb-3">
-            <div className="w-14 h-14 bg-riverside-red rounded-3xl flex items-center justify-center text-white shadow-2xl shadow-red-200">
-              <ShieldCheck size={32} />
-            </div>
-            <h1 className="text-4xl font-black text-slate-950 tracking-tight">
+      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-6 pt-6">
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 bg-riverside-red rounded-2xl flex items-center justify-center text-white shadow-lg">
+            <ShieldCheck size={28} />
+          </div>
+          <div>
+            <h1 className="text-3xl font-black text-slate-950 tracking-tight">
               Riverside <span className="text-riverside-red">Hub</span>
             </h1>
+            <p className="text-[9px] text-slate-400 font-black uppercase tracking-[0.2em] opacity-70">Contrôle administratif Riverside</p>
           </div>
-          <p className="text-[10px] text-slate-400 font-black uppercase tracking-[0.3em] ml-1 opacity-70">Centre de contrôle administratif et stratégique</p>
         </div>
         
-        {/* Tab Switcher */}
-        <div className="flex bg-white/80 backdrop-blur-xl p-1.5 rounded-[2rem] border border-slate-200 shadow-xl shadow-slate-100/50 gap-1 overflow-x-auto no-scrollbar">
+        {/* Tab Switcher - Plus compact */}
+        <div className="flex bg-white p-1 rounded-2xl border border-slate-200 shadow-sm gap-0.5 overflow-x-auto no-scrollbar">
           {(["taches", "personnel", "rapports", "archives", "audit", "stocks"] as const).map((tab) => (
             <button 
               key={tab}
               onClick={() => setActiveTab(tab)}
               className={cn(
-                "px-6 py-3 text-[10px] uppercase tracking-widest font-black rounded-2xl transition-all duration-300 whitespace-nowrap",
+                "px-4 py-2 text-[9px] uppercase tracking-widest font-black rounded-xl transition-all duration-200 whitespace-nowrap",
                 activeTab === tab 
-                  ? "bg-slate-900 text-white shadow-lg shadow-slate-200" 
+                  ? "bg-slate-900 text-white shadow-md" 
                   : "text-slate-400 hover:text-slate-600 hover:bg-slate-50"
               )}
             >
@@ -417,138 +426,196 @@ export default function AdministrationPage() {
         </div>
       </div>
 
-      <div className="fixed bottom-12 right-12 z-[100]">
-        <motion.button 
-          whileHover={{ scale: 1.05, y: -4 }}
-          whileTap={{ scale: 0.95 }}
-          onClick={handleGenerateMonthlyReport}
-          className="group bg-slate-950 text-white px-8 py-5 rounded-[2.5rem] shadow-2xl shadow-slate-400/30 border border-white/10 flex items-center gap-4 hover:shadow-black/20 transition-all font-inter"
-        >
-          <div className="w-10 h-10 bg-white/10 rounded-2xl flex items-center justify-center group-hover:bg-riverside-red transition-colors">
-            <Printer size={20} />
-          </div>
-          <span className="text-[11px] font-black uppercase tracking-widest leading-none">Rapport Mensuel PDF</span>
-        </motion.button>
-      </div>
-
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="bg-white rounded-[3.5rem] border border-slate-200/60 shadow-2xl shadow-slate-200/40 overflow-hidden min-h-[750px] flex flex-col"
+        className="bg-white rounded-[2rem] border border-slate-200/60 shadow-xl shadow-slate-200/40 overflow-hidden min-h-[600px] flex flex-col"
       >
-        <div className="px-12 py-10 border-b border-slate-100 flex flex-col md:flex-row items-center justify-between bg-white relative gap-6">
-          <div className="flex items-center gap-6">
-            <div className="w-16 h-16 bg-slate-50 rounded-[2rem] border border-slate-100 flex items-center justify-center text-slate-400 shadow-sm">
-              {activeTab === "taches" ? <ClipboardList size={28} /> : activeTab === "personnel" ? <Users size={28} /> : activeTab === "archives" ? <FolderOpen size={28} /> : activeTab === "audit" ? <Lock size={28} /> : <FileText size={28} />}
+        <div className="px-8 py-6 border-b border-slate-100 flex flex-col md:flex-row items-center justify-between bg-white relative gap-4">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-slate-50 rounded-2xl border border-slate-100 flex items-center justify-center text-slate-400 shadow-sm">
+              {activeTab === "taches" ? <ClipboardList size={22} /> : activeTab === "personnel" ? <Users size={22} /> : activeTab === "archives" ? <FolderOpen size={22} /> : activeTab === "audit" ? <Lock size={22} /> : <FileText size={22} />}
             </div>
             <div>
-              <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tight leading-none mb-2">
-                {activeTab === "taches" ? "Gestion des Tâches" : activeTab === "personnel" ? "Dossiers RH Numériques" : activeTab === "rapports" ? "Archives Cliniques & Gardes" : activeTab === "archives" ? "Coffre-fort Documentaire" : activeTab === "audit" ? "Audit & Transparence" : "Gestion des Stocks"}
+              <h2 className="text-xl font-black text-slate-900 uppercase tracking-tight leading-none mb-1">
+                {activeTab === "taches" ? "Tâches" : activeTab === "personnel" ? "Personnel (RH)" : activeTab === "rapports" ? "Rapports" : activeTab === "archives" ? "Archives" : activeTab === "audit" ? "Audit" : "Stocks"}
               </h2>
-              <div className="flex items-center gap-3">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-[0.2em]">Flux de données Riverside • Sécurité Certifiée</p>
+              <div className="flex items-center gap-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                <p className="text-[9px] text-slate-400 font-bold uppercase tracking-[0.2em]">Flux Riverside • Sécurisé</p>
               </div>
             </div>
           </div>
           
-          <div className="flex items-center gap-4 w-full md:w-auto">
+          <div className="flex items-center gap-3 w-full md:w-auto">
             {activeTab === "archives" && (
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full">
-                <input type="text" placeholder="Nom du document..." className="px-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-xs font-bold outline-none focus:border-slate-300 w-full sm:w-64" value={archiveForm.nom} onChange={e => setArchiveForm({...archiveForm, nom: e.target.value})} />
-                <select className="px-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-xs font-black uppercase tracking-widest outline-none" value={archiveForm.categorie} onChange={e => setArchiveForm({...archiveForm, categorie: e.target.value as any})}>
-                  <option value="LÉGAL">LÉGAL</option>
-                  <option value="RH">RH</option>
-                  <option value="TECHNIQUE">TECHNIQUE</option>
-                </select>
-                <label className="cursor-pointer px-8 py-4 bg-slate-950 text-white text-[11px] font-black uppercase tracking-widest rounded-2xl hover:bg-black transition-all flex items-center justify-center gap-3">
-                  {uploading ? <Loader2 className="animate-spin" size={16} /> : <Upload size={16} />} 
-                  {uploading ? "SYNC..." : "Téléverser"}
+              <div className="flex items-center gap-2">
+                <input type="text" placeholder="Nom..." className="px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl text-[10px] font-bold outline-none" value={archiveForm.nom} onChange={e => setArchiveForm({...archiveForm, nom: e.target.value})} />
+                <label className="cursor-pointer px-6 py-3 bg-slate-900 text-white text-[10px] font-black uppercase rounded-xl hover:bg-black transition-all flex items-center gap-2">
+                  <Upload size={14} /> Téléverser
                   <input type="file" className="hidden" onChange={handleUploadArchive} disabled={uploading} />
                 </label>
               </div>
             )}
             {activeTab === "taches" && (
-              <button onClick={() => setShowTaskForm(true)} className="px-8 py-4 bg-riverside-red text-white text-[11px] font-black uppercase tracking-widest rounded-2xl hover:bg-riverside-red-hover transition-all flex items-center justify-center gap-3 ml-auto shadow-xl shadow-red-100">
-                <Plus size={18} /> Nouvelle Tâche
+              <button onClick={() => setShowTaskForm(true)} className="px-6 py-3 bg-riverside-red text-white text-[10px] font-black uppercase rounded-xl shadow-red-100 flex items-center gap-2">
+                <Plus size={16} /> Nouvelle Tâche
               </button>
             )}
-            {activeTab === "stocks" && (
-              <button onClick={() => setShowStockForm(true)} className="px-8 py-4 bg-slate-950 text-white text-[11px] font-black uppercase tracking-widest rounded-2xl hover:bg-black transition-all flex items-center justify-center gap-3 ml-auto">
-                <Plus size={18} /> Entrée Stock
+            <div className="flex items-center gap-2">
+              <button 
+                onClick={handleGenerateMonthlyReport}
+                className="px-4 py-3 bg-slate-950 text-white text-[10px] font-black uppercase rounded-xl flex items-center gap-2 shadow-lg"
+              >
+                <FileDown size={14} /> Rapport Mensuel
               </button>
-            )}
+              <button 
+                onClick={() => generatePDF('admin-content', `Riverside_${activeTab}.pdf`)}
+                className="p-3 bg-slate-50 text-slate-400 rounded-xl hover:text-riverside-red transition-all"
+              >
+                <Printer size={20} />
+              </button>
+            </div>
           </div>
         </div>
 
-        <div className="flex-1 p-12 overflow-y-auto max-h-[75vh] scrollbar-hide bg-white">
+        <div id="admin-content" className="flex-1 p-6 lg:p-8 overflow-y-auto max-h-[70vh] bg-white">
           {loading ? (
-            <div className="h-full flex flex-col items-center justify-center py-40 gap-6">
-              <Loader2 className="animate-spin text-riverside-red font-light" size={64} strokeWidth={1} />
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest animate-pulse">Initialisation du Hub Riverside...</p>
+            <div className="h-full flex flex-col items-center justify-center py-20 gap-4">
+              <Loader2 className="animate-spin text-riverside-red" size={48} />
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Chargement...</p>
             </div>
           ) : activeTab === "taches" ? (
-            <div className="space-y-4">
-              {tasks.length === 0 ? (
-                <div className="py-20 text-center text-slate-400 italic text-[11px] uppercase font-black tracking-widest opacity-40">Aucune mission en cours</div>
-              ) : (
-                tasks.map(task => (
-                  <motion.div layout key={task.id} whileHover={{ x: 6, borderColor: "rgba(220, 38, 38, 0.2)" }} className={cn("group flex items-center justify-between p-6 rounded-[2rem] border transition-all cursor-pointer", task.statut === "Terminé" ? "bg-slate-50 border-slate-100 opacity-60" : "bg-white border-slate-200 shadow-sm")}>
-                    <div className="flex items-center gap-6">
-                      <button onClick={() => toggleTaskStatus(task)} className={cn("transition-all duration-500", task.statut === "Terminé" ? "text-emerald-500 scale-110" : "text-slate-200 hover:text-riverside-red hover:scale-110")}>
-                        {task.statut === "Terminé" ? <CheckCircle2 size={28} strokeWidth={2.5} /> : <Circle size={28} strokeWidth={2} />}
-                      </button>
-                      <div>
-                        <p className={cn("text-base font-black tracking-tight transition-all", task.statut === "Terminé" ? "text-slate-400 line-through" : "text-slate-900")}>{task.titre}</p>
-                        <div className="flex items-center gap-3 mt-1.5 shadow-sm w-fit rounded-full overflow-hidden">
-                          <span className={cn("text-[9px] font-black uppercase tracking-widest px-3 py-1", priorityColors[task.priorite])}>{task.priorite}</span>
-                        </div>
-                      </div>
-                    </div>
-                  </motion.div>
-                ))
-              )}
-            </div>
-          ) : activeTab === "personnel" ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
-              {personnel.map(p => (
-                <motion.div key={p.id} whileHover={{ y: -8 }} onClick={() => setSelectedStaff(p)} className="bg-slate-50/40 p-8 rounded-[3rem] border border-slate-100 hover:border-riverside-red/20 hover:bg-white hover:shadow-2xl transition-all cursor-pointer group text-center">
-                  <div className="w-24 h-24 bg-white rounded-[2.5rem] flex items-center justify-center text-slate-300 group-hover:text-riverside-red border border-slate-100 shadow-sm mx-auto mb-6 transition-all duration-300">
-                    <UserCog size={44} strokeWidth={1} />
-                  </div>
-                  <h4 className="text-xl font-black text-slate-950 tracking-tight leading-none mb-2">{p.nom_complet}</h4>
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest opacity-60">{p.fonction}</p>
-                </motion.div>
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-2">
+              {tasks.map(task => (
+                <div key={task.id} className="p-2 rounded-lg border border-slate-100 bg-white shadow-sm flex items-center justify-between">
+                   <div className="flex items-center gap-2">
+                     <button onClick={() => toggleTaskStatus(task)} className={cn(task.statut === "Terminé" ? "text-emerald-500" : "text-slate-200")}>
+                        <CheckCircle2 size={18} />
+                     </button>
+                     <div>
+                       <p className={cn("text-[10px] font-black uppercase truncate max-w-[80px]", task.statut === "Terminé" ? "text-slate-300 line-through" : "text-slate-900")}>{task.titre}</p>
+                       <span className="text-[7px] font-black uppercase text-slate-400 px-1 py-0.5 bg-slate-50 rounded">{task.priorite}</span>
+                     </div>
+                   </div>
+                </div>
               ))}
             </div>
+          ) : activeTab === "personnel" ? (
+            <div className="bg-white border border-slate-100 rounded-lg overflow-hidden shadow-sm">
+              <table className="w-full text-left">
+                <thead className="bg-slate-50 border-b border-slate-100 text-[8px] font-black text-slate-400 uppercase tracking-widest">
+                  <tr>
+                    <th className="px-4 py-2">Employé</th>
+                    <th className="px-4 py-2">Poste</th>
+                    <th className="px-4 py-2 text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-50">
+                  {personnel.map(p => (
+                    <tr key={p.id} className="hover:bg-slate-50 transition-colors group">
+                      <td className="px-4 py-1.5">
+                         <div className="flex items-center gap-2">
+                           <div className="w-6 h-6 rounded bg-slate-100 flex items-center justify-center text-slate-400 group-hover:bg-riverside-red group-hover:text-white transition-colors">
+                             <UserCog size={12} />
+                           </div>
+                           <p className="text-[10px] font-black text-slate-900 uppercase truncate max-w-[150px]">{p.nom_complet}</p>
+                         </div>
+                      </td>
+                      <td className="px-4 py-1.5 text-[9px] font-bold text-slate-400 uppercase truncate max-w-[100px]">{p.fonction}</td>
+                      <td className="px-4 py-1.5 text-right">
+                        <button 
+                          onClick={() => setSelectedStaff(p)}
+                          className="px-2 py-1 bg-slate-900 text-white rounded text-[7px] font-black uppercase hover:bg-riverside-red transition-all"
+                        >
+                          Fiche RH
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           ) : activeTab === "rapports" ? (
-            <div className="space-y-16">
-              <div className="bg-slate-950 p-12 rounded-[4rem] text-white">
-                <h3 className="text-2xl font-black uppercase tracking-tight mb-8">Nouveau Rapport de Garde</h3>
-                <form onSubmit={handleCreateGardeRapport} className="grid grid-cols-1 md:grid-cols-2 gap-10">
-                  <div className="space-y-6">
-                    <select required className="w-full p-5 bg-white/5 border border-white/10 rounded-2xl text-white outline-none focus:border-riverside-red" value={gardeForm.medecin_id} onChange={e => setGardeForm({...gardeForm, medecin_id: e.target.value})}>
-                      <option value="" className="text-slate-900">Médecin responsable...</option>
-                      {personnel.map(p => <option key={p.id} value={p.id} className="text-slate-900">{p.nom_complet}</option>)}
-                    </select>
-                    <input className="w-full p-5 bg-white/5 border border-white/10 rounded-2xl text-white outline-none focus:border-riverside-red" placeholder="Détails évènements..." value={gardeForm.evenements} onChange={e => setGardeForm({...gardeForm, evenements: e.target.value})} />
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+              <div className="lg:col-span-12 bg-slate-950 p-8 rounded-[2.5rem] text-white">
+                <div className="flex items-center justify-between mb-8">
+                   <div className="flex gap-4">
+                     <button type="button" onClick={() => setRapportType("GARDE")} className={cn("px-4 py-2 rounded-xl text-[10px] font-black uppercase transition-all", rapportType === "GARDE" ? "bg-riverside-red text-white" : "bg-white/5 text-slate-500 hover:text-white")}>Garde</button>
+                     <button type="button" onClick={() => setRapportType("REUNION")} className={cn("px-4 py-2 rounded-xl text-[10px] font-black uppercase transition-all", rapportType === "REUNION" ? "bg-riverside-red text-white" : "bg-white/5 text-slate-500 hover:text-white")}>Réunion</button>
+                   </div>
+                   <div>
+                     <h3 className="text-xl font-black uppercase tracking-tight text-right">Rapport Officiel</h3>
+                     <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-1">Saisie assistée Riverside</p>
+                   </div>
+                </div>
+                
+                <form onSubmit={handleCreateGardeRapport} className="space-y-8">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div className="space-y-2">
+                      <label className="text-[9px] font-black uppercase text-slate-500 ml-1">Médecin de Garde</label>
+                      <select required className="w-full p-4 bg-white/5 border border-white/10 rounded-2xl text-white outline-none focus:border-riverside-red text-xs transition-all" value={gardeForm.medecin_id} onChange={e => setGardeForm({...gardeForm, medecin_id: e.target.value})}>
+                        <option value="" className="text-slate-900">Identifier le responsable...</option>
+                        {personnel.map(p => <option key={p.id} value={p.id} className="text-slate-900">{p.nom_complet}</option>)}
+                      </select>
+                    </div>
+                    <div className="md:col-span-2 space-y-2">
+                      <label className="text-[9px] font-black uppercase text-slate-500 ml-1">Évènements Notables (Urgences, Décès, Sorties)</label>
+                      <input className="w-full p-4 bg-white/5 border border-white/10 rounded-2xl text-white outline-none focus:border-riverside-red text-xs transition-all" placeholder="Décrire les moments forts de la garde..." value={gardeForm.evenements} onChange={e => setGardeForm({...gardeForm, evenements: e.target.value})} />
+                    </div>
                   </div>
-                  <textarea className="w-full p-6 bg-white/5 border border-white/10 rounded-[2.5rem] text-white outline-none focus:border-riverside-red h-40 resize-none" placeholder="Transmissions techniques..." value={gardeForm.transmissions} onChange={e => setGardeForm({...gardeForm, transmissions: e.target.value})} />
-                  <button disabled={submitting} className="md:col-span-2 py-6 bg-riverside-red text-white font-black text-[11px] uppercase tracking-[0.4em] rounded-[2rem] shadow-2xl hover:scale-105 transition-all">SCELLER LE RAPPORT</button>
+
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between border-b border-white/5 pb-2">
+                      <h4 className="text-[10px] font-black uppercase text-slate-400 tracking-widest flex items-center gap-2">
+                        <History size={14} className="text-riverside-red" /> Transmissions par Services
+                      </h4>
+                      <button type="button" onClick={() => setGardeForm({...gardeForm, transmissions: gardeForm.transmissions + "\n- Nouveau patient: "})} className="text-[9px] font-black text-riverside-red uppercase hover:underline">Ajouter un bloc</button>
+                    </div>
+                    <textarea className="w-full p-6 bg-white/5 border border-white/10 rounded-3xl text-white outline-none focus:border-riverside-red text-xs h-48 resize-none transition-all leading-relaxed" placeholder="Détaillez ici les soins administrés, les patients critiques et les consignes pour la relève..." value={gardeForm.transmissions} onChange={e => setGardeForm({...gardeForm, transmissions: e.target.value})} />
+                  </div>
+
+                  <div className="flex justify-end">
+                    <button disabled={submitting} className="group px-12 py-5 bg-riverside-red text-white font-black text-[11px] uppercase tracking-[0.3em] rounded-[2rem] shadow-2xl shadow-red-900/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center gap-4">
+                      {submitting ? <Loader2 className="animate-spin" size={18} /> : <ShieldCheck size={18} />}
+                      SCELLER LE RAPPORT OFFICIEL
+                    </button>
+                  </div>
                 </form>
               </div>
-              <div className="bg-white border border-slate-100 rounded-[3rem] overflow-hidden shadow-2xl">
+
+              <div className="lg:col-span-12 bg-white border border-slate-100 rounded-3xl overflow-hidden shadow-xl shadow-slate-100/50">
+                <div className="px-8 py-6 border-b border-slate-100 flex items-center justify-between">
+                  <h3 className="text-sm font-black uppercase text-slate-900 tracking-tight">Historique des Gardes</h3>
+                  <div className="flex gap-2">
+                    <Search size={16} className="text-slate-300" />
+                  </div>
+                </div>
                 <table className="w-full">
-                  <thead className="bg-slate-50 text-[11px] font-black text-slate-400 uppercase tracking-widest">
-                    <tr><th className="p-8 text-left">Date Riverside</th><th className="p-8 text-left">Type</th><th className="p-8 text-left">Signataire</th><th className="p-8 text-right">Téléchargement</th></tr>
+                  <thead className="bg-slate-50 text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                    <tr><th className="px-8 py-4 text-left">Horodatage</th><th className="px-8 py-4 text-left">Officier de Garde</th><th className="px-8 py-4 text-left">Statut</th><th className="px-8 py-4 text-right">Documents</th></tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100">
+                  <tbody className="divide-y divide-slate-50">
                     {rapports.map(r => (
-                      <tr key={r.id} className="hover:bg-slate-50 transition-colors">
-                        <td className="p-8 font-black text-slate-900">{new Date(r.created_at).toLocaleDateString()}</td>
-                        <td className="p-8"><span className="px-3 py-1 bg-red-100 text-riverside-red rounded-lg text-[9px] font-black uppercase">{r.type_rapport}</span></td>
-                        <td className="p-8 font-bold text-slate-600">{r.auteur}</td>
-                        <td className="p-8 text-right"><button onClick={() => window.print()} className="p-3 text-slate-400 hover:text-riverside-red transition-all"><Download size={20} /></button></td>
+                      <tr key={r.id} className="hover:bg-slate-50/50 transition-colors group">
+                        <td className="px-8 py-4 text-[11px] font-black text-slate-900 uppercase">
+                          <div className="flex items-center gap-2">
+                            <Calendar size={12} className="text-slate-300" />
+                            {new Date(r.created_at).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })}
+                          </div>
+                        </td>
+                        <td className="px-8 py-4 text-[11px] font-bold text-slate-600 uppercase flex items-center gap-2">
+                          <div className="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center text-[10px] text-slate-400 group-hover:bg-riverside-red group-hover:text-white transition-colors">{r.auteur[0]}</div>
+                          {r.auteur}
+                        </td>
+                        <td className="px-8 py-4">
+                          <span className="px-2 py-1 bg-emerald-50 text-emerald-600 rounded-md text-[8px] font-black uppercase border border-emerald-100">Archivé</span>
+                        </td>
+                        <td className="px-8 py-4 text-right">
+                          <button onClick={() => handleDownloadRapportPDF(r)} className="p-2 text-slate-300 hover:text-riverside-red hover:bg-red-50 rounded-lg transition-all">
+                             <FileDown size={18} />
+                          </button>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -556,18 +623,15 @@ export default function AdministrationPage() {
               </div>
             </div>
           ) : activeTab === "archives" ? (
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               {(['LÉGAL', 'RH', 'TECHNIQUE'] as const).map(cat => (
-                <div key={cat} className="bg-slate-50/40 p-10 rounded-[3.5rem] border border-slate-100 min-h-[500px]">
-                  <h4 className="text-sm font-black text-slate-950 uppercase tracking-[0.2em] mb-10 pb-6 border-b border-slate-200">{cat}</h4>
-                  <div className="space-y-4">
+                <div key={cat} className="space-y-3">
+                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{cat}</p>
+                  <div className="space-y-2">
                     {archives.filter(a => a.categorie === cat).map(a => (
-                      <div key={a.id} className="p-4 bg-white border border-slate-100 rounded-2xl flex items-center justify-between group shadow-sm">
-                        <div className="flex items-center gap-4">
-                          <FileText className="text-slate-400" size={20} />
-                          <p className="text-[12px] font-black text-slate-950 line-clamp-1">{a.nom_fichier}</p>
-                        </div>
-                        <a href={a.url_fichier} target="_blank" rel="noopener" className="p-2 text-slate-400 hover:text-riverside-red transition-all"><Download size={16} /></a>
+                      <div key={a.id} className="p-3 bg-slate-50 border border-slate-100 rounded-xl flex items-center justify-between group">
+                        <p className="text-[10px] font-black text-slate-700 line-clamp-1">{a.nom_fichier}</p>
+                        <a href={a.url_fichier} target="_blank" rel="noopener noreferrer" className="text-slate-300 hover:text-riverside-red"><Download size={14} /></a>
                       </div>
                     ))}
                   </div>
@@ -575,46 +639,32 @@ export default function AdministrationPage() {
               ))}
             </div>
           ) : activeTab === "audit" ? (
-            <div className="space-y-12">
-              <div className="p-10 bg-emerald-50/40 border border-emerald-100 rounded-[3rem] flex items-center justify-between">
-                <div className="flex items-center gap-6">
-                  <div className="w-20 h-20 bg-white rounded-[2rem] text-emerald-600 flex items-center justify-center shadow-lg"><Lock size={36} /></div>
-                  <div><h3 className="text-2xl font-black text-slate-950 uppercase tracking-tight">Le Verrou du Patron</h3><p className="text-[11px] font-black text-emerald-700 uppercase opacity-70 tracking-widest">Traçabilité Immuable</p></div>
-                </div>
-                <div className="bg-emerald-500 text-white px-6 py-2 rounded-full text-[10px] font-black uppercase tracking-widest shadow-xl">Sécurité Active</div>
-              </div>
-              <div className="bg-white border border-slate-100 rounded-[4rem] overflow-hidden shadow-2xl">
-                <table className="w-full">
-                  <thead className="bg-slate-950 text-[11px] font-black text-slate-500 uppercase tracking-widest">
-                    <tr><th className="p-10 text-left">Horodatage</th><th className="p-10 text-left">Utilisateur</th><th className="p-10 text-left">Action</th><th className="p-10 text-left">Preuves</th></tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {auditLogs.map(log => (
-                      <tr key={log.id} className="hover:bg-slate-50 transition-all font-mono text-[11px]">
-                        <td className="p-10 text-slate-400">{new Date(log.created_at).toLocaleString()}</td>
-                        <td className="p-10 font-bold">{log.utilisateur}</td>
-                        <td className="p-10"><span className="px-3 py-1 bg-amber-50 text-amber-600 rounded-lg font-black">{log.action}</span></td>
-                        <td className="p-10 text-slate-600 italic">{log.details}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+            <div className="bg-white border border-slate-100 rounded-xl overflow-hidden">
+               <table className="w-full text-left font-mono text-[9px]">
+                 <thead className="bg-slate-900 text-slate-400 uppercase">
+                   <tr><th className="px-4 py-3">Log</th><th className="px-4 py-3">Action</th><th className="px-4 py-3">Preuve</th></tr>
+                 </thead>
+                 <tbody className="divide-y divide-slate-50">
+                   {auditLogs.map(log => (
+                     <tr key={log.id}>
+                       <td className="px-4 py-2 text-slate-400">{new Date(log.created_at).toLocaleString()}</td>
+                       <td className="px-4 py-2 font-black uppercase text-amber-600">{log.action}</td>
+                       <td className="px-4 py-2 text-slate-500">{log.details}</td>
+                     </tr>
+                   ))}
+                 </tbody>
+               </table>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
               {stocks.map(item => (
-                <div key={item.id} className="p-8 bg-white border border-slate-200 rounded-[3rem] shadow-sm relative overflow-hidden group">
-                  {item.quantite_actuelle <= item.seuil_alerte && (
-                    <div className="absolute top-0 right-0 bg-red-600 text-white text-[9px] font-black uppercase px-4 py-2 flex items-center gap-2">
-                       ALERTE STOCK
-                    </div>
-                  )}
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">{item.categorie}</p>
-                  <h4 className="text-xl font-black text-slate-900 tracking-tight mb-8">{item.designation}</h4>
-                  <div className="flex justify-between items-end border-t border-slate-100 pt-6">
-                    <div><p className="text-[10px] font-black text-slate-400 uppercase">Quantité</p><p className={cn("text-3xl font-black", item.quantite_actuelle <= item.seuil_alerte ? "text-red-700" : "text-slate-900")}>{item.quantite_actuelle}</p></div>
-                    <div className="text-right text-[10px] font-black text-slate-400 uppercase"><p>Seuil</p><p>{item.seuil_alerte}</p></div>
+                <div key={item.id} className="p-3 bg-white border border-slate-100 rounded-lg shadow-sm relative group hover:border-riverside-red/30 transition-all">
+                  {item.quantite_actuelle <= item.seuil_alerte && <div className="absolute top-0 right-0 w-1.5 h-1.5 bg-red-600 rounded-full m-1.5 animate-pulse" />}
+                  <p className="text-[7px] font-black text-slate-300 uppercase leading-none mb-1">{item.categorie}</p>
+                  <h4 className="text-[9px] font-black text-slate-900 uppercase truncate mb-2">{item.designation}</h4>
+                  <div className="flex items-end justify-between mt-1">
+                    <p className={cn("text-base font-black leading-none", item.quantite_actuelle <= item.seuil_alerte ? "text-red-600" : "text-slate-900")}>{item.quantite_actuelle}</p>
+                    <p className="text-[7px] font-bold text-slate-200">#STK</p>
                   </div>
                 </div>
               ))}
@@ -622,6 +672,7 @@ export default function AdministrationPage() {
           )}
         </div>
       </motion.div>
+
 
       {/* MODALS */}
       <AnimatePresence>
@@ -682,6 +733,12 @@ export default function AdministrationPage() {
           </>
         )}
       </AnimatePresence>
+
+      <PDFTemplates 
+        id="admin-rapport-template" 
+        type="RAPPORT_GARDE" 
+        data={printingRapport} 
+      />
     </div>
   );
 }

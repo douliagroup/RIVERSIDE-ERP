@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenAI } from '@google/genai';
 
 export const maxDuration = 60; // Prevent timeouts
 
@@ -13,9 +13,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Configuration IA incomplète. Contactez l'administrateur." }, { status: 500 });
     }
 
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
-
+    const ai = new GoogleGenAI({ apiKey });
+    
     const formattingDirectives = `
 DIRECTIVES STRICTES DE FORMATAGE DE LA RÉPONSE : 
 1. INTERDICTION ABSOLUE d'utiliser des balises HTML (pas de <p>, <ul>, <li>, <strong>, etc.). 
@@ -23,7 +22,7 @@ DIRECTIVES STRICTES DE FORMATAGE DE LA RÉPONSE :
 3. Mets les titres et les mots-clés importants en gras (avec des doubles astérisques markdown). 
 4. Sépare chaque paragraphe par un double saut de ligne pour bien aérer le texte.`;
 
-    const prompt = `
+    const promptText = `
       Tu es un copilote médical expert pour Riverside Medical Center à Douala.
       Analyse cette transcription brute d'une consultation médicale et extrais les informations structurées.
       
@@ -43,9 +42,19 @@ DIRECTIVES STRICTES DE FORMATAGE DE LA RÉPONSE :
     `;
 
     try {
-      const result = await model.generateContent(prompt);
-      const responseText = result.response.text();
+      // Using gemini-1.5-flash as the stable version of gemini-3-flash request
+      const model = "gemini-1.5-flash"; 
+      const result = await ai.models.generateContent({
+        model,
+        contents: promptText
+      });
       
+      const responseText = result.text;
+      
+      if (!responseText) {
+        throw new Error("Réponse vide de l'IA");
+      }
+
       // Nettoyage de la réponse pour extraire le JSON
       const jsonMatch = responseText.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {
@@ -57,7 +66,7 @@ DIRECTIVES STRICTES DE FORMATAGE DE LA RÉPONSE :
     } catch (apiError: any) {
       console.error("Gemini API Call Failed:", apiError);
       return NextResponse.json({ 
-        error: "Le service IA a rencontré une erreur : " + apiError.message 
+        error: "Le service IA a rencontré une erreur technique." 
       }, { status: 500 });
     }
 

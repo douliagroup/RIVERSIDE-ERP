@@ -44,8 +44,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   useEffect(() => {
-    const checkUser = async () => {
+    let mounted = true;
+
+    const initAuth = async () => {
+      // First check getSession once
       const { data: { session } } = await supabase.auth.getSession();
+      if (!mounted) return;
+
       if (session?.user) {
         setUser(session.user);
         await fetchUserRole(session.user.email!);
@@ -59,13 +64,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLoading(false);
     };
 
-    checkUser();
+    initAuth();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (!mounted) return;
+
       if (session?.user) {
         setUser(session.user);
         await fetchUserRole(session.user.email!);
-      } else {
+      } else if (event === 'SIGNED_OUT') {
         setUser(null);
         Cookies.remove('riverside_role');
         if (window.location.pathname !== '/login') {
@@ -75,7 +82,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLoading(false);
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, [router]);
 
   const handleSetRole = (role: Role) => {

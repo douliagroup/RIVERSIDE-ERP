@@ -44,18 +44,82 @@ interface AlertPatient {
   id: string;
   nom_complet: string;
   telephone: string;
-  type: "ANNIVERSAIRE" | "SUIVI";
+  type: "ANNIVERSAIRE" | "J+3" | "CRM";
   info: string;
+  date_reference?: string;
+  patient_id?: string;
+}
+
+interface CRMAction {
+  id: string;
+  patient_id: string;
+  type_action: string;
+  statut: string;
+  date_prevue: string;
+  notes: string;
+  created_at: string;
+  patients: { nom_complet: string; telephone: string };
 }
 
 export default function DouliaLovePage() {
+  const [activeTab, setActiveTab] = useState<"anniversaires" | "post_soins" | "suivi">("anniversaires");
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [crmTasks, setCrmTasks] = useState<CRMAction[]>([]);
   const [birthdayPatients, setBirthdayPatients] = useState<AlertPatient[]>([]);
-  const [followupPatients, setFollowupPatients] = useState<AlertPatient[]>([]);
+  const [j3Patients, setJ3Patients] = useState<AlertPatient[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCampaignModal, setShowCampaignModal] = useState(false);
+  const [showCRMModal, setShowCRMModal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [activeView, setActiveView] = useState<"dashboard" | "ia">("dashboard");
+
+  const getWhatsAppLink = (phone: string, type: "ANNIVERSAIRE" | "J+3" | "CRM", name: string) => {
+    if (!phone) return null;
+    const cleanPhone = phone.replace(/\s/g, '').replace('+', '');
+    const finalPhone = cleanPhone.startsWith('237') ? cleanPhone : `237${cleanPhone}`;
+    
+    let message = "";
+    if (type === "ANNIVERSAIRE") {
+      message = `Joyeux Anniversaire ${name} ! 🎂 La clinique Riverside vous souhaite bonheur et santé. ✨`;
+    } else if (type === "J+3") {
+      message = `Bonjour ${name}, la clinique Riverside prend de vos nouvelles suite à votre passage il y a 3 jours. Comment évolue votre état ? ❤️`;
+    } else {
+      message = `Bonjour ${name}, nous vous contactons pour votre suivi à la clinique Riverside.`;
+    }
+
+    return `https://wa.me/${finalPhone}?text=${encodeURIComponent(message)}`;
+  };
+
+  const markActionDone = async (patient: AlertPatient | CRMAction, type: string) => {
+    try {
+      if ('type_action' in patient) {
+        // It's a record in crm_suivi
+        await supabase.from('crm_suivi').update({ statut: 'Fait' }).eq('id', patient.id);
+      } else {
+        // It's a dynamic alert, we log it
+        await supabase.from('crm_suivi').insert([{
+          patient_id: patient.patient_id,
+          type_action: type,
+          statut: 'Fait',
+          date_prevue: new Date().toISOString().split('T')[0],
+          notes: `Action automatisée DOULIA Love effectuée`
+        }]);
+      }
+      toast.success("Action marquée comme effectuée ! ✨");
+      fetchData();
+    } catch (err: any) {
+      toast.error(err.message);
+    }
+  };
+
+  const [crmForm, setCrmForm] = useState({
+    patient_id: "",
+    type_action: "Suivi Médical",
+    date_prevue: new Date().toISOString().split('T')[0],
+    notes: ""
+  });
+
+  const [patientsList, setPatientsList] = useState<any[]>([]);
 
   // IA Generator State
   const [iaForm, setIaForm] = useState({
@@ -76,52 +140,62 @@ export default function DouliaLovePage() {
   const fetchData = React.useCallback(async () => {
     setLoading(true);
     try {
-      // 1. Fetch Campaigns
-      const { data: qCam } = await supabase
-        .from('campagnes_doulia_love')
-        .select('*')
-        .order('created_at', { ascending: false });
-      setCampaigns(qCam || []);
+      // 1. Fetch CRM Tasks from crm_suivi
+      const { data: qCrm } = await supabase
+        .from('crm_suivi')
+        .select('*, patients(nom_complet, telephone)')
+        .eq('statut', 'À faire')
+        .order('date_prevue', { ascending: true });
+      setCrmTasks(qCrm as any || []);
 
-      // 2. Fetch Birthdays (today is Day-Month)
+      // 2. Fetch Patients for Birthdays & Search
+      const { data: qPats } = await supabase.from('patients').select('id, nom_complet, telephone, date_naissance');
+      setPatientsList(qPats || []);
+
       const today = new Date();
-      const month = today.getMonth() + 1;
-      const day = today.getDate();
+      const currentMonth = today.getMonth() + 1;
       
-      const { data: qPat } = await supabase.from('patients').select('id, nom_complet, telephone, date_naissance');
-      const bdays = (qPat || []).filter(p => {
+      const bdays = (qPats || []).filter(p => {
         if (!p.date_naissance) return false;
         const d = new Date(p.date_naissance);
-        return (d.getMonth() + 1) === month && d.getDate() === day;
+        return (d.getMonth() + 1) === currentMonth;
       }).map(p => ({
         id: p.id,
+        patient_id: p.id,
         nom_complet: p.nom_complet,
         telephone: p.telephone,
         type: "ANNIVERSAIRE" as const,
-        info: "Fête son anniversaire aujourd'hui !"
+        info: `Anniversaire le ${new Date(p.date_naissance).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })}`
       }));
       setBirthdayPatients(bdays);
 
-      // 3. Fetch Follow-ups (exactly 3 days ago)
-      const threeDaysAgo = new Date();
-      threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
-      const start = new Date(threeDaysAgo.setHours(0,0,0,0)).toISOString();
-      const end = new Date(threeDaysAgo.setHours(23,59,59,999)).toISOString();
+      // 3. Fetch J+3 (Post-Soins)
+      // We check sejours_actifs with status 'Sortie (Terminé)' or consultations
+      const forDate = new Date();
+      forDate.setDate(forDate.getDate() - 3);
+      const start = new Date(forDate.setHours(0,0,0,0)).toISOString();
+      const end = new Date(forDate.setHours(23,59,59,999)).toISOString();
 
-      const { data: qConsult } = await supabase
-        .from('consultations')
+      const { data: qSejours } = await supabase
+        .from('sejours_actifs')
         .select('*, patients(nom_complet, telephone)')
-        .gte('created_at', start)
-        .lte('created_at', end);
+        .not('date_sortie', 'is', null)
+        .gte('date_sortie', start)
+        .lte('date_sortie', end);
       
-      const follows = (qConsult || []).map((c: any) => ({
-        id: c.id,
-        nom_complet: c.patients?.nom_complet || "Inconnu",
-        telephone: c.patients?.telephone || "N/A",
-        type: "SUIVI" as const,
-        info: `Consulté il y a 3 jours pour: ${c.motif_visite || 'Routine'}`
+      const j3 = (qSejours || []).map((s: any) => ({
+        id: s.id,
+        patient_id: s.patient_id,
+        nom_complet: s.patients?.nom_complet || "Inconnu",
+        telephone: s.patients?.telephone || "N/A",
+        type: "J+3" as const,
+        info: `Sortie de clinique il y a 3 jours`
       }));
-      setFollowupPatients(follows);
+      setJ3Patients(j3);
+
+      // 4. Fetch Campaigns
+      const { data: qCam } = await supabase.from('campagnes_doulia_love').select('*').order('created_at', { ascending: false });
+      setCampaigns(qCam || []);
 
     } catch (err) {
       console.error("Doulia Love data error:", err);
@@ -177,6 +251,39 @@ export default function DouliaLovePage() {
         .eq('id', id);
       if (error) throw error;
       toast.success(`Campagne "${titre}" déclenchée avec succès !`);
+      fetchData();
+    } catch (err: any) {
+      toast.error(err.message);
+    }
+  };
+
+  const handleCRMSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubmitting(true);
+    try {
+      const { error } = await supabase
+        .from('crm_suivi')
+        .insert([crmForm]);
+      if (error) throw error;
+      toast.success("Action CRM enregistrée");
+      setShowCRMModal(false);
+      setCrmForm({ patient_id: "", type_action: "Appel J+3", date_prevue: new Date().toISOString().split('T')[0], notes: "" });
+      fetchData();
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const updateCRMStatus = async (id: string, status: string) => {
+    try {
+      const { error } = await supabase
+        .from('crm_suivi')
+        .update({ statut: status })
+        .eq('id', id);
+      if (error) throw error;
+      toast.success("Action mise à jour");
       fetchData();
     } catch (err: any) {
       toast.error(err.message);
@@ -240,11 +347,11 @@ export default function DouliaLovePage() {
             <button 
               onClick={() => setActiveView("dashboard")}
               className={cn(
-                "px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all",
+                "px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2",
                 activeView === "dashboard" ? "bg-slate-900 text-white shadow-lg" : "text-slate-400 hover:text-rose-600"
               )}
             >
-              Fidélisation
+              <Heart size={14} className={activeView === "dashboard" ? "fill-white" : ""} /> Centre de Fidélisation
             </button>
             <button 
               onClick={() => setActiveView("ia")}
@@ -253,7 +360,7 @@ export default function DouliaLovePage() {
                 activeView === "ia" ? "bg-rose-500 text-white shadow-lg" : "text-slate-400 hover:text-rose-600"
               )}
             >
-              <Zap size={14} className={activeView === "ia" ? "text-yellow-300" : ""} /> Générateur IA
+              <Zap size={14} className={activeView === "ia" ? "text-yellow-300" : ""} /> Assistant IA
             </button>
           </div>
         </div>
@@ -265,151 +372,194 @@ export default function DouliaLovePage() {
               initial={{ opacity: 0, scale: 0.98 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.98 }}
+              className="space-y-10"
             >
-              {/* ALERTS SECTION */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 mb-16">
-                
-                {/* BIRTHDAYS */}
-                <div className="bg-white p-10 rounded-[3.5rem] shadow-xl shadow-rose-100/30 border border-rose-50 relative overflow-hidden">
-                  <div className="absolute top-0 right-0 w-32 h-32 bg-rose-50 rounded-full blur-3xl -translate-y-10 translate-x-10" />
-                  <h2 className="text-sm font-black text-slate-950 uppercase tracking-widest mb-8 flex items-center gap-3 relative z-10">
-                    <Cake size={20} className="text-rose-500" /> 🎂 Anniversaires du Jour
-                  </h2>
-
-                  <div className="space-y-4 relative z-10">
-                    {loading ? (
-                       <Loader2 className="animate-spin text-slate-200 mx-auto" size={48} />
-                    ) : birthdayPatients.length === 0 ? (
-                      <div className="p-10 text-center text-[11px] font-bold text-slate-300 uppercase italic border-2 border-dashed border-slate-50 rounded-[2.5rem]">
-                        Aucun anniversaire aujourd&apos;hui
-                      </div>
-                    ) : (
-                      birthdayPatients.map(p => (
-                        <div key={p.id} className="p-6 bg-rose-50/50 border border-rose-100 rounded-[2rem] flex items-center justify-between group hover:bg-rose-50 hover:shadow-md transition-all">
-                          <div className="flex items-center gap-5">
-                            <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center text-lg font-black text-rose-500 shadow-sm">
-                              {p.nom_complet.charAt(0)}
-                            </div>
-                            <div>
-                              <p className="text-sm font-black text-slate-900 leading-none mb-1">{p.nom_complet}</p>
-                              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">{p.telephone}</p>
-                            </div>
-                          </div>
-                          <button 
-                            onClick={() => sendSMS(p)}
-                            className="bg-rose-500 text-white px-4 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-slate-900 transition-all flex items-center gap-2"
-                          >
-                            <Send size={12} /> SMS de Vœux
-                          </button>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-
-                {/* FOLLOW UPS */}
-                <div className="bg-white p-10 rounded-[3.5rem] shadow-xl shadow-blue-100/30 border border-blue-50 relative overflow-hidden">
-                  <div className="absolute top-0 right-0 w-32 h-32 bg-blue-50 rounded-full blur-3xl -translate-y-10 translate-x-10" />
-                  <h2 className="text-sm font-black text-slate-950 uppercase tracking-widest mb-8 flex items-center gap-3 relative z-10">
-                    <Sparkles size={20} className="text-blue-500" /> ❤️ Suivi Post-Consultation (J+3)
-                  </h2>
-
-                  <div className="space-y-4 relative z-10">
-                    {loading ? (
-                       <Loader2 className="animate-spin text-slate-200 mx-auto" size={48} />
-                    ) : followupPatients.length === 0 ? (
-                      <div className="p-10 text-center text-[11px] font-bold text-slate-300 uppercase italic border-2 border-dashed border-slate-50 rounded-[2.5rem]">
-                         Aucun suivi à 3 jours prévu
-                      </div>
-                    ) : (
-                      followupPatients.map(p => (
-                        <div key={p.id} className="p-6 bg-blue-50/50 border border-blue-100 rounded-[2rem] flex items-center justify-between group hover:bg-blue-50 hover:shadow-md transition-all">
-                          <div className="flex items-center gap-5">
-                            <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center text-lg font-black text-blue-500 shadow-sm">
-                              {p.nom_complet.charAt(0)}
-                            </div>
-                            <div>
-                              <p className="text-sm font-black text-slate-900 leading-none mb-1">{p.nom_complet}</p>
-                              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">{p.info}</p>
-                            </div>
-                          </div>
-                          <button 
-                            onClick={() => sendSMS(p)}
-                            className="bg-blue-600 text-white px-4 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-slate-900 transition-all flex items-center gap-2"
-                          >
-                            <Send size={12} /> SMS de Suivi
-                          </button>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-
+              {/* INTERNAL TABS */}
+              <div className="flex items-center gap-6 bg-white/60 p-2 rounded-[2rem] border border-rose-100/50 backdrop-blur-sm w-fit mx-auto shadow-sm">
+                <button 
+                  onClick={() => setActiveTab('anniversaires')}
+                  className={cn(
+                    "px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2",
+                    activeTab === 'anniversaires' ? "bg-rose-500 text-white shadow-lg" : "text-slate-400 hover:text-rose-500"
+                  )}
+                >
+                  🎂 Anniversaires {birthdayPatients.length > 0 && <span className="w-2 h-2 bg-white rounded-full animate-pulse" />}
+                </button>
+                <button 
+                  onClick={() => setActiveTab('post_soins')}
+                  className={cn(
+                    "px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2",
+                    activeTab === 'post_soins' ? "bg-rose-500 text-white shadow-lg" : "text-slate-400 hover:text-rose-500"
+                  )}
+                >
+                  📞 Appels J+3 {j3Patients.length > 0 && <span className="w-2 h-2 bg-white rounded-full animate-pulse" />}
+                </button>
+                <button 
+                  onClick={() => setActiveTab('suivi')}
+                  className={cn(
+                    "px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2",
+                    activeTab === 'suivi' ? "bg-rose-500 text-white shadow-lg" : "text-slate-400 hover:text-rose-500"
+                  )}
+                >
+                  💉 Suivi & Rappels {crmTasks.length > 0 && <span className="w-2 h-2 bg-white rounded-full animate-pulse" />}
+                </button>
               </div>
 
-              {/* CAMPAIGNS SECTION */}
-              <div className="bg-white p-12 rounded-[4rem] shadow-2xl shadow-slate-200/50 border border-slate-100">
-                 <div className="flex items-center justify-between mb-10">
-                   <h2 className="text-lg font-black text-slate-950 uppercase tracking-tighter flex items-center gap-3">
-                     <Megaphone size={24} className="text-rose-500" /> Gestion des Campagnes Massives
-                   </h2>
-                   <button 
-                    onClick={() => setShowCampaignModal(true)}
-                    className="px-6 py-3 bg-slate-950 text-white rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-rose-600 transition-all flex items-center gap-2"
-                   >
-                     <Plus size={14} /> Créer Broadcast
-                   </button>
-                 </div>
+              {/* LISTS */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                {loading ? (
+                  <div className="col-span-full py-20 flex flex-col items-center gap-4">
+                     <Loader2 className="animate-spin text-rose-500" size={40} />
+                     <p className="text-[10px] font-black uppercase text-slate-300">Synchronisation Riverside CRM...</p>
+                  </div>
+                ) : (
+                  <>
+                    {/* ANNIVERSAIRES TAB */}
+                    {activeTab === 'anniversaires' && (
+                      birthdayPatients.length === 0 ? (
+                        <div className="col-span-full py-20 text-center bg-white rounded-[3rem] border-2 border-dashed border-rose-50 italic text-slate-300 font-bold uppercase text-xs">
+                          Aucun anniversaire ce mois-ci
+                        </div>
+                      ) : (
+                        birthdayPatients.map(p => (
+                          <div key={p.id} className="bg-white p-8 rounded-[3rem] border border-rose-50 shadow-xl shadow-rose-100/20 group relative overflow-hidden">
+                             <div className="absolute top-0 right-0 w-24 h-24 bg-rose-50 rounded-full blur-3xl -translate-y-12 translate-x-12 opacity-50 transition-all group-hover:scale-150" />
+                             <div className="flex items-center gap-5 mb-6 relative z-10">
+                                <div className="w-14 h-14 bg-rose-100 rounded-[1.5rem] flex items-center justify-center text-rose-600 font-black text-xl shadow-inner uppercase">
+                                   {p.nom_complet.charAt(0)}
+                                </div>
+                                <div className="flex-1 overflow-hidden">
+                                   <h3 className="text-sm font-black text-slate-900 uppercase truncate tracking-tight">{p.nom_complet}</h3>
+                                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{p.info}</p>
+                                </div>
+                             </div>
 
-                 <div className="overflow-x-auto">
-                   <table className="w-full">
-                     <thead>
-                       <tr className="border-b border-slate-50">
-                          <th className="text-left py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Campagne</th>
-                          <th className="text-left py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Cible</th>
-                          <th className="text-center py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Statut</th>
-                          <th className="text-right py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Actions</th>
-                       </tr>
-                     </thead>
-                     <tbody className="divide-y divide-slate-50">
-                       {campaigns.map(camp => (
-                         <tr key={camp.id} className="group hover:bg-slate-50/50 transition-colors">
-                           <td className="py-6">
-                             <p className="text-xs font-black text-slate-950 uppercase">{camp.titre}</p>
-                             <p className="text-[9px] font-bold text-slate-400 truncate max-w-xs">&quot;{camp.contenu}&quot;</p>
-                           </td>
-                           <td className="py-6">
-                             <span className="text-[9px] font-black text-slate-600 bg-slate-100 px-3 py-1 rounded-lg uppercase">
-                               {camp.cible}
-                             </span>
-                           </td>
-                           <td className="py-6 text-center">
-                             <span className={cn(
-                              "px-4 py-1 rounded-full text-[9px] font-black uppercase tracking-widest",
-                              camp.statut === "Envoyé" ? "bg-emerald-100 text-emerald-600" : "bg-slate-100 text-slate-400"
-                             )}>
-                               {camp.statut}
-                             </span>
-                           </td>
-                           <td className="py-6 text-right">
-                              {camp.statut !== "Envoyé" ? (
+                             <div className="flex gap-3 relative z-10">
                                 <button 
-                                  onClick={() => sendCampaign(camp.id, camp.titre)}
-                                  className="bg-slate-950 text-white px-5 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-rose-600 transition-all shadow-md flex items-center justify-center gap-2 ml-auto"
+                                  onClick={() => markActionDone(p, 'Souhait Anniversaire')}
+                                  className="flex-1 py-3 bg-slate-50 text-slate-400 hover:text-emerald-500 hover:bg-emerald-50 rounded-xl transition-all flex items-center justify-center gap-2"
+                                  title="Marquer comme fait"
                                 >
-                                  <Send size={12} /> Lancer
+                                   <CheckCircle2 size={16} />
                                 </button>
-                              ) : (
-                                <span className="text-[9px] font-black text-emerald-500 uppercase tracking-widest flex items-center justify-end gap-2 px-5">
-                                  <CheckCircle2 size={14} /> Envoyé
-                                </span>
-                              )}
-                           </td>
-                         </tr>
-                       ))}
-                     </tbody>
-                   </table>
-                 </div>
+                                {p.telephone && (
+                                   <a 
+                                     href={getWhatsAppLink(p.telephone, "ANNIVERSAIRE", p.nom_complet) || "#"}
+                                     target="_blank"
+                                     onClick={() => markActionDone(p, 'Souhait Anniversaire')}
+                                     className="flex-[3] py-3 bg-emerald-500 text-white rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-emerald-600 transition-all shadow-lg shadow-emerald-100 flex items-center justify-center gap-2"
+                                   >
+                                      WhatsApp
+                                   </a>
+                                )}
+                             </div>
+                          </div>
+                        ))
+                      )
+                    )}
+
+                    {/* POST-SOINS TAB */}
+                    {activeTab === 'post_soins' && (
+                      j3Patients.length === 0 ? (
+                        <div className="col-span-full py-20 text-center bg-white rounded-[3rem] border-2 border-dashed border-blue-50 italic text-slate-300 font-bold uppercase text-xs">
+                          Aucun suivi J+3 pour aujourd&apos;hui
+                        </div>
+                      ) : (
+                        j3Patients.map(p => (
+                          <div key={p.id} className="bg-white p-8 rounded-[3rem] border border-blue-50 shadow-xl shadow-blue-100/20 group relative overflow-hidden">
+                             <div className="absolute top-0 right-0 w-24 h-24 bg-blue-50 rounded-full blur-3xl -translate-y-12 translate-x-12 opacity-50" />
+                             <div className="flex items-center gap-5 mb-6 relative z-10">
+                                <div className="w-14 h-14 bg-blue-100 rounded-[1.5rem] flex items-center justify-center text-blue-600 font-black text-xl shadow-inner uppercase">
+                                   {p.nom_complet.charAt(0)}
+                                </div>
+                                <div className="flex-1 overflow-hidden">
+                                   <h3 className="text-sm font-black text-slate-900 uppercase truncate tracking-tight">{p.nom_complet}</h3>
+                                   <p className="text-[10px] font-bold text-blue-400 uppercase tracking-widest font-black">{p.info}</p>
+                                </div>
+                             </div>
+
+                             <div className="flex gap-3 relative z-10">
+                                <button 
+                                  onClick={() => markActionDone(p, 'Appel Suivi J+3')}
+                                  className="flex-1 py-3 bg-slate-50 text-slate-400 hover:text-emerald-500 hover:bg-emerald-50 rounded-xl transition-all flex items-center justify-center gap-2"
+                                >
+                                   <CheckCircle2 size={16} />
+                                </button>
+                                {p.telephone && (
+                                   <a 
+                                     href={getWhatsAppLink(p.telephone, "J+3", p.nom_complet) || "#"}
+                                     target="_blank"
+                                     onClick={() => markActionDone(p, 'Appel Suivi J+3')}
+                                     className="flex-[3] py-3 bg-blue-600 text-white rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-slate-900 transition-all shadow-lg shadow-blue-100 flex items-center justify-center gap-2"
+                                   >
+                                      WhatsApp
+                                   </a>
+                                )}
+                             </div>
+                          </div>
+                        ))
+                      )
+                    )}
+
+                    {/* CRM SUIVI TAB */}
+                    {activeTab === 'suivi' && (
+                      crmTasks.length === 0 ? (
+                        <div className="col-span-full py-20 text-center bg-white rounded-[3rem] border-2 border-dashed border-amber-50 italic text-slate-300 font-bold uppercase text-xs">
+                          Aucun rappel programmé
+                        </div>
+                      ) : (
+                        crmTasks.map(task => (
+                          <div key={task.id} className="bg-white p-8 rounded-[3rem] border border-amber-50 shadow-xl shadow-amber-100/20 group relative overflow-hidden">
+                             <div className="flex justify-between items-start mb-4">
+                                <span className="text-[9px] font-black bg-amber-500 text-white px-3 py-1 rounded-full uppercase tracking-widest">{task.type_action}</span>
+                                <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest">{new Date(task.date_prevue).toLocaleDateString()}</span>
+                             </div>
+                             <h3 className="text-sm font-black text-slate-900 uppercase truncate mb-2">{task.patients?.nom_complet}</h3>
+                             <div className="bg-slate-50 p-4 rounded-2xl text-[10px] font-medium text-slate-600 mb-6 border border-slate-100 min-h-[60px]">
+                                {task.notes || "Pas de notes"}
+                             </div>
+
+                             <div className="flex gap-3">
+                                <button 
+                                  onClick={() => markActionDone(task, 'Suivi CRM')}
+                                  className="flex-1 py-3 bg-slate-50 text-slate-400 hover:text-emerald-500 hover:bg-emerald-50 rounded-xl transition-all flex items-center justify-center gap-2"
+                                >
+                                   <CheckCircle2 size={16} />
+                                </button>
+                                {task.patients?.telephone && (
+                                   <a 
+                                     href={getWhatsAppLink(task.patients.telephone, "CRM", task.patients.nom_complet) || "#"}
+                                     target="_blank"
+                                     className="flex-[3] py-3 bg-amber-500 text-white rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-slate-900 transition-all shadow-lg shadow-amber-100 flex items-center justify-center gap-2"
+                                   >
+                                      WhatsApp
+                                   </a>
+                                )}
+                             </div>
+                          </div>
+                        ))
+                      )
+                    )}
+                  </>
+                )}
+              </div>
+
+              {/* Broadcast Quick Access */}
+              <div className="bg-slate-900 p-10 rounded-[3.5rem] text-white flex flex-col md:flex-row items-center justify-between gap-8 border border-white/5 shadow-2xl relative overflow-hidden">
+                <div className="absolute top-0 left-0 w-full h-full bg-rose-500/10 pointer-events-none" />
+                <div className="space-y-4 relative z-10">
+                   <div className="flex items-center gap-3">
+                      <Megaphone className="text-rose-500" size={24} />
+                      <h3 className="text-xl font-black uppercase tracking-tighter">Communication de Masse</h3>
+                   </div>
+                   <p className="text-xs font-medium text-slate-400 max-w-md">Besoin de diffuser une information à tous vos patients ? Utilisez notre moteur de Broadcast DOULIA Love.</p>
+                </div>
+                <button 
+                  onClick={() => setShowCampaignModal(true)}
+                  className="bg-white text-slate-950 px-8 py-4 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] hover:bg-rose-500 hover:text-white transition-all shadow-xl relative z-10"
+                >
+                   Lancer une Campagne
+                </button>
               </div>
             </motion.div>
           ) : (
@@ -610,6 +760,83 @@ export default function DouliaLovePage() {
                     Enregistrer & Programmer
                   </button>
                 </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* CRM MODAL */}
+      <AnimatePresence>
+        {showCRMModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="bg-white w-full max-w-lg rounded-[2.5rem] shadow-2xl p-10 relative overflow-hidden"
+            >
+              <div className="absolute top-0 left-0 w-full h-2 bg-slate-900" />
+              <h2 className="text-2xl font-black text-slate-950 uppercase tracking-tighter mb-8 flex items-center gap-3">
+                <Target size={24} className="text-rose-500" /> Planifier Action CRM
+              </h2>
+
+              <form onSubmit={handleCRMSubmit} className="space-y-6">
+                 <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Patient</label>
+                    <select 
+                      required
+                      value={crmForm.patient_id}
+                      onChange={e => setCrmForm({...crmForm, patient_id: e.target.value})}
+                      className="w-full p-4 bg-slate-50 border border-slate-100 rounded-xl outline-none focus:border-rose-500 font-bold text-sm"
+                    >
+                       <option value="">Sélectionner un patient...</option>
+                       {patientsList.map(p => <option key={p.id} value={p.id}>{p.nom_complet}</option>)}
+                    </select>
+                 </div>
+
+                 <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Type d&apos;action</label>
+                      <select 
+                        value={crmForm.type_action}
+                        onChange={e => setCrmForm({...crmForm, type_action: e.target.value})}
+                        className="w-full p-4 bg-slate-50 border border-slate-100 rounded-xl font-bold text-sm"
+                      >
+                         <option>Appel J+3</option>
+                         <option>Anniversaire</option>
+                         <option>Rappel Vaccin</option>
+                         <option>Relance Facture</option>
+                         <option>Suivi Chronique</option>
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Date Prévue</label>
+                       <input 
+                         type="date"
+                         required
+                         value={crmForm.date_prevue}
+                         onChange={e => setCrmForm({...crmForm, date_prevue: e.target.value})}
+                         className="w-full p-4 bg-slate-50 border border-slate-100 rounded-xl font-bold text-sm"
+                       />
+                    </div>
+                 </div>
+
+                 <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Notes / Instructions</label>
+                    <textarea 
+                      value={crmForm.notes}
+                      onChange={e => setCrmForm({...crmForm, notes: e.target.value})}
+                      className="w-full p-4 bg-slate-50 border border-slate-100 rounded-xl font-medium text-sm min-h-[100px] resize-none"
+                    />
+                 </div>
+
+                 <div className="flex gap-4 pt-4">
+                    <button type="button" onClick={() => setShowCRMModal(false)} className="flex-1 py-4 text-[10px] font-black uppercase text-slate-400 hover:text-slate-600 transition-colors">Annuler</button>
+                    <button disabled={submitting} className="flex-[2] py-4 bg-slate-900 text-white rounded-xl font-black uppercase text-[10px] tracking-widest shadow-xl hover:bg-rose-500 transition-all">
+                       {submitting ? "Planification..." : "Valider l'Action"}
+                    </button>
+                 </div>
               </form>
             </motion.div>
           </div>

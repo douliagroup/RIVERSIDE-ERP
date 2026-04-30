@@ -23,7 +23,7 @@ DIRECTIVES STRICTES DE FORMATAGE DE LA RÉPONSE :
     const ai = new GoogleGenAI({ apiKey });
     
     const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
+      model: "gemini-1.5-flash",
       contents: message,
       config: {
         systemInstruction: "Tu es DOULIA Insight, un assistant médical expert conçu pour aider les médecins de la clinique Riverside au Cameroun. Tu fournis des informations concises, basées sur les preuves cliniques. Tu aides au diagnostic, au calcul de posologie et à la vérification des interactions médicamenteuses. Termine toujours tes conseils critiques par un rappel que le médecin garde la responsabilité finale. " + formattingDirectives,

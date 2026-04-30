@@ -25,6 +25,9 @@ import { motion, AnimatePresence } from "motion/react";
 import { useAuth } from "@/src/context/AuthContext";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
+import { PDFTemplates } from "@/src/components/PDFTemplates";
+import html2canvas from "html2canvas";
+import jsPDF from "jspdf";
 
 interface Entry {
   id: string;
@@ -75,6 +78,16 @@ export default function AccountingPage() {
     flux: "ENTREE" as Entry["flux"]
   });
 
+  const [lignesBudgetaires, setLignesBudgetaires] = useState<any[]>([]);
+  const [showBudgetForm, setShowBudgetForm] = useState(false);
+  const [budgetForm, setBudgetForm] = useState({
+    titre: "",
+    categorie: "LOYER",
+    prevu: "",
+    reel: "",
+    mois: DEFAULT_MONTHS[new Date().getMonth()].toUpperCase()
+  });
+
   // Calculate filtered stats
   const stats = useMemo(() => {
     const filtered = entries.filter(e => {
@@ -87,77 +100,104 @@ export default function AccountingPage() {
     const banque = filtered.filter(e => e.flux === "BANQUE").reduce((acc, curr) => acc + curr.montant, 0);
     const horsCaisse = filtered.filter(e => e.flux === "HORS_CAISSE").reduce((acc, curr) => acc + curr.montant, 0);
     
-    const soldeProvisoire = entrees - sorties;
-    const soldeNet = soldeProvisoire - banque;
+    // Total Dépenses Réelles (Budget)
+    const depensesBudget = lignesBudgetaires
+      .filter(l => l.mois === DEFAULT_MONTHS[selectedMonth].toUpperCase())
+      .reduce((acc, curr) => acc + (curr.reel || 0), 0);
 
-    return { filtered, entrees, sorties, banque, horsCaisse, soldeProvisoire, soldeNet };
-  }, [entries, selectedMonth, selectedYear]);
+    const soldeProvisoire = entrees - sorties;
+    const soldeNet = (systemCashTotal + entrees) - (sorties + depensesBudget); // Simplified analysis
+
+    return { filtered, entrees, sorties, banque, horsCaisse, soldeProvisoire, soldeNet, depensesBudget };
+  }, [entries, selectedMonth, selectedYear, systemCashTotal, lignesBudgetaires]);
+
+  const fetchData = async () => {
+    setLoading(true);
+    try {
+      // 1. Fetch manual entries
+      const [
+        { data: entryData, error: entryError },
+        { data: catData },
+        { data: budgetData, error: budgetErr }
+      ] = await Promise.all([
+        supabase.from('comptabilite_manuelle').select('*').order('date_operation', { ascending: false }),
+        supabase.from('categories_comptables').select('*').order('nom'),
+        supabase.from('lignes_budgetaires').select('*').order('created_at', { ascending: false })
+      ]);
+      
+      if (entryError) throw entryError;
+      setEntries(entryData || []);
+      setCategories(catData || []);
+      setLignesBudgetaires(budgetData || []);
+
+      // 3. System Audit - Cash Total for current month
+      const startOfMonth = new Date(selectedYear, selectedMonth, 1).toISOString();
+      const endOfMonth = new Date(selectedYear, selectedMonth + 1, 0, 23, 59, 59).toISOString();
+
+      const { data: sysData } = await supabase
+        .from('transactions_caisse')
+        .select('montant_total, methode_paiement')
+        .gte('date_transaction', startOfMonth)
+        .lte('date_transaction', endOfMonth)
+        .eq('methode_paiement', 'Cash');
+      
+      const totalCash = sysData?.reduce((acc, curr) => acc + (curr.montant_total || 0), 0) || 0;
+      setSystemCashTotal(totalCash);
+
+      // 4. Insurance Invoices
+      const { data: factData, error: factError } = await supabase
+        .from('factures')
+        .select('*, patients(nom_complet)')
+        .gt('part_assurance', 0)
+        .gte('created_at', startOfMonth)
+        .lte('created_at', endOfMonth);
+
+      if (factError) {
+        const { data: txAssurance } = await supabase
+          .from('transactions_caisse')
+          .select('*, patients(nom_complet)')
+          .eq('methode_paiement', 'Assurance')
+          .gte('date_transaction', startOfMonth)
+          .lte('date_transaction', endOfMonth);
+        setInsuranceInvoices(txAssurance || []);
+      } else {
+        setInsuranceInvoices(factData || []);
+      }
+
+    } catch (err) {
+      console.error("Erreur fetch comptabilité:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      try {
-        // 1. Fetch manual entries
-        const { data: entryData, error: entryError } = await supabase
-          .from('comptabilite_manuelle')
-          .select('*')
-          .order('date_operation', { ascending: false });
-        
-        if (entryError) throw entryError;
-        setEntries(entryData || []);
-
-        // 2. Fetch categories
-        const { data: catData } = await supabase
-          .from('categories_comptables')
-          .select('*')
-          .order('nom');
-        setCategories(catData || []);
-
-        // 3. System Audit - Cash Total for current month
-        const startOfMonth = new Date(selectedYear, selectedMonth, 1).toISOString();
-        const endOfMonth = new Date(selectedYear, selectedMonth + 1, 0, 23, 59, 59).toISOString();
-
-        const { data: sysData } = await supabase
-          .from('transactions_caisse')
-          .select('montant_total, methode_paiement')
-          .gte('date_transaction', startOfMonth)
-          .lte('date_transaction', endOfMonth)
-          .eq('methode_paiement', 'Cash');
-        
-        const totalCash = sysData?.reduce((acc, curr) => acc + (curr.montant_total || 0), 0) || 0;
-        setSystemCashTotal(totalCash);
-
-        // 4. Insurance Invoices
-        // Try 'factures' first as per request, fallback to transactions_caisse
-        const { data: factData, error: factError } = await supabase
-          .from('factures')
-          .select('*, patients(nom_complet)')
-          .gt('part_assurance', 0)
-          .gte('created_at', startOfMonth)
-          .lte('created_at', endOfMonth);
-
-        if (factError) {
-          // Fallback if table 'factures' doesn't exist
-          const { data: txAssurance } = await supabase
-            .from('transactions_caisse')
-            .select('*, patients(nom_complet)')
-            .eq('methode_paiement', 'Assurance')
-            .gte('date_transaction', startOfMonth)
-            .lte('date_transaction', endOfMonth);
-          setInsuranceInvoices(txAssurance || []);
-        } else {
-          setInsuranceInvoices(factData || []);
-        }
-
-      } catch (err) {
-        console.error("Erreur fetch comptabilité:", err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchData();
   }, [selectedMonth, selectedYear]);
+
+  const handleCreateBudgetLine = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubmitting(true);
+    try {
+      const { error } = await supabase
+        .from('lignes_budgetaires')
+        .insert([{
+          ...budgetForm,
+          prevu: parseFloat(budgetForm.prevu),
+          reel: parseFloat(budgetForm.reel)
+        }]);
+      
+      if (error) throw error;
+      toast.success("Ligne budgétaire ajoutée");
+      setShowBudgetForm(false);
+      setBudgetForm({ titre: "", categorie: "LOYER", prevu: "", reel: "", mois: DEFAULT_MONTHS[selectedMonth].toUpperCase() });
+      fetchData();
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -198,8 +238,32 @@ export default function AccountingPage() {
     return categories.filter(c => c.flux_associe === form.flux);
   }, [categories, form.flux]);
 
-  const handlePrint = () => {
-    window.print();
+  const handlePrint = async () => {
+    const templateId = "bilan-comptable-template";
+    const element = document.getElementById(templateId);
+    if (!element) {
+      toast.error("Template non trouvé");
+      return;
+    }
+
+    try {
+      toast.loading("Génération du Rapport Financier...");
+      const canvas = await html2canvas(element, { scale: 2 });
+      const imgData = canvas.toDataURL("image/png");
+      const pdf = new jsPDF("p", "mm", "a4");
+      const imgProps = pdf.getImageProperties(imgData);
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+      
+      pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, pdfHeight);
+      pdf.save(`Rapport_Financier_Riverside_${DEFAULT_MONTHS[selectedMonth]}_${selectedYear}.pdf`);
+      toast.dismiss();
+      toast.success("Rapport PDF généré !");
+    } catch (err) {
+      console.error(err);
+      toast.dismiss();
+      toast.error("Erreur lors de la génération");
+    }
   };
 
   const gap = stats.entrees - systemCashTotal;
@@ -248,28 +312,56 @@ export default function AccountingPage() {
             <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Total Recettes</p>
             <h3 className="text-2xl font-black text-emerald-600 tabular-nums">{stats.entrees.toLocaleString()} <span className="text-[10px] opacity-60">FCFA</span></h3>
           </div>
-          <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm">
-            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Total Dépenses</p>
-            <h3 className="text-2xl font-black text-red-600 tabular-nums">{stats.sorties.toLocaleString()} <span className="text-[10px] opacity-60">FCFA</span></h3>
+          <div className="bg-white p-6 rounded-[2rem] border border-red-100 shadow-sm relative overflow-hidden group">
+            <div className="absolute top-0 right-0 w-24 h-24 bg-red-50 rounded-full blur-xl -translate-y-8 translate-x-8 group-hover:scale-110 transition-transform" />
+            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2 relative z-10">Total Dépenses (Audit)</p>
+            <h3 className="text-2xl font-black text-red-600 tabular-nums relative z-10">{(stats.sorties + stats.depensesBudget).toLocaleString()} <span className="text-[10px] opacity-60">FCFA</span></h3>
           </div>
           <div className="bg-slate-900 p-6 rounded-[2rem] text-white">
-            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Solde Provisoire</p>
-            <h3 className="text-2xl font-black tabular-nums">{stats.soldeProvisoire.toLocaleString()} <span className="text-[10px] opacity-60">FCFA</span></h3>
+            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Flux Combiné</p>
+            <h3 className="text-2xl font-black tabular-nums">{(stats.entrees + systemCashTotal).toLocaleString()} <span className="text-[10px] opacity-60">FCFA</span></h3>
           </div>
           <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm">
-            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Dépôts Banque</p>
+            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Immobilisation</p>
             <h3 className="text-2xl font-black text-blue-600 tabular-nums">{stats.banque.toLocaleString()} <span className="text-[10px] opacity-60">FCFA</span></h3>
           </div>
           <div className="bg-white p-6 rounded-[2rem] border border-emerald-100 shadow-xl shadow-emerald-50">
-            <p className="text-[9px] font-black text-emerald-500 uppercase tracking-widest mb-2">Solde Net Caisse</p>
+            <p className="text-[9px] font-black text-emerald-500 uppercase tracking-widest mb-2">Solde Net Stratégique</p>
             <h3 className="text-2xl font-black text-emerald-700 tabular-nums">{stats.soldeNet.toLocaleString()} <span className="text-[10px] opacity-60">FCFA</span></h3>
           </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 mb-10">
           
-          {/* LEFT: FORM */}
+          {/* LEFT: FORM & BUDGET */}
           <div className="lg:col-span-4 lg:sticky lg:top-10 h-fit space-y-6">
+            
+            <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm">
+              <div className="flex items-center justify-between mb-4 px-2">
+                <h3 className="text-[10px] font-black uppercase text-slate-900">Lignes Budgétaires</h3>
+                <button onClick={() => setShowBudgetForm(true)} className="p-1 px-3 bg-slate-900 text-white rounded-lg text-[8px] font-black uppercase">Ajouter</button>
+              </div>
+              <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
+                {lignesBudgetaires
+                  .filter(l => l.mois === DEFAULT_MONTHS[selectedMonth].toUpperCase())
+                  .map(l => (
+                  <div key={l.id} className="p-3 bg-slate-50 border border-slate-100 rounded-xl flex items-center justify-between group">
+                    <div>
+                      <p className="text-[9px] font-black text-slate-800 uppercase leading-none mb-1">{l.titre}</p>
+                      <p className="text-[8px] font-bold text-slate-400 uppercase">{l.categorie}</p>
+                    </div>
+                    <div className="text-right">
+                       <p className="text-[10px] font-black text-slate-900 leading-none">{l.reel?.toLocaleString()}</p>
+                       <p className="text-[7px] font-bold text-slate-300">/ {l.prevu?.toLocaleString()}</p>
+                    </div>
+                  </div>
+                ))}
+                {lignesBudgetaires.filter(l => l.mois === DEFAULT_MONTHS[selectedMonth].toUpperCase()).length === 0 && (
+                  <p className="text-[9px] text-center text-slate-300 italic py-4">Aucun budget défini pour ce mois</p>
+                )}
+              </div>
+            </div>
+
             <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
               <h2 className="text-xs font-black text-slate-900 uppercase tracking-widest mb-6 py-2 border-b border-slate-50 flex items-center gap-2">
                 <Plus size={16} className="text-riverside-red" />
@@ -638,6 +730,62 @@ export default function AccountingPage() {
            </div>
         </div>
       </div>
+
+      {/* Hidden Templates */}
+      <PDFTemplates 
+        id="bilan-comptable-template" 
+        type="BILAN_COMPTABLE" 
+        data={{
+          mois: DEFAULT_MONTHS[selectedMonth],
+          annee: selectedYear,
+          recettes: (stats.entrees + systemCashTotal),
+          depenses: (stats.sorties + stats.depensesBudget),
+          banque: stats.banque,
+          lignes: lignesBudgetaires.filter(l => l.mois === DEFAULT_MONTHS[selectedMonth].toUpperCase())
+        }} 
+      />
+
+      {/* Budget Modal */}
+      <AnimatePresence>
+        {showBudgetForm && (
+          <>
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowBudgetForm(false)} className="fixed inset-0 bg-slate-950/70 backdrop-blur-lg z-[1001]" />
+            <motion.div initial={{ scale: 0.9, opacity: 0, x: "-50%", y: "-50%" }} animate={{ scale: 1, opacity: 1, x: "-50%", y: "-50%" }} exit={{ scale: 0.9, opacity: 0, x: "-50%", y: "-50%" }} className="fixed top-1/2 left-1/2 w-[95%] max-w-lg bg-white rounded-[4rem] z-[1002] p-12 shadow-2xl">
+              <div className="flex items-center gap-4 mb-8">
+                <div className="w-12 h-12 bg-red-50 text-red-600 rounded-2xl flex items-center justify-center">
+                  <TrendingUp size={24} />
+                </div>
+                <div>
+                   <h3 className="text-xl font-black text-slate-950 uppercase">Ligne Budgétaire</h3>
+                   <p className="text-[10px] font-bold text-slate-400 uppercase">Configuration du provisionnement</p>
+                </div>
+              </div>
+
+              <form onSubmit={handleCreateBudgetLine} className="space-y-6">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Intitulé du poste</label>
+                  <input required value={budgetForm.titre} onChange={e => setBudgetForm({...budgetForm, titre: e.target.value})} className="w-full p-5 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:border-riverside-red font-bold text-sm" placeholder="Ex: Loyer Avril, Maintenance..." />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Budget Prévu</label>
+                    <input type="number" required value={budgetForm.prevu} onChange={e => setBudgetForm({...budgetForm, prevu: e.target.value})} className="w-full p-5 bg-slate-50 border border-slate-100 rounded-2xl font-black text-lg outline-none" placeholder="0" />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Décaissé (Réel)</label>
+                    <input type="number" required value={budgetForm.reel} onChange={e => setBudgetForm({...budgetForm, reel: e.target.value})} className="w-full p-5 bg-slate-50 border border-slate-100 rounded-2xl font-black text-lg outline-none" placeholder="0" />
+                  </div>
+                </div>
+
+                <button disabled={submitting} type="submit" className="w-full py-5 bg-riverside-red text-white uppercase font-black text-[11px] tracking-widest rounded-3xl shadow-xl shadow-red-100 mt-4 active:scale-95 transition-all">
+                  ACTUALISER LE TABLEAU DE BORD
+                </button>
+              </form>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
 
       <style jsx global>{`
         @media print {

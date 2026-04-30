@@ -12,6 +12,7 @@ import { Toaster as SonnerToaster } from "sonner";
 import { Toaster as HotToaster } from "react-hot-toast";
 
 import { motion, AnimatePresence } from "motion/react";
+import ChatInterneWidget from "../components/ChatInterneWidget";
 
 import { Inter, Space_Grotesk } from 'next/font/google';
 
@@ -106,6 +107,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 </motion.div>
               </AnimatePresence>
             </div>
+            <ChatInterneWidget />
           </main>
         </body>
       </AuthProvider>
