@@ -21,13 +21,25 @@ import {
   AlertCircle,
   Calculator,
   ChevronRight,
-  History
+  History,
+  Send,
+  MessageSquare,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { cn } from "../../lib/utils";
 import { useAuth } from "../../context/AuthContext";
 
 // Type definitions for SpeechRecognition
+const MEDICAMENTS_PEDIATRIQUES = [
+  { id: 'para', nom: 'Paracétamol', dose: 15, type: 'mg/kg/prise', indication: 'Toutes les 6h' },
+  { id: 'ibu', nom: 'Ibuprofène', dose: 10, type: 'mg/kg/prise', indication: 'Toutes les 8h (Max 30mg/kg/jour)' },
+  { id: 'amox', nom: 'Amoxicilline', dose: 50, type: 'mg/kg/jour', indication: 'À diviser en 2 ou 3 prises' },
+  { id: 'cefp', nom: 'Cefpodoxime (Orelox)', dose: 8, type: 'mg/kg/jour', indication: 'À diviser en 2 prises' },
+  { id: 'azith', nom: 'Azithromycine', dose: 20, type: 'mg/kg/jour', indication: '1 prise par jour (pendant 3 jours)' },
+  { id: 'phloro', nom: 'Phloroglucinol (Spasfon)', dose: 3, type: 'mg/kg/jour', indication: 'À diviser en 3 prises' },
+  { id: 'amox_clav', nom: 'Amoxicilline + Acide Clavulanique', dose: 80, type: 'mg/kg/jour', indication: 'À diviser en 3 prises' }
+];
+
 interface SpeechRecognitionErrorEvent extends Event {
   error: string;
 }
@@ -81,7 +93,7 @@ interface PatientWaiting {
 export default function MedicalPage() {
   const { user } = useAuth();
   const [selectedPatient, setSelectedPatient] = useState<PatientWaiting | null>(null);
-  const [activeTab, setActiveTab] = useState<'CONSULTATION' | 'HISTORIQUE' | 'OUTILS'>('CONSULTATION');
+  const [activeTab, setActiveTab] = useState<'CONSULTATION' | 'HISTORIQUE' | 'OUTILS' | 'IA_INSIGHT'>('CONSULTATION');
   
   // States for list
   const [waitingPatients, setWaitingPatients] = useState<PatientWaiting[]>([]);
@@ -106,9 +118,47 @@ export default function MedicalPage() {
   const [aiAnalysis, setAiAnalysis] = useState<AIAnalysis | null>(null);
   const [recognition, setRecognition] = useState<SpeechRecognition_Type | null>(null);
 
+  // Chat AI State
+  const [chatMessages, setChatMessages] = useState<{ role: 'user' | 'ai'; content: string }[]>([
+    { role: 'ai', content: 'Bonjour Docteur. Je suis DOULIA Insight. Comment puis-je vous assister aujourd\'hui ?' }
+  ]);
+  const [chatInput, setChatInput] = useState("");
+  const [isChatLoading, setIsChatLoading] = useState(false);
+
+  const handleSendMessage = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!chatInput.trim() || isChatLoading) return;
+
+    const userMessage = chatInput.trim();
+    setChatInput("");
+    setChatMessages(prev => [...prev, { role: 'user', content: userMessage }]);
+    setIsChatLoading(true);
+
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: userMessage }),
+      });
+
+      if (!res.ok) throw new Error("Erreur serveur");
+      const data = await res.json();
+      
+      if (data.error) throw new Error(data.error);
+      
+      setChatMessages(prev => [...prev, { role: 'ai', content: data.response }]);
+    } catch (err: any) {
+      console.error("Chat Error:", err);
+      toast.error("Erreur de communication avec DOULIA Insight.");
+      setChatMessages(prev => [...prev, { role: 'ai', content: "Désolé, j'ai rencontré une difficulté technique. Veuillez réessayer." }]);
+    } finally {
+      setIsChatLoading(false);
+    }
+  };
+
   // Tools State
   const [bmiInput, setBmiInput] = useState({ weight: "", height: "" });
-  const [paraInput, setParaInput] = useState({ weight: "" });
+  const [pediaInput, setPediaInput] = useState({ weight: "", medicineId: "para" });
 
   const fetchWaitingPatients = useCallback(async () => {
     setLoadingPatients(true);
@@ -420,7 +470,8 @@ export default function MedicalPage() {
                       {[
                         { id: 'CONSULTATION', icon: Stethoscope, label: 'Consul.' },
                         { id: 'HISTORIQUE', icon: History, label: 'Hist.' },
-                        { id: 'OUTILS', icon: Calculator, label: 'Outils' }
+                        { id: 'OUTILS', icon: Calculator, label: 'Outils' },
+                        { id: 'IA_INSIGHT', icon: Brain, label: 'IA Insight' }
                       ].map((t) => (
                         <button
                           key={t.id}
@@ -715,7 +766,7 @@ export default function MedicalPage() {
                         )}
                       </div>
 
-                      {/* Paracetamol Calculator */}
+                      {/* Pediatric Dosage Calculator */}
                       <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm space-y-8 flex flex-col justify-between hover:shadow-xl transition-all group">
                         <div className="space-y-6">
                           <div className="flex items-center gap-4">
@@ -723,43 +774,132 @@ export default function MedicalPage() {
                               <Pill size={24} />
                             </div>
                             <div>
-                               <h4 className="text-sm font-black text-slate-900 uppercase tracking-tighter">Dose Paracétamol</h4>
-                               <p className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.2em]">Pédiatrie (15mg/kg/prise)</p>
+                               <h4 className="text-sm font-black text-slate-900 uppercase tracking-tighter">Calculateur de Dose</h4>
+                               <p className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.2em]">Pédiatrie (mg/kg)</p>
                             </div>
                           </div>
                           
-                          <div className="space-y-2">
-                            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Poids de l&apos;enfant (kg)</label>
-                            <div className="relative group">
-                              <Weight className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-emerald-500 transition-colors" size={16} />
-                              <input 
-                                type="number" 
-                                value={paraInput.weight}
-                                onChange={(e) => setParaInput({ weight: e.target.value })}
-                                placeholder="Ex: 10"
-                                className="w-full pl-14 pr-5 py-4 bg-slate-50 border border-slate-100 rounded-2xl font-black text-sm outline-none focus:border-emerald-500 shadow-inner focus:bg-white transition-all"
-                              />
+                          <div className="space-y-4">
+                            <div className="space-y-2">
+                              <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Médicament</label>
+                              <select 
+                                value={pediaInput.medicineId}
+                                onChange={(e) => setPediaInput({ ...pediaInput, medicineId: e.target.value })}
+                                className="w-full px-5 py-4 bg-slate-50 border border-slate-100 rounded-2xl font-black text-sm outline-none focus:border-emerald-500 shadow-inner focus:bg-white transition-all appearance-none cursor-pointer"
+                              >
+                                {MEDICAMENTS_PEDIATRIQUES.map(m => (
+                                  <option key={m.id} value={m.id}>{m.nom}</option>
+                                ))}
+                              </select>
+                            </div>
+
+                            <div className="space-y-2">
+                              <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Poids de l&apos;enfant (kg)</label>
+                              <div className="relative group/input">
+                                <Weight className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within/input:text-emerald-500 transition-colors" size={16} />
+                                <input 
+                                  type="number" 
+                                  value={pediaInput.weight}
+                                  onChange={(e) => setPediaInput({ ...pediaInput, weight: e.target.value })}
+                                  placeholder="Ex: 10"
+                                  className="w-full pl-14 pr-5 py-4 bg-slate-50 border border-slate-100 rounded-2xl font-black text-sm outline-none focus:border-emerald-500 shadow-inner focus:bg-white transition-all"
+                                />
+                              </div>
                             </div>
                           </div>
                         </div>
 
-                        {paraInput.weight ? (
-                          <div className="p-8 bg-emerald-900 rounded-[2rem] text-center space-y-3 shadow-2xl relative overflow-hidden border-b-4 border-emerald-700">
-                            <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/10 rounded-full -mr-16 -mt-16 blur-2xl" />
-                            <p className="text-[9px] font-black text-emerald-500/50 uppercase tracking-[0.3em] relative z-10">Dose Recommandée</p>
-                            <div className="text-4xl font-black text-emerald-400 tracking-tighter relative z-10">
-                              {Number(paraInput.weight) * 15} <span className="text-lg">MG</span>
+                        {pediaInput.weight ? (() => {
+                          const med = MEDICAMENTS_PEDIATRIQUES.find(m => m.id === pediaInput.medicineId);
+                          if (!med) return null;
+                          const result = Number(pediaInput.weight) * med.dose;
+                          return (
+                            <div className="p-8 bg-emerald-900 rounded-[2rem] text-center space-y-3 shadow-2xl relative overflow-hidden border-b-4 border-emerald-700">
+                              <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/10 rounded-full -mr-16 -mt-16 blur-2xl" />
+                              <p className="text-[9px] font-black text-emerald-500/50 uppercase tracking-[0.3em] relative z-10">{med.nom}</p>
+                              <div className="text-4xl font-black text-emerald-400 tracking-tighter relative z-10">
+                                {result} <span className="text-lg">MG</span>
+                              </div>
+                              <div className="space-y-1 relative z-10">
+                                <p className="text-[10px] font-black text-emerald-200 uppercase tracking-widest">{med.type}</p>
+                                <p className="text-[9px] font-bold text-emerald-300/80 italic">{med.indication}</p>
+                              </div>
                             </div>
-                            <div className="bg-emerald-500/10 px-4 py-2 rounded-xl inline-block text-[10px] font-black text-emerald-200 uppercase tracking-widest relative z-10 italic">
-                              Max 4 fois par jour
-                            </div>
-                          </div>
-                        ) : (
+                          );
+                        })() : (
                           <div className="p-10 border-2 border-dashed border-slate-100 rounded-[2rem] text-center">
                              <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Entrez le poids du patient</p>
                           </div>
                         )}
                       </div>
+                    </div>
+                  )}
+
+                  {activeTab === 'IA_INSIGHT' && (
+                    <div className="flex flex-col h-[600px]">
+                      <div className="flex items-center justify-between mb-6">
+                        <div>
+                          <h4 className="text-xl font-black text-slate-900 uppercase tracking-tight">DOULIA Insight</h4>
+                          <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] mt-1">Assistant d&apos;aide à la décision clinique</p>
+                        </div>
+                        <div className="w-12 h-12 bg-red-50 rounded-2xl flex items-center justify-center text-red-600 border border-red-100">
+                          <Brain size={24} />
+                        </div>
+                      </div>
+
+                      <div className="flex-1 overflow-y-auto space-y-4 p-4 bg-slate-50/50 rounded-3xl border border-slate-100 mb-6 flex flex-col scrollbar-hide">
+                        {chatMessages.map((msg, idx) => (
+                          <div 
+                            key={idx} 
+                            className={cn(
+                              "max-w-[80%] p-4 rounded-2xl text-sm font-medium leading-relaxed",
+                              msg.role === 'user' 
+                                ? "bg-slate-900 text-white self-end rounded-tr-none" 
+                                : "bg-white text-slate-800 self-start rounded-tl-none shadow-sm border border-slate-100"
+                            )}
+                          >
+                            <div className="flex items-start gap-3">
+                              {msg.role === 'ai' && (
+                                <div className="mt-1">
+                                  <Stethoscope size={14} className="text-red-600" />
+                                </div>
+                              )}
+                              <p>{msg.content}</p>
+                            </div>
+                          </div>
+                        ))}
+                        {isChatLoading && (
+                          <div className="bg-white text-slate-800 self-start p-4 rounded-2xl rounded-tl-none shadow-sm border border-slate-100 flex items-center gap-2">
+                             <div className="flex gap-1">
+                               <div className="w-1.5 h-1.5 bg-red-400 rounded-full animate-bounce [animation-delay:-0.3s]" />
+                               <div className="w-1.5 h-1.5 bg-red-400 rounded-full animate-bounce [animation-delay:-0.15s]" />
+                               <div className="w-1.5 h-1.5 bg-red-400 rounded-full animate-bounce" />
+                             </div>
+                             <span className="text-[10px] font-black text-slate-400 uppercase ml-2">DOULIA réfléchit...</span>
+                          </div>
+                        )}
+                      </div>
+
+                      <form onSubmit={handleSendMessage} className="relative">
+                        <input 
+                          type="text"
+                          value={chatInput}
+                          onChange={(e) => setChatInput(e.target.value)}
+                          placeholder="Posez une question clinique (ex: posologie amoxicilline enfant 20kg)..."
+                          className="w-full bg-white border border-slate-100 p-6 rounded-3xl text-sm font-bold shadow-xl shadow-slate-200/50 focus:border-red-600 outline-none transition-all pr-20"
+                          disabled={isChatLoading}
+                        />
+                        <button 
+                          type="submit"
+                          disabled={!chatInput.trim() || isChatLoading}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 w-12 h-12 bg-red-600 text-white rounded-2xl flex items-center justify-center hover:bg-red-700 transition-all disabled:opacity-50 shadow-lg shadow-red-200"
+                        >
+                          <Send size={18} />
+                        </button>
+                      </form>
+                      <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest text-center mt-4 italic">
+                        DOULIA Insight est une aide ; la responsabilité clinique finale incombe au médecin.
+                      </p>
                     </div>
                   )}
                 </div>
