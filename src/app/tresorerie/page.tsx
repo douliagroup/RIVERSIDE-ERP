@@ -538,7 +538,7 @@ export default function TresoreriePage() {
     }
   };
 
-  if (loading) {
+  if (!mounted || loading) {
     return (
       <div className="flex items-center justify-center h-screen bg-slate-50">
         <div className="text-center space-y-4">
@@ -548,8 +548,6 @@ export default function TresoreriePage() {
       </div>
     );
   }
-
-  if (!mounted) return null;
 
   return (
     <div className="w-full max-w-full overflow-x-hidden space-y-8 pb-20 px-4 md:px-8">

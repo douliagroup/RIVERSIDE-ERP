@@ -41,7 +41,12 @@ interface Prescription {
 
 export default function PharmaciePage() {
   const { user } = useAuth();
+  const [mounted, setMounted] = useState(false);
   const [activeTab, setActiveTab ] = useState<'prescriptions' | 'vente'>('prescriptions');
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
   const [stocks, setStocks] = useState<StockItem[]>([]);
   const [prescriptions, setPrescriptions] = useState<Prescription[]>([]);
   const [loading, setLoading] = useState(true);
@@ -130,6 +135,8 @@ export default function PharmaciePage() {
       setSubmitting(false);
     }
   };
+
+  if (!mounted) return null;
 
   return (
     <div className="p-8 max-w-7xl mx-auto space-y-10 min-h-screen pb-20">

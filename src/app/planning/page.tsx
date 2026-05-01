@@ -51,6 +51,7 @@ interface Announcement {
 const physicians = ["Dr TONYE", "Dr NDEDI", "Dr KAMGA", "Dr EBELLE"];
 
 export default function PlanningPage() {
+  const [mounted, setMounted] = useState(false);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [loading, setLoading] = useState(true);
@@ -64,6 +65,10 @@ export default function PlanningPage() {
 
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [viewDate, setViewDate] = useState(new Date()); // Used for month navigation
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const formattedSelectedDate = selectedDate.toISOString().split('T')[0];
 
@@ -192,6 +197,12 @@ export default function PlanningPage() {
       return rdvHour === hour && a.medecin_name === physician;
     });
   };
+
+  if (!mounted) return (
+    <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+      <Loader2 className="animate-spin text-slate-200" size={48} />
+    </div>
+  );
 
   return (
     <div className="p-8 max-w-6xl mx-auto space-y-8 min-h-screen">

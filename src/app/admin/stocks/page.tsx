@@ -35,13 +35,18 @@ interface StockItem {
 export default function AdminStocksPage() {
   const { user, userRole } = useAuth();
   const router = useRouter();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // Guard for admin/major
   useEffect(() => {
-    if (userRole && userRole !== 'patron' && userRole !== 'major') {
+    if (mounted && userRole && userRole !== 'patron' && userRole !== 'major') {
       router.push('/');
     }
-  }, [userRole, router]);
+  }, [userRole, router, mounted]);
 
   const [stocks, setStocks] = useState<StockItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -108,6 +113,8 @@ export default function AdminStocksPage() {
     alerte: stocks.filter(s => s.quantite_actuelle <= s.seuil_alerte).length,
     valeur: stocks.reduce((acc, curr) => acc + (curr.quantite_actuelle * curr.prix_vente), 0)
   };
+
+  if (!mounted) return null;
 
   return (
     <div className="w-full max-w-7xl mx-auto space-y-10 pb-20 p-8">

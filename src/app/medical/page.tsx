@@ -968,7 +968,9 @@ export default function MedicalPage() {
                                   <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
                                     <Clock size={16} className="text-slate-400" />
                                   </div>
-                                  <p className="text-sm font-black text-slate-900 uppercase tracking-tight">Le {new Date(consult.created_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
+                                  <p className="text-sm font-black text-slate-900 uppercase tracking-tight" suppressHydrationWarning>
+                                    Le {mounted && new Date(consult.created_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}
+                                  </p>
                                 </div>
                                 <div className="flex gap-2">
                                   <span className="px-3 py-1 bg-slate-50 rounded-lg text-[9px] font-black text-slate-500 border border-slate-100">TA: {consult.tension || 'N/A'}</span>

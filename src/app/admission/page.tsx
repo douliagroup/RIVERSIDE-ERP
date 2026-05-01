@@ -69,6 +69,11 @@ interface QueueEntry {
 
 function AdmissionDashboard() {
   const router = useRouter();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
   
   // Search & Selection
   const [searchTerm, setSearchTerm] = useState("");
@@ -380,6 +385,8 @@ function AdmissionDashboard() {
     printWindow.document.write(html);
     printWindow.document.close();
   };
+
+  if (!mounted) return null;
 
   return (
     <div className="w-full max-w-7xl mx-auto space-y-8 pb-20">

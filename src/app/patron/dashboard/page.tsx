@@ -34,10 +34,15 @@ import toast from "react-hot-toast";
 export default function PatronDashboard() {
   const router = useRouter();
   const { user } = useAuth();
+  const [mounted, setMounted] = useState(false);
   const [query, setQuery] = useState("");
   const [analyzing, setAnalyzing] = useState(false);
   const [report, setReport] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // States for KPIs
   const [stats, setStats] = useState({
@@ -189,7 +194,7 @@ export default function PatronDashboard() {
     }
   };
 
-  if (loading) {
+  if (!mounted || loading) {
     return (
       <div className="flex items-center justify-center h-screen bg-[#0A0A0B]">
         <div className="text-center space-y-4">
@@ -310,7 +315,7 @@ export default function PatronDashboard() {
                                 <p className="text-[10px] text-slate-500 font-bold uppercase">{exp.liste_beneficiaires?.nom || "Inconnu"}</p>
                                 <span className="text-slate-700">•</span>
                                 <p className="text-[10px] text-slate-600 font-mono tracking-tighter" suppressHydrationWarning>
-                                  {exp.date_depense ? new Date(exp.date_depense).toLocaleDateString() : 'N/A'}
+                                  {mounted && (exp.date_depense ? new Date(exp.date_depense).toLocaleDateString() : 'N/A')}
                                 </p>
                               </div>
                             </div>
@@ -439,7 +444,7 @@ export default function PatronDashboard() {
                           <div className="flex items-center gap-2 mt-1.5">
                             <span className="text-[9px] font-bold text-slate-500 bg-slate-800 px-1.5 py-0.5 rounded uppercase">{log.utilisateur}</span>
                             <span className="text-[9px] text-slate-600 font-mono italic" suppressHydrationWarning>
-                              {log.created_at ? new Date(log.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'N/A'}
+                              {mounted && (log.created_at ? new Date(log.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'N/A')}
                             </span>
                           </div>
                           {log.details && (

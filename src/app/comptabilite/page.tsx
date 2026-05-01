@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { 
   Plus, 
   Search, 
@@ -57,13 +57,17 @@ export default function AccountingPage() {
 
   useEffect(() => {
     setMounted(true);
-  }, []);
-
-  useEffect(() => {
-    if (mounted && userRole !== 'patron' && userRole !== 'comptable') {
+    const now = new Date();
+    setSelectedMonth(now.getMonth());
+    setSelectedYear(now.getFullYear());
+    setForm(prev => ({ ...prev, date_operation: now.toISOString().split('T')[0] }));
+    setBudgetForm(prev => ({ ...prev, mois: `${DEFAULT_MONTHS[now.getMonth()]} ${now.getFullYear()}`.toUpperCase() }));
+    
+    // Auth check
+    if (userRole && userRole !== 'patron' && userRole !== 'comptable') {
       router.push('/');
     }
-  }, [userRole, router, mounted]);
+  }, [userRole, router]);
 
   const [entries, setEntries] = useState<Entry[]>([]);
   const [categories, setCategories] = useState<CategoryOption[]>([]);
@@ -72,11 +76,11 @@ export default function AccountingPage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   
-  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
-  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const [selectedMonth, setSelectedMonth] = useState(0);
+  const [selectedYear, setSelectedYear] = useState(2024);
 
   const [form, setForm] = useState({
-    date_operation: new Date().toISOString().split('T')[0],
+    date_operation: "",
     libelle: "",
     categorie: "",
     montant: "",
@@ -90,7 +94,7 @@ export default function AccountingPage() {
     categorie: "LOYER",
     prevu: "",
     reel: "",
-    mois: DEFAULT_MONTHS[new Date().getMonth()].toUpperCase()
+    mois: ""
   });
 
   // Calculate filtered stats
@@ -107,7 +111,7 @@ export default function AccountingPage() {
     
     // Total Dépenses Réelles (Budget)
     const depensesBudget = lignesBudgetaires
-      .filter(l => l.mois === DEFAULT_MONTHS[selectedMonth].toUpperCase())
+      .filter(l => l.mois === `${DEFAULT_MONTHS[selectedMonth]} ${selectedYear}`.toUpperCase())
       .reduce((acc, curr) => acc + (curr.reel || 0), 0);
 
     const soldeProvisoire = entrees - sorties;
@@ -116,7 +120,7 @@ export default function AccountingPage() {
     return { filtered, entrees, sorties, banque, horsCaisse, soldeProvisoire, soldeNet, depensesBudget };
   }, [entries, selectedMonth, selectedYear, systemCashTotal, lignesBudgetaires]);
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     setLoading(true);
     try {
       // 1. Fetch manual entries
@@ -174,7 +178,7 @@ export default function AccountingPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedMonth, selectedYear]);
 
   useEffect(() => {
     fetchData();
@@ -195,7 +199,7 @@ export default function AccountingPage() {
       if (error) throw error;
       toast.success("Ligne budgétaire ajoutée");
       setShowBudgetForm(false);
-      setBudgetForm({ titre: "", categorie: "LOYER", prevu: "", reel: "", mois: DEFAULT_MONTHS[selectedMonth].toUpperCase() });
+      setBudgetForm({ titre: "", categorie: "LOYER", prevu: "", reel: "", mois: `${DEFAULT_MONTHS[selectedMonth]} ${selectedYear}`.toUpperCase() });
       fetchData();
     } catch (err: any) {
       toast.error(err.message);
@@ -350,7 +354,7 @@ export default function AccountingPage() {
               </div>
               <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
                 {lignesBudgetaires
-                  .filter(l => l.mois === DEFAULT_MONTHS[selectedMonth].toUpperCase())
+                  .filter(l => l.mois === `${DEFAULT_MONTHS[selectedMonth]} ${selectedYear}`.toUpperCase())
                   .map(l => (
                   <div key={l.id} className="p-3 bg-slate-50 border border-slate-100 rounded-xl flex items-center justify-between group">
                     <div>
@@ -363,7 +367,7 @@ export default function AccountingPage() {
                     </div>
                   </div>
                 ))}
-                {lignesBudgetaires.filter(l => l.mois === DEFAULT_MONTHS[selectedMonth].toUpperCase()).length === 0 && (
+                {lignesBudgetaires.filter(l => l.mois === `${DEFAULT_MONTHS[selectedMonth]} ${selectedYear}`.toUpperCase()).length === 0 && (
                   <p className="text-[9px] text-center text-slate-300 italic py-4">Aucun budget défini pour ce mois</p>
                 )}
               </div>
@@ -525,7 +529,9 @@ export default function AccountingPage() {
                            <ArrowDownRight size={16} />}
                         </div>
                         <div>
-                          <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">{item.date_operation ? new Date(item.date_operation).toLocaleDateString() : 'N/A'} • {item.categorie}</p>
+                          <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1" suppressHydrationWarning>
+                            {mounted && (item.date_operation ? new Date(item.date_operation).toLocaleDateString() : 'N/A')} • {item.categorie}
+                          </p>
                           <p className="text-xs font-bold text-slate-700">{item.libelle || item.categorie}</p>
                         </div>
                       </div>
@@ -621,7 +627,7 @@ export default function AccountingPage() {
                 <tbody>
                   {items.map(e => (
                     <tr key={e.id}>
-                      <td className="border p-3 text-xs">{e.date_operation ? new Date(e.date_operation).toLocaleDateString() : 'N/A'}</td>
+                      <td className="border p-3 text-xs" suppressHydrationWarning>{mounted && (e.date_operation ? new Date(e.date_operation).toLocaleDateString() : 'N/A')}</td>
                       <td className="border p-3 text-xs">{e.libelle || e.categorie}</td>
                       <td className="border p-3 text-right text-xs font-black tabular-nums">{(e.montant || 0).toLocaleString()}</td>
                     </tr>
@@ -664,7 +670,7 @@ export default function AccountingPage() {
                 <tbody>
                   {items.map(e => (
                     <tr key={e.id}>
-                      <td className="border p-3 text-xs">{e.date_operation ? new Date(e.date_operation).toLocaleDateString() : 'N/A'}</td>
+                      <td className="border p-3 text-xs" suppressHydrationWarning>{mounted && (e.date_operation ? new Date(e.date_operation).toLocaleDateString() : 'N/A')}</td>
                       <td className="border p-3 text-xs">{e.libelle || e.categorie}</td>
                       <td className="border p-3 text-right text-xs font-black tabular-nums">{(e.montant || 0).toLocaleString()}</td>
                     </tr>

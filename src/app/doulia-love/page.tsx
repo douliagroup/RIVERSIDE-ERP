@@ -62,6 +62,7 @@ interface CRMAction {
 }
 
 export default function DouliaLovePage() {
+  const [mounted, setMounted] = useState(false);
   const [activeTab, setActiveTab] = useState<"anniversaires" | "post_soins" | "suivi">("anniversaires");
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [crmTasks, setCrmTasks] = useState<CRMAction[]>([]);
@@ -72,6 +73,10 @@ export default function DouliaLovePage() {
   const [showCRMModal, setShowCRMModal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [activeView, setActiveView] = useState<"dashboard" | "ia">("dashboard");
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const getWhatsAppLink = (phone: string, type: "ANNIVERSAIRE" | "J+3" | "CRM", name: string) => {
     if (!phone) return null;
@@ -295,19 +300,29 @@ export default function DouliaLovePage() {
     
     setGeneratingIa(true);
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.NEXT_PUBLIC_GEMINI_API_KEY });
-      const prompt = `Génère un post pour les réseaux sociaux pour une clinique médicale nommée Riverside.
-      Thème: ${iaForm.theme}
-      Plateforme: ${iaForm.plateforme}
-      Ton: ${iaForm.ton}
-      Inclus des emojis pertinents et des hashtags. Le contenu doit être engageant et inciter à l'action ou à la réflexion sur la santé.`;
+      const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
+      if (!apiKey) throw new Error("API Key NOT FOUND. Configure NEXT_PUBLIC_GEMINI_API_KEY in secrets.");
+      
+      const ai = new GoogleGenAI({ apiKey });
+      const prompt = `Génère un post professionnel et engageant pour les réseaux sociaux de la clinique médicale Riverside à Douala.
+Thème : ${iaForm.theme}
+Plateforme : ${iaForm.plateforme}
+Ton : ${iaForm.ton}
+
+Directives :
+1. Capture l'attention dès la première ligne.
+2. Utilise un langage simple, rassurant et professionnel.
+3. Inclus des conseils santé pertinents liés au thème.
+4. Ajoute des emojis locaux et professionnels.
+5. Termine par un appel à l'action (CTA) invitant à visiter la clinique ou à prendre rendez-vous.
+6. Utilise des hashtags comme #RiversideMedicalCenter #SanteDouala #Douala.`;
 
       const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
         contents: prompt,
       });
 
-      setGeneratedPost(response.text || "Erreur de génération");
+      setGeneratedPost(response.text || "Erreur de génération : contenu vide.");
       toast.success("Contenu généré ! ✨");
     } catch (err: any) {
       console.error(err);
@@ -512,7 +527,9 @@ export default function DouliaLovePage() {
                           <div key={task.id} className="bg-white p-8 rounded-[3rem] border border-amber-50 shadow-xl shadow-amber-100/20 group relative overflow-hidden">
                              <div className="flex justify-between items-start mb-4">
                                 <span className="text-[9px] font-black bg-amber-500 text-white px-3 py-1 rounded-full uppercase tracking-widest">{task.type_action}</span>
-                                <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest">{new Date(task.date_prevue).toLocaleDateString()}</span>
+                                <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest" suppressHydrationWarning>
+                                  {mounted && new Date(task.date_prevue).toLocaleDateString()}
+                                </span>
                              </div>
                              <h3 className="text-sm font-black text-slate-900 uppercase truncate mb-2">{task.patients?.nom_complet}</h3>
                              <div className="bg-slate-50 p-4 rounded-2xl text-[10px] font-medium text-slate-600 mb-6 border border-slate-100 min-h-[60px]">

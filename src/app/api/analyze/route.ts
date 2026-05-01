@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/src/lib/supabaseAdmin';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenAI } from '@google/genai';
 
 export const maxDuration = 60;
 
@@ -67,18 +67,8 @@ DIRECTIVES STRICTES DE FORMATAGE DE LA RÉPONSE :
     }
 
     // 3. Synthèse Gemini
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ 
-      model: "gemini-3-flash-preview",
-      systemInstruction: `Tu es DOULIA Intelligence, le cerveau stratégique omniscient du Riverside Medical Center à Douala. 
-      Tu as une connaissance absolue de toutes les fonctionnalités et modules de l'application ERP Riverside. 
-      Ton rôle est d'analyser les performances de chaque page (Admission, Médical, Trésorerie) pour conseiller le Directeur (le Patron).
-      
-      ${appContext}
-      
-      ${formattingDirectives}`
-    });
-
+    const ai = new GoogleGenAI({ apiKey });
+    
     const prompt = `
       ANALYSE STRATÉGIQUE TRANSVERSALE POUR LE PATRON.
       
@@ -103,8 +93,19 @@ DIRECTIVES STRICTES DE FORMATAGE DE LA RÉPONSE :
       - Ton: Professionnel, direct, ambitieux (Editorial Aesthetic).
     `;
 
-    const result = await model.generateContent(prompt);
-    const reportText = result.response.text();
+    const result = await ai.models.generateContent({
+      model: "gemini-3-flash-preview",
+      systemInstruction: `Tu es DOULIA Intelligence, le cerveau stratégique omniscient du Riverside Medical Center à Douala. 
+        Tu as une connaissance absolue de toutes les fonctionnalités et modules de l'application ERP Riverside. 
+        Ton rôle est d'analyser les performances de chaque page (Admission, Médical, Trésorerie) pour conseiller le Directeur (le Patron).
+        
+        ${appContext}
+        
+        ${formattingDirectives}`,
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+    });
+
+    const reportText = result.text;
 
     // 4. Persistence dans Supabase
     const { error: insertError } = await supabaseAdmin

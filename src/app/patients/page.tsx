@@ -72,6 +72,11 @@ interface Facture {
 
 export default function PatientsEMRPage() {
   const router = useRouter();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
   
   // State
   const [patients, setPatients] = useState<Patient[]>([]);
@@ -226,6 +231,8 @@ export default function PatientsEMRPage() {
 
   const totalSpent = factures.reduce((acc, curr) => acc + curr.montant_total, 0);
   const totalDebt = factures.reduce((acc, curr) => acc + curr.reste_a_payer, 0);
+
+  if (!mounted) return null;
 
   return (
     <div className="flex flex-col h-[calc(100vh-80px)] overflow-hidden bg-white -m-4 md:-m-10">

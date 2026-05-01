@@ -1,7 +1,8 @@
 import { GoogleGenAI } from "@google/genai";
 
+const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY || process.env.GEMINI_API_KEY || "";
 const ai = new GoogleGenAI({
-  apiKey: process.env.NEXT_PUBLIC_GEMINI_API_KEY || "",
+  apiKey,
 });
 
 const formattingDirectives = `
@@ -12,6 +13,8 @@ DIRECTIVES STRICTES DE FORMATAGE DE LA RÉPONSE :
 4. Sépare chaque paragraphe par un double saut de ligne pour bien aérer le texte.`;
 
 export async function generateDouliaMessage(patientName: string, motif: string, diagnostic: string) {
+  if (!apiKey) throw new Error("GEMINI_API_KEY is not configured");
+
   const response = await ai.models.generateContent({
     model: "gemini-3-flash-preview",
     contents: `Tu es l'assistant DOULIA Love de la clinique RIVERSIDE MEDICAL CENTER à Douala. 
@@ -30,6 +33,8 @@ ${formattingDirectives}`,
 }
 
 export async function generateCMPost(trends: string[]) {
+  if (!apiKey) throw new Error("GEMINI_API_KEY is not configured");
+
   const trendsStr = trends.join(", ");
   const response = await ai.models.generateContent({
     model: "gemini-3-flash-preview",
