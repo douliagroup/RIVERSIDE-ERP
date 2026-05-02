@@ -30,29 +30,50 @@ DIRECTIVES STRICTES DE FORMATAGE :
 
     if (!geminiKey) return NextResponse.json({ error: 'Configuration API Gemini manquante' }, { status: 500 });
 
-    // RAG Interne (Supabase)
+    // RAG Interne Ultra-Complet (Supabase)
     const { supabaseAdmin } = await import('@/src/lib/supabaseAdmin');
     const now = new Date();
     const todayStart = new Date(now.setHours(0,0,0,0)).toISOString();
 
-    const { data: debts } = await supabaseAdmin
-      .from('transactions_caisse')
-      .select(`reste_a_payer, patients(nom_complet), hospitalisations(compagnie_assurance)`)
-      .gt('reste_a_payer', 0);
-    
-    const detailedDebts = (debts || []).map(d => ({
-      entite: d.patients?.nom_complet || d.hospitalisations?.compagnie_assurance || "Inconnu",
-      montant: d.reste_a_payer
-    }));
+    // 1. Super-Fetch en parallèle pour contexte 360°
+    const [
+      { data: activeDebts },
+      { data: recentExpenses },
+      { data: queueActivity },
+      { data: pharmacyAlerts },
+      { data: lastShiftReport },
+      { count: consultCount },
+      { data: todayRevenue }
+    ] = await Promise.all([
+      // Dettes intemporelles (OMNISCIENT)
+      supabaseAdmin.from('transactions_caisse').select('reste_a_payer, patients(nom_complet)').gt('reste_a_payer', 0).limit(20),
+      // Dernières dépenses
+      supabaseAdmin.from('comptabilite_manuelle').select('*').order('created_at', { ascending: false }).limit(5),
+      // Patients en cours
+      supabaseAdmin.from('file_attente').select('patients(nom_complet), motif_visite, degre_urgence').eq('statut', 'En attente'),
+      // Alertes stocks pharmacie
+      supabaseAdmin.from('stocks_pharmacie').select('nom_article, quantite_actuelle, seuil_alerte').lte('quantite_actuelle', 'seuil_alerte'),
+      // Dernier rapport de garde (Équipe)
+      supabaseAdmin.from('rapports_clinique').select('*').order('created_at', { ascending: false }).limit(1),
+      // Stats du jour
+      supabaseAdmin.from('consultations').select('*', { count: 'exact', head: true }).gte('created_at', todayStart),
+      supabaseAdmin.from('transactions_caisse').select('montant_verse').gte('date_transaction', todayStart)
+    ]);
 
-    const { count: consults } = await supabaseAdmin.from('consultations').select('*', { count: 'exact', head: true }).gte('created_at', todayStart);
-    const { data: caData } = await supabaseAdmin.from('transactions_caisse').select('montant_verse').gte('date_transaction', todayStart);
-    const caTotal = (caData || []).reduce((acc, curr) => acc + (curr.montant_verse || 0), 0);
-    const { data: triage } = await supabaseAdmin.from('file_attente').select('patients(nom_complet), motif_visite, degre_urgence').eq('statut', 'En attente');
+    const caTotal = (todayRevenue || []).reduce((acc, curr) => acc + (curr.montant_verse || 0), 0);
 
-    // Recherche Tavily (Uniquement si nécessaire ou pour contexte externe)
-    let searchResults = "Recherche externe non sollicitée.";
-    if (tavilyKey && (prompt.toLowerCase().includes("marché") || prompt.toLowerCase().includes("concurrence"))) {
+    // Construction du Contexte Structuré
+    const contextLines = [
+      `[CRÉANCES & DETTES] : ${activeDebts?.length ? activeDebts.map(d => `${d.patients?.nom_complet} doit ${d.reste_a_payer.toLocaleString()} FCFA`).join(', ') : "Aucun impayé majeur."}`,
+      `[DÉPENSES RÉCENTES] : ${recentExpenses?.length ? recentExpenses.map(e => `${e.libelle} (${e.montant.toLocaleString()} FCFA)`).join(', ') : "Pas de sorties de fonds récentes."}`,
+      `[PHARMACIE - ALERTES RUPTURE] : ${pharmacyAlerts?.length ? pharmacyAlerts.map(p => `STOCK CRITIQUE: ${p.nom_article} (${p.quantite_actuelle} restants)`).join(' | ') : "Stocks conformes."}`,
+      `[FILE D'ATTENTE] : ${queueActivity?.length ? queueActivity.length + " patients attendent (" + queueActivity.map(q => q.patients?.nom_complet).join(', ') + ")" : "Aucun patient en attente."}`,
+      `[DERNIER RAPPORT DE GARDE] : ${lastShiftReport?.[0]?.auteur || "Inconnu"} signale : ${lastShiftReport?.[0]?.contenu?.transmissions?.substring(0, 100) || "RAS"}`
+    ];
+
+    // Recherche Tavily (Si besoin de contexte externe)
+    let searchResults = "";
+    if (tavilyKey && (prompt.toLowerCase().includes("marché") || prompt.toLowerCase().includes("innovation") || prompt.toLowerCase().includes("douala"))) {
       try {
         const tvly = tavily({ apiKey: tavilyKey });
         const res = await tvly.search(prompt, { searchDepth: "advanced", maxResults: 3 });
@@ -63,32 +84,25 @@ DIRECTIVES STRICTES DE FORMATAGE :
     const fullContext = `
       [CONTEXTE TEMPS RÉEL] Nous sommes le : ${currentDateTime} (Heure de Douala).
       
-      [SOURCE DE VÉRITÉ - DONNÉES ERP RIVERSIDE]
+      VOICI LA PHOTOGRAPHIE EXACTE DE LA CLINIQUE RIVERSIDE À LA SECONDE ACTUELLE :
       
-      1. CRÉANCES / DETTES ACTIVES :
-      ${detailedDebts.length > 0 
-        ? detailedDebts.map(d => `- ${d.entite} : ${d.montant.toLocaleString()} FCFA`).join('\n')
-        : "Le système n'indique aucune dette actuelle."}
-      
-      2. PERFORMANCE DU JOUR :
+      STATISTIQUES DU JOUR :
       - Encaissements : ${caTotal.toLocaleString()} FCFA
-      - Nombre de consultations : ${consults || 0}
+      - Consultations : ${consultCount || 0}
       
-      3. TRIAGE ET FILE D'ATTENTE :
-      ${(triage || []).length > 0
-        ? (triage || []).map(t => `- ${t.patients?.nom_complet} (${t.motif_visite})`).join('\n')
-        : "File d'attente vide."}
+      ANALYSE MULTI-DÉPARTEMENTALE :
+      ${contextLines.join('\n')}
       
-      [RÉSULTATS RECHERCHE EXTERNE]
+      [CONSIGNES STRATÉGIQUES] :
+      Tu es 'Riverside Strategic Intelligence'. Tu as désormais accès à tous les départements. 
+      Analyse ces données de manière croisée pour répondre au Directeur. 
+      Exemple : Si les dettes augmentent alors que les stocks diminuent, signale une tension possible sur la trésorerie.
+      Sois précis, factuel et adopte un ton de conseiller de haut niveau.
+      
+      [RESULTATS EXTERNES (SANTÉ/MARCHÉ)] :
       ${searchResults}
       
-      [QUESTION DU PATRON] : ${prompt}
-
-      [CONSIGNES IA] :
-      Tu es 'Riverside Intelligence V3'. Tu dois te baser EXCLUSIVEMENT sur les [DONNÉES ERP] pour répondre aux questions sur la clinique. 
-      Si on te demande "Comment vont les affaires ?", analyse les dettes (${detailedDebts.length}) vs les encaissements (${caTotal}).
-      NE DIT JAMAIS que nous sommes en février si la date actuelle indique une autre période.
-      Si une donnée interne manque, déclare-le, n'invente rien.
+      [INTERFACE DIRECTEUR] : ${prompt}
     `;
 
     const ai = new GoogleGenAI({ apiKey: geminiKey });
@@ -106,7 +120,7 @@ DIRECTIVES STRICTES DE FORMATAGE :
       model: "gemini-3-flash-preview",
       contents: fullContext,
       config: {
-        systemInstruction: "Tu es l'IA décisionnelle stratégique de Riverside Medical Center. " + formattingDirectives,
+        systemInstruction: "Tu es l'IA décisionnelle stratégique omnisciente de Riverside Medical Center. Ton rôle est d'analyser les données RH, financières, médicales et logistiques pour une gestion optimale. " + formattingDirectives,
       }
     });
 

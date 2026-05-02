@@ -507,7 +507,12 @@ export default function PatronInsight() {
                   </div>
                 </div>
                 <div className="flex items-center gap-4">
-                   <div className="px-4 py-2 bg-slate-50 rounded-xl text-[10px] font-black text-slate-500 uppercase tracking-widest border border-slate-100">AUDIT LIVE CONNECTÉ</div>
+                   <Link href="/patron/chat">
+                     <button className="px-5 py-2.5 bg-slate-900 hover:bg-riverside-red text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all active:scale-95 flex items-center gap-2 shadow-lg">
+                       <Zap size={14} className="animate-pulse" /> Mode Plein Écran
+                     </button>
+                   </Link>
+                   <div className="hidden sm:block px-4 py-2 bg-slate-50 rounded-xl text-[10px] font-black text-slate-500 uppercase tracking-widest border border-slate-100">AUDIT LIVE CONNECTÉ</div>
                 </div>
               </div>
 
