@@ -373,7 +373,6 @@ function AdmissionDashboard() {
   };
 
   const printTicket = (entry: QueueEntry) => {
-    // ... no changes to print ticket logic requested
     const printWindow = window.open('', '_blank');
     if (!printWindow) return;
 
@@ -512,16 +511,21 @@ function AdmissionDashboard() {
                     </div>
                     
                     <div className="flex items-center gap-2">
+                       {/* === LE BOUTON CORRIGÉ EST ICI === */}
                        <button 
-                         onClick={() => {
+                         onClick={(e) => {
+                           e.stopPropagation();
                            setSelectedPatient(p);
                            setIsEditTriageMode(false);
                            setIsTriageModalOpen(true);
                          }}
-                         className="px-6 py-2.5 bg-riverside-red text-white text-[10px] font-black uppercase rounded-xl hover:bg-slate-900 shadow-lg shadow-red-200 transition-all font-sans"
+                         className="flex items-center gap-2 px-4 py-2.5 bg-riverside-red text-white text-[11px] font-black uppercase rounded-xl hover:bg-red-700 shadow-lg shadow-red-200 transition-all font-sans"
                        >
-                         🩺 Démarrer
+                         <Stethoscope size={16} />
+                         SÉJOUR
                        </button>
+                       {/* ================================== */}
+
                        <div className="relative">
                          <button 
                            onClick={() => setActiveDropdown(activeDropdown === p.id ? null : p.id)}
