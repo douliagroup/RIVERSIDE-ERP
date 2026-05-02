@@ -100,6 +100,7 @@ function AdmissionDashboard() {
   const [editingQueueEntry, setEditingQueueEntry] = useState<QueueEntry | null>(null);
 
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
+  const [isTriageModalOpen, setIsTriageModalOpen] = useState(false);
   const [showPatientCard, setShowPatientCard] = useState(false);
 
   useEffect(() => {
@@ -125,7 +126,7 @@ function AdmissionDashboard() {
       .then(({ data }) => {
         if (data) {
           setSelectedPatient(data);
-          setShowTriageModal(true);
+          setIsTriageModalOpen(true);
         }
       });
   };
@@ -171,7 +172,7 @@ function AdmissionDashboard() {
       pouls: entry.pouls || "",
       spo2: entry.spo2 || ""
     });
-    setShowTriageModal(true);
+    setIsTriageModalOpen(true);
     setActiveDropdown(null);
   };
 
@@ -327,7 +328,7 @@ function AdmissionDashboard() {
         toast.success(`${selectedPatient.nom_complet} ajouté à la file d'attente ! ✨`);
       }
       
-      setShowTriageModal(false);
+      setIsTriageModalOpen(false);
       setSelectedPatient(null);
       setSearchTerm("");
       setFoundPatients([]);
@@ -515,11 +516,11 @@ function AdmissionDashboard() {
                          onClick={() => {
                            setSelectedPatient(p);
                            setIsEditTriageMode(false);
-                           setShowTriageModal(true);
+                           setIsTriageModalOpen(true);
                          }}
-                         className="px-4 py-2 bg-slate-900 text-white text-[9px] font-black uppercase rounded-xl hover:bg-riverside-red transition-all"
+                         className="px-6 py-2.5 bg-riverside-red text-white text-[10px] font-black uppercase rounded-xl hover:bg-slate-900 shadow-lg shadow-red-200 transition-all font-sans"
                        >
-                         Triage
+                         🩺 Démarrer
                        </button>
                        <div className="relative">
                          <button 
@@ -637,11 +638,11 @@ function AdmissionDashboard() {
 
                    <div className="flex items-center gap-4">
                      <button 
-                       onClick={() => setShowTriageModal(true)}
+                       onClick={() => setIsTriageModalOpen(true)}
                        className="flex-1 md:flex-none flex items-center justify-center gap-3 px-8 py-5 bg-riverside-red text-white text-[11px] font-black uppercase rounded-3xl shadow-2xl shadow-red-200 hover:bg-slate-900 hover:shadow-slate-200 transition-all active:scale-95 whitespace-nowrap"
                      >
                        <Stethoscope size={20} />
-                       🩺 Nouveau Séjour / Triage
+                       🩺 Démarrer un Séjour
                      </button>
                      
                      <div className="relative">
@@ -694,7 +695,7 @@ function AdmissionDashboard() {
            <div className="bg-white rounded-[32px] overflow-hidden border border-slate-100 shadow-xl shadow-slate-100/50">
               <div className="p-8 border-b border-slate-50 flex items-center justify-between bg-white">
                 <div>
-                  <h2 className="text-sm font-black text-slate-900 uppercase tracking-widest">Salle d&apos;Attente</h2>
+                  <h2 className="text-lg font-bold text-red-600 border-b pb-2 mb-4 uppercase tracking-tighter">File d&apos;attente du jour</h2>
                   <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1" suppressHydrationWarning>File active du {new Date().toLocaleDateString()}</p>
                 </div>
                 <button 
@@ -833,13 +834,17 @@ function AdmissionDashboard() {
 
       {/* Triage Modal */}
       <AnimatePresence>
-        {showTriageModal && selectedPatient && (
+        {isTriageModalOpen && selectedPatient && (
           <>
             <motion.div 
               initial={{ opacity: 0 }} 
               animate={{ opacity: 1 }} 
               exit={{ opacity: 0 }} 
-              onClick={() => setShowTriageModal(false)}
+              onClick={() => {
+                setIsTriageModalOpen(false);
+                setIsEditTriageMode(false);
+                setEditingQueueEntry(null);
+              }}
               className="fixed inset-0 bg-slate-950/40 backdrop-blur-md z-[1001]" 
             />
             <motion.div 
@@ -864,7 +869,7 @@ function AdmissionDashboard() {
                  </div>
                  <button 
                    onClick={() => {
-                     setShowTriageModal(false);
+                     setIsTriageModalOpen(false);
                      setIsEditTriageMode(false);
                      setEditingQueueEntry(null);
                    }}
@@ -1021,10 +1026,10 @@ function AdmissionDashboard() {
                <div className="p-8 md:p-10 bg-slate-50 border-t border-slate-100 flex gap-6">
                  <button 
                    onClick={() => {
-                      setShowTriageModal(false);
+                      setIsTriageModalOpen(false);
                       setIsEditTriageMode(false);
                    }}
-                   className="flex-1 py-5 bg-white border border-slate-200 text-[10px] font-black text-slate-400 uppercase tracking-widest rounded-2xl hover:bg-slate-50 transition-all"
+                   className="flex-1 py-5 bg-white border border-slate-200 text-[10px] font-black text-slate-400 uppercase tracking-widest rounded-2xl hover:bg-slate-50 transition-all font-sans"
                  >
                    Annuler
                  </button>
