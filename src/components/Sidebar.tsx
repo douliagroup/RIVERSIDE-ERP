@@ -27,7 +27,8 @@ import { useAuth } from "../context/AuthContext";
 
 const menuItems = [
   { icon: LayoutDashboard, label: "Dashboard", href: "/", roles: ['patron', 'comptable', 'major', 'caissier', 'personnel', 'communication', 'accueil'] },
-  { icon: Users, label: "Admission", href: "/patients", roles: ['patron', 'major', 'caissier', 'accueil'] },
+  { icon: Users, label: "Admission", href: "/admission", roles: ['patron', 'major', 'caissier', 'accueil'] },
+  { icon: FileText, label: "Dossiers Patients", href: "/patients", roles: ['patron', 'major', 'personnel'] },
   { icon: Stethoscope, label: "Médical", href: "/medical", roles: ['patron', 'personnel', 'major'] },
   { icon: Calendar, label: "Planning", href: "/planning", roles: ['patron', 'personnel', 'major', 'accueil'] },
   { icon: Pill, label: "Pharmacie", href: "/pharmacie", roles: ['patron', 'personnel', 'major', 'comptable'] },
@@ -214,8 +215,7 @@ export default function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
           <div className="mt-4 text-center">
             <p className="text-[9px] font-bold text-slate-300 uppercase tracking-[0.2em] italic">© 2026 Riverside</p>
           </div>
-        )}
-      </div>
+        )}      </div>
     </div>
   );
 }
