@@ -51,7 +51,7 @@ const DEFAULT_MONTHS = [
 ];
 
 export default function AccountingPage() {
-  const { userRole, user } = useAuth();
+  const { userRole, user, loading: authLoading } = useAuth();
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
 
@@ -64,10 +64,10 @@ export default function AccountingPage() {
     setBudgetForm(prev => ({ ...prev, mois: `${DEFAULT_MONTHS[now.getMonth()]} ${now.getFullYear()}`.toUpperCase() }));
     
     // Auth check
-    if (userRole && userRole !== 'patron' && userRole !== 'comptable') {
+    if (!authLoading && userRole && userRole !== 'patron' && userRole !== 'comptable') {
       router.push('/');
     }
-  }, [userRole, router]);
+  }, [userRole, authLoading, router]);
 
   const [entries, setEntries] = useState<Entry[]>([]);
   const [categories, setCategories] = useState<CategoryOption[]>([]);

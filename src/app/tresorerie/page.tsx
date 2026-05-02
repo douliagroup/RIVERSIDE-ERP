@@ -27,6 +27,8 @@ import { supabase } from "@/src/lib/supabase";
 import { cn } from "@/src/lib/utils";
 import { motion, AnimatePresence } from "motion/react";
 import toast from "react-hot-toast";
+import { useAuth } from "@/src/context/AuthContext";
+import { useRouter } from "next/navigation";
 
 interface Patient {
   id: string;
@@ -54,11 +56,16 @@ interface Sejour {
 const PAYMENT_MODES = ["CASH", "ASSURANCE", "MOMO/OM", "CARTE BANCAIRE"];
 
 export default function TresoreriePage() {
+  const { userRole, loading: authLoading } = useAuth();
+  const router = useRouter();
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     setMounted(true);
-  }, []);
+    if (!authLoading && userRole && userRole !== 'patron' && userRole !== 'comptable' && userRole !== 'caissier') {
+      router.push('/');
+    }
+  }, [userRole, authLoading, router]);
 
   const [sejours, setSejours] = useState<Sejour[]>([]);
   const [catalogue, setCatalogue] = useState<Acte[]>([]);

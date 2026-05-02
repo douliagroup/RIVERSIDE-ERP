@@ -29,9 +29,8 @@ CONSTITUTION DE L'ECOSYSTÈME RIVERSIDE (VOTRE CONTEXTE GLOBAL) :
     const formattingDirectives = `
 DIRECTIVES STRICTES DE FORMATAGE : 
 1. PAS de balises HTML. 
-2. Listes numériques uniquement (1., 2.). 
-3. Mots-clés importants en **gras markdown**. 
-4. Double saut de ligne entre paragraphes.`;
+2. N'utilise JAMAIS de formatage Markdown. Ne mets JAMAIS d'étoiles (**) ou de dièses (#). Génère uniquement du texte brut avec des sauts de ligne normaux entre les paragraphes.
+3. Listes numériques au format "1. " uniquement.`;
 
     // 1. Récupération des données Supabase
     const now = new Date();
@@ -43,7 +42,7 @@ DIRECTIVES STRICTES DE FORMATAGE :
       .select(`
         reste_a_payer,
         patient_id,
-        patients (nom_complet, telephone),
+        patients (nom_complet, telephone, assurance),
         stay_id,
         hospitalisations (compagnie_assurance)
       `)
@@ -52,7 +51,7 @@ DIRECTIVES STRICTES DE FORMATAGE :
     const debtorsList = (debts || []).map(d => ({
       nom: d.patients?.nom_complet || "Inconnu",
       montant: d.reste_a_payer,
-      assurance: d.hospitalisations?.compagnie_assurance || "Particulier"
+      assurance: d.hospitalisations?.compagnie_assurance || d.patients?.assurance || "Particulier"
     }));
 
     // b. Finances du jour
@@ -120,7 +119,13 @@ DIRECTIVES STRICTES DE FORMATAGE :
       model: "gemini-3-flash-preview",
       contents: prompt,
       config: {
-        systemInstruction: `Tu es DOULIA Intelligence, l'IA décisionnelle du Riverside Medical Center.
+        systemInstruction: `Tu es DOULIA Intelligence, l'IA décisionnelle stratégique du Riverside Medical Center.
+        Ton rôle est d'analyser les données RH, financières, médicales et logistiques pour une gestion optimale.
+        
+        RÈGLE FINANCIÈRE : Si un patient a une dette ET qu'il possède une 'assurance', tu dois EXPLICITEMENT préciser que c'est la compagnie d'assurance qui est redevable de cette dette, et non le patient directement.
+        
+        DIRECTIVE DE FORMATAGE : N'utilise JAMAIS de formatage Markdown. Pas d'étoiles (**), pas de dièses (#). Uniquement du texte brut avec sauts de ligne normaux entre les paragraphes.
+        
         ${appContext}
         ${formattingDirectives}
         

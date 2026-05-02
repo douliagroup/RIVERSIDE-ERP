@@ -21,9 +21,8 @@ export async function POST(req: Request) {
     const formattingDirectives = `
 DIRECTIVES STRICTES DE FORMATAGE : 
 1. PAS de balises HTML. 
-2. Listes numériques uniquement (1., 2.). 
-3. Titres et mots-clés en **gras markdown**. 
-4. Double saut de ligne entre paragraphes.`;
+2. N'utilise JAMAIS de formatage Markdown. Ne mets JAMAIS d'étoiles (**) ou de dièses (#). Génère uniquement du texte brut avec des sauts de ligne normaux entre les paragraphes.
+3. Listes numériques au format "1. " uniquement.`;
 
     const geminiKey = process.env.GEMINI_API_KEY; 
     const tavilyKey = process.env.TAVILY_API_KEY;
@@ -37,7 +36,8 @@ DIRECTIVES STRICTES DE FORMATAGE :
 
     // 1. Super-Fetch en parallèle pour contexte 360°
     const [
-      { data: activeDebts },
+      { data: activeDebts1 },
+      { data: activeDebts2 },
       { data: recentExpenses },
       { data: queueActivity },
       { data: pharmacyAlerts },
@@ -45,8 +45,10 @@ DIRECTIVES STRICTES DE FORMATAGE :
       { count: consultCount },
       { data: todayRevenue }
     ] = await Promise.all([
-      // Dettes intemporelles (OMNISCIENT)
-      supabaseAdmin.from('transactions_caisse').select('reste_a_payer, patients(nom_complet)').gt('reste_a_payer', 0).limit(20),
+      // Dettes intemporelles (OMNISCIENT) - Jointure pour l'assurance
+      supabaseAdmin.from('transactions_caisse').select('reste_a_payer, patients(nom_complet, assurance)').gt('reste_a_payer', 0).limit(20),
+      // Factures avec assurance
+      supabaseAdmin.from('factures').select('*, patients(nom_complet, assurance)').gt('reste_a_payer', 0).limit(20),
       // Dernières dépenses
       supabaseAdmin.from('comptabilite_manuelle').select('*').order('created_at', { ascending: false }).limit(5),
       // Patients en cours
@@ -60,11 +62,13 @@ DIRECTIVES STRICTES DE FORMATAGE :
       supabaseAdmin.from('transactions_caisse').select('montant_verse').gte('date_transaction', todayStart)
     ]);
 
+    const activeDebts = [...(activeDebts1 || []), ...(activeDebts2 || [])];
+
     const caTotal = (todayRevenue || []).reduce((acc, curr) => acc + (curr.montant_verse || 0), 0);
 
     // Construction du Contexte Structuré
     const contextLines = [
-      `[CRÉANCES & DETTES] : ${activeDebts?.length ? activeDebts.map(d => `${d.patients?.nom_complet} doit ${d.reste_a_payer.toLocaleString()} FCFA`).join(', ') : "Aucun impayé majeur."}`,
+      `[CRÉANCES & DETTES] : ${activeDebts?.length ? activeDebts.map(d => `${d.patients?.nom_complet} (${d.patients?.assurance || 'Aucune'}) doit ${d.reste_a_payer.toLocaleString()} FCFA`).join(', ') : "Aucun impayé majeur."}`,
       `[DÉPENSES RÉCENTES] : ${recentExpenses?.length ? recentExpenses.map(e => `${e.libelle} (${e.montant.toLocaleString()} FCFA)`).join(', ') : "Pas de sorties de fonds récentes."}`,
       `[PHARMACIE - ALERTES RUPTURE] : ${pharmacyAlerts?.length ? pharmacyAlerts.map(p => `STOCK CRITIQUE: ${p.nom_article} (${p.quantite_actuelle} restants)`).join(' | ') : "Stocks conformes."}`,
       `[FILE D'ATTENTE] : ${queueActivity?.length ? queueActivity.length + " patients attendent (" + queueActivity.map(q => q.patients?.nom_complet).join(', ') + ")" : "Aucun patient en attente."}`,
@@ -96,7 +100,8 @@ DIRECTIVES STRICTES DE FORMATAGE :
       [CONSIGNES STRATÉGIQUES] :
       Tu es 'Riverside Strategic Intelligence'. Tu as désormais accès à tous les départements. 
       Analyse ces données de manière croisée pour répondre au Directeur. 
-      Exemple : Si les dettes augmentent alors que les stocks diminuent, signale une tension possible sur la trésorerie.
+      RÈGLE FINANCIÈRE : Si un patient a une dette ET qu'il possède une 'assurance', tu dois EXPLICITEMENT préciser que c'est la compagnie d'assurance qui est redevable de cette dette, et non le patient directement.
+      N'utilise JAMAIS de formatage Markdown (** ou #).
       Sois précis, factuel et adopte un ton de conseiller de haut niveau.
       
       [RESULTATS EXTERNES (SANTÉ/MARCHÉ)] :

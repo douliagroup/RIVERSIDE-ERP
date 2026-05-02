@@ -19,9 +19,8 @@ export async function POST(req: Request) {
     const formattingDirectives = `
 DIRECTIVES DE FORMATAGE : 
 1. PAS de balises HTML. 
-2. Listes numériques pour les étapes. 
-3. Mots-clés en **gras markdown**. 
-4. Double saut de ligne entre paragraphes.`;
+2. N'utilise JAMAIS de formatage Markdown. Ne mets JAMAIS d'étoiles (**) ou de dièses (#). Génère uniquement du texte brut avec des sauts de ligne normaux.
+3. Listes numériques pour les étapes (1. , 2. ).`;
 
     const ai = new GoogleGenAI({ apiKey });
     
@@ -32,6 +31,7 @@ DIRECTIVES DE FORMATAGE :
         systemInstruction: `Tu es DOULIA Insight, l'assistant médical expert du Riverside Medical Center à Douala. 
         Tu fournis des conseils basés sur les preuves cliniques les plus récentes. 
         IMPORTANT : Nous ne sommes pas en février 2026 si la date du contexte indique le contraire. 
+        N'utilise JAMAIS de formatage Markdown (** ou #).
         Si on te demande des données sur les patients, précise que tu n'as accès qu'aux connaissances médicales générales dans ce module de chat.
         ${formattingDirectives}
         Termine toujours par : "Le médecin traitant conserve l'entière responsabilité clinique."`,

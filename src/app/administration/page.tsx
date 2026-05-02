@@ -32,6 +32,7 @@ import { cn } from "@/src/lib/utils";
 import { motion, AnimatePresence } from "motion/react";
 import { toast } from "sonner";
 import { useAuth } from "@/src/context/AuthContext";
+import { useRouter } from "next/navigation";
 
 import { generatePDF } from "@/src/lib/pdfGenerator";
 import { PDFTemplates } from "@/src/components/PDFTemplates";
@@ -97,12 +98,16 @@ interface StockItem {
 }
 
 export default function AdministrationPage() {
-  const { user } = useAuth();
+  const { user, userRole, loading: authLoading } = useAuth();
+  const router = useRouter();
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     setMounted(true);
-  }, []);
+    if (!authLoading && userRole && userRole !== 'patron' && userRole !== 'personnel' && userRole !== 'administratif') {
+      router.push('/');
+    }
+  }, [userRole, authLoading, router]);
 
   const [activeTab, setActiveTab] = useState<TabType>("taches");
   const [tasks, setTasks] = useState<Task[]>([]);

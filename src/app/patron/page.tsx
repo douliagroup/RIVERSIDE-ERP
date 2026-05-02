@@ -37,7 +37,7 @@ import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 
 export default function PatronInsight() {
-  const { userRole } = useAuth();
+  const { userRole, loading: authLoading } = useAuth();
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -47,10 +47,10 @@ export default function PatronInsight() {
   }, []);
 
   useEffect(() => {
-    if (mounted && userRole !== 'patron') {
+    if (mounted && !authLoading && userRole !== 'patron') {
       router.push('/');
     }
-  }, [userRole, router, mounted]);
+  }, [userRole, router, mounted, authLoading]);
 
   const [stats, setStats] = useState({
     ca_jour: 0,

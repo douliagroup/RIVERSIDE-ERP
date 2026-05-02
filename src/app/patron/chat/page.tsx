@@ -277,14 +277,12 @@ export default function PatronChatPage() {
                   </div>
                   
                   <div className={cn(
-                    "p-5 rounded-2xl text-[15px] leading-relaxed",
+                    "p-5 rounded-2xl text-[15px] leading-relaxed text-left whitespace-pre-wrap",
                     msg.role === 'user' 
                       ? "bg-slate-50 text-slate-800 border border-slate-100" 
                       : "bg-white text-slate-800"
                   )}>
-                    <div className="markdown-content prose prose-slate prose-sm max-w-none">
-                      <Markdown>{msg.text}</Markdown>
-                    </div>
+                    {msg.text.replace(/[*#]/g, '')}
                   </div>
                 </div>
               </motion.div>
@@ -316,13 +314,24 @@ export default function PatronChatPage() {
                 <button type="button" className="p-3 text-slate-400 hover:text-riverside-red transition-colors">
                   <Plus size={20} />
                 </button>
-                <input 
-                  type="text"
+                <textarea 
                   value={userInput}
-                  onChange={(e) => setUserInput(e.target.value)}
+                  onChange={(e) => {
+                    setUserInput(e.target.value);
+                    // Simple auto-resize logic
+                    e.target.style.height = 'inherit';
+                    e.target.style.height = `${Math.min(e.target.scrollHeight, 200)}px`;
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      handleChat(e as any);
+                    }
+                  }}
                   placeholder="Posez votre question stratégique..."
-                  className="flex-1 bg-transparent py-4 text-sm font-medium outline-none text-slate-700 placeholder:text-slate-400"
+                  className="flex-1 bg-transparent py-4 text-sm font-medium outline-none text-slate-700 placeholder:text-slate-400 resize-none min-h-[52px] max-h-[200px]"
                   disabled={chatLoading}
+                  rows={1}
                 />
                 <button 
                   type="submit"

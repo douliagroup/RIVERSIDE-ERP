@@ -41,6 +41,7 @@ import {
 import { motion, AnimatePresence } from "motion/react";
 import { cn } from "../../lib/utils";
 import { useAuth } from "../../context/AuthContext";
+import { useRouter } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 
 import NewPatientModal from "@/src/components/NewPatientModal";
@@ -115,12 +116,16 @@ interface PatientWaiting {
 }
 
 export default function MedicalPage() {
-  const { user } = useAuth();
+  const { user, userRole, loading: authLoading } = useAuth();
+  const router = useRouter();
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     setMounted(true);
-  }, []);
+    if (!authLoading && userRole && userRole !== 'patron' && userRole !== 'major' && userRole !== 'medecin') {
+      router.push('/');
+    }
+  }, [userRole, authLoading, router]);
 
   const [selectedPatient, setSelectedPatient] = useState<PatientWaiting | null>(null);
   const [activeTab, setActiveTab] = useState<'CONSULTATION' | 'HISTORIQUE' | 'OUTILS' | 'IA_INSIGHT'>('CONSULTATION');
@@ -1152,10 +1157,10 @@ export default function MedicalPage() {
 
                       <div className="flex-1 overflow-y-auto space-y-4 p-4 bg-slate-50/50 rounded-3xl border border-slate-100 mb-6 flex flex-col scrollbar-hide">
                         {chatMessages.map((msg, idx) => (
-                          <div 
+                           <div 
                             key={idx} 
                             className={cn(
-                              "max-w-[80%] p-4 rounded-2xl text-sm font-medium leading-relaxed",
+                              "max-w-[80%] p-4 rounded-2xl text-sm font-medium leading-relaxed text-left whitespace-pre-wrap",
                               msg.role === 'user' 
                                 ? "bg-slate-900 text-white self-end rounded-tr-none" 
                                 : "bg-white text-slate-800 self-start rounded-tl-none shadow-sm border border-slate-100"
@@ -1167,8 +1172,8 @@ export default function MedicalPage() {
                                   <Stethoscope size={14} className="text-red-600" />
                                 </div>
                               )}
-                              <div className="whitespace-pre-wrap prose prose-sm max-w-none prose-p:leading-relaxed prose-strong:text-red-600 prose-ul:list-decimal">
-                                <ReactMarkdown>{msg.content}</ReactMarkdown>
+                              <div>
+                                {msg.content.replace(/[*#]/g, '')}
                               </div>
                             </div>
                           </div>
@@ -1186,13 +1191,24 @@ export default function MedicalPage() {
                       </div>
 
                       <form onSubmit={handleSendMessage} className="relative">
-                        <input 
-                          type="text"
+                        <textarea 
                           value={chatInput}
-                          onChange={(e) => setChatInput(e.target.value)}
+                          onChange={(e) => {
+                            setChatInput(e.target.value);
+                            // Simple auto-resize logic
+                            e.target.style.height = 'inherit';
+                            e.target.style.height = `${Math.min(e.target.scrollHeight, 200)}px`;
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' && !e.shiftKey) {
+                              e.preventDefault();
+                              handleSendMessage(e as any);
+                            }
+                          }}
                           placeholder="Posez une question clinique (ex: posologie amoxicilline enfant 20kg)..."
-                          className="w-full bg-white border border-slate-100 p-6 rounded-3xl text-sm font-bold shadow-xl shadow-slate-200/50 focus:border-red-600 outline-none transition-all pr-20"
+                          className="w-full bg-white border border-slate-100 p-6 rounded-3xl text-sm font-bold shadow-xl shadow-slate-200/50 focus:border-red-600 outline-none transition-all pr-20 resize-none min-h-[68px] max-h-[200px]"
                           disabled={isChatLoading}
+                          rows={1}
                         />
                         <button 
                           type="submit"

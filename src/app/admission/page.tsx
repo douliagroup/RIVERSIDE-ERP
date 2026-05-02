@@ -33,6 +33,7 @@ import NewPatientModal from "@/src/components/NewPatientModal";
 import { cn } from "@/src/lib/utils";
 import { toast } from "react-hot-toast";
 import { useRouter } from "next/navigation";
+import { useAuth } from "@/src/context/AuthContext";
 
 interface Patient {
   id: string;
@@ -68,12 +69,19 @@ interface QueueEntry {
 }
 
 function AdmissionDashboard() {
+  const { userRole, loading: authLoading } = useAuth();
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     setMounted(true);
-  }, []);
+    if (!authLoading && userRole) {
+      const allowedRoles = ['patron', 'caissier', 'receptionniste', 'communication'];
+      if (!allowedRoles.includes(userRole)) {
+        router.push('/');
+      }
+    }
+  }, [userRole, authLoading, router]);
   
   // Search & Selection
   const [searchTerm, setSearchTerm] = useState("");
@@ -406,6 +414,14 @@ function AdmissionDashboard() {
         </div>
         
         <div className="flex items-center gap-4">
+          <button 
+            onClick={() => setIsPatientModalOpen(true)}
+            className="hidden md:flex items-center gap-2 px-6 py-4 bg-riverside-red text-white text-[11px] font-black uppercase rounded-2xl shadow-xl shadow-red-200 hover:bg-red-700 transition-all"
+          >
+            <UserPlus size={18} />
+            Nouvelle Admission
+          </button>
+
           <div className="bg-white/80 backdrop-blur-md p-4 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-4 px-6">
             <div className="text-right">
               <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Aujourd&apos;hui</p>
