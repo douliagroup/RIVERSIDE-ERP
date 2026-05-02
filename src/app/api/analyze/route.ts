@@ -31,19 +31,59 @@ DIRECTIVES STRICTES DE FORMATAGE DE LA RÉPONSE :
 3. Mets les titres et les mots-clés importants en gras (avec des doubles astérisques markdown). 
 4. Sépare chaque paragraphe par un double saut de ligne pour bien aérer le texte.`;
 
-    // 1. Récupération des données Supabase (KPIs internes)
-    const { data: stats, error: statsError } = await supabaseAdmin
-      .from('statistiques_mensuelles')
-      .select('*')
-      .order('mois', { ascending: false })
-      .limit(1);
+    // 1. Récupération des données Supabase en temps réel
+    const now = new Date();
+    const todayStart = new Date(now.setHours(0,0,0,0)).toISOString();
+    
+    // a. Récupération des DETTES (Noms exacts patients + assurances)
+    const { data: debts } = await supabaseAdmin
+      .from('transactions_caisse')
+      .select(`
+        reste_a_payer,
+        patient_id,
+        patients (nom_complet, telephone),
+        stay_id,
+        hospitalisations (compagnie_assurance)
+      `)
+      .gt('reste_a_payer', 0);
 
-    const internalData = stats?.[0] || {
-      revenu: 4500000,
-      patients: 120,
-      depenses: 2800000,
-      satisfaction: 4.8
-    };
+    const debtorsList = (debts || []).map(d => ({
+      nom: d.patients?.nom_complet || "Inconnu",
+      telephone: d.patients?.telephone || "N/A",
+      montant: d.reste_a_payer,
+      assurance: d.hospitalisations?.compagnie_assurance || "Particulier"
+    }));
+
+    // b. Activité du jour (Finances)
+    const { data: todayTransactions } = await supabaseAdmin
+      .from('transactions_caisse')
+      .select('montant_verse, mode_paiement')
+      .gte('date_transaction', todayStart);
+
+    const caisseJour = (todayTransactions || []).reduce((acc, curr) => acc + (curr.montant_verse || 0), 0);
+
+    // c. Activité Médicale (Consultations & Triage)
+    const { count: consultsToday } = await supabaseAdmin
+      .from('consultations')
+      .select('*', { count: 'exact', head: true })
+      .gte('created_at', todayStart);
+
+    const { count: triageActive } = await supabaseAdmin
+      .from('file_attente')
+      .select('*', { count: 'exact', head: true })
+      .eq('statut', 'En attente');
+
+    // d. Alertes Stocks
+    const { data: stocks } = await supabaseAdmin.from('stocks').select('designation, quantite_actuelle, seuil_alerte');
+    const criticalStocks = (stocks || []).filter(s => s.quantite_actuelle <= s.seuil_alerte);
+
+    // e. Dépenses (Comptabilité Manuelle)
+    const { data: expenses } = await supabaseAdmin
+      .from('comptabilite_manuelle')
+      .select('montant, categorie, libelle')
+      .gte('date_operation', todayStart);
+    
+    const totalExpenses = (expenses || []).reduce((acc, curr) => acc + (curr.montant || 0), 0);
 
     // 2. Recherche Tavily (Contexte externe)
     let searchContext = "Pas de données externes trouvées.";
@@ -66,18 +106,30 @@ DIRECTIVES STRICTES DE FORMATAGE DE LA RÉPONSE :
       }
     }
 
-    // 3. Synthèse Gemini
-    const ai = new GoogleGenAI({ apiKey });
-    
     const prompt = `
       ANALYSE STRATÉGIQUE TRANSVERSALE POUR LE PATRON.
       
-      DONNÉES FINANCIÈRES & OPÉRATIONNELLES (Temps Réel):
-      - Revenu mensuel: ${internalData.revenu} FCFA
-      - Nombre de patients: ${internalData.patients}
-      - Dépenses: ${internalData.depenses} FCFA
-      - Taux de satisfaction: ${internalData.satisfaction}/5
-      - Goulot d'étranglement potentiel: Patient flux admission élevé.
+      DONNÉES EN TEMPS RÉEL (BASE DE DONNÉES RIVERSIDE) :
+      
+      1. ÉTAT DES DETTES (RECUPÉRATION ET RECOUVREMENT) :
+      Voici la liste exacte des débiteurs (Patients et Compagnies d'Assurance) :
+      ${debtorsList.length > 0 
+        ? debtorsList.map(d => `- ${d.nom} (${d.assurance}) : ${d.montant.toLocaleString()} FCFA [Tel: ${d.telephone}]`).join('\n')
+        : "Aucune dette active détectée."}
+      
+      2. ACTIVITÉ FINANCIÈRE DE CE JOUR (${new Date().toLocaleDateString()}) :
+      - Encaissements totaux : ${caisseJour.toLocaleString()} FCFA
+      - Dépenses décaissées : ${totalExpenses.toLocaleString()} FCFA
+      - Solde journalier : ${(caisseJour - totalExpenses).toLocaleString()} FCFA
+      
+      3. ACTIVITÉ MÉDICALE DU JOUR :
+      - Consultations terminées : ${consultsToday || 0}
+      - Patients actuellement en attente au Triage : ${triageActive || 0}
+      
+      4. ALERTES STOCKS CRITIQUES :
+      ${criticalStocks.length > 0 
+        ? criticalStocks.map(s => `- ${s.designation} : ${s.quantite_actuelle} restants (Seuil: ${s.seuil_alerte})`).join('\n')
+        : "Stocks optimaux."}
 
       CONTEXTE MARCHE EXTERNE (Recherche Web):
       ${searchContext}
@@ -93,8 +145,10 @@ DIRECTIVES STRICTES DE FORMATAGE DE LA RÉPONSE :
       - Ton: Professionnel, direct, ambitieux (Editorial Aesthetic).
     `;
 
-    const result = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
+    // 3. Synthèse Gemini
+    const ai = new GoogleGenAI(apiKey);
+    const model = ai.getGenerativeModel({ 
+      model: "gemini-2.0-flash-exp",
       systemInstruction: `Tu es DOULIA Intelligence, le cerveau stratégique omniscient du Riverside Medical Center à Douala. 
         Tu as une connaissance absolue de toutes les fonctionnalités et modules de l'application ERP Riverside. 
         Ton rôle est d'analyser les performances de chaque page (Admission, Médical, Trésorerie) pour conseiller le Directeur (le Patron).
@@ -102,10 +156,18 @@ DIRECTIVES STRICTES DE FORMATAGE DE LA RÉPONSE :
         ${appContext}
         
         ${formattingDirectives}`,
-      contents: [{ role: 'user', parts: [{ text: prompt }] }],
     });
 
-    const reportText = result.text;
+    const result = await model.generateContent(prompt);
+    const reportText = result.response.text();
+
+    const summaryKPIs = { 
+      caisseJour, 
+      consultsToday, 
+      triageActive, 
+      debtorsCount: debtorsList.length,
+      totalDebt: debtorsList.reduce((acc, curr) => acc + curr.montant, 0)
+    };
 
     // 4. Persistence dans Supabase
     const { error: insertError } = await supabaseAdmin
@@ -114,13 +176,13 @@ DIRECTIVES STRICTES DE FORMATAGE DE LA RÉPONSE :
         { 
           titre: "Analyse Stratégique - " + new Date().toLocaleDateString(), 
           contenu: reportText,
-          metadata: { internalData, query }
+          metadata: { summaryKPIs, query }
         }
       ]);
 
     if (insertError) console.error("Erreur insertion rapport:", insertError);
 
-    return NextResponse.json({ report: reportText, kpis: internalData });
+    return NextResponse.json({ report: reportText, kpis: summaryKPIs });
   } catch (error: any) {
     console.error("Erreur API Analyze:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });

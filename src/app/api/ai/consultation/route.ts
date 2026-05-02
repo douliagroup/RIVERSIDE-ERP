@@ -13,7 +13,10 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Configuration IA incomplète. Contactez l'administrateur." }, { status: 500 });
     }
 
-    const ai = new GoogleGenAI({ apiKey });
+    const ai = new GoogleGenAI(apiKey);
+    const model = ai.getGenerativeModel({ 
+      model: "gemini-2.0-flash-exp",
+    });
 
     const formattingDirectives = `
 DIRECTIVES STRICTES DE FORMATAGE DE LA RÉPONSE : 
@@ -42,15 +45,14 @@ DIRECTIVES STRICTES DE FORMATAGE DE LA RÉPONSE :
     `;
 
     try {
-      const result = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
+      const result = await model.generateContent({
         contents: [{ role: 'user', parts: [{ text: promptText }] }],
         generationConfig: {
           maxOutputTokens: 2000,
         }
       });
       
-      const responseText = result.text;
+      const responseText = result.response.text();
       
       if (!responseText) {
         throw new Error("Réponse vide de l'IA");

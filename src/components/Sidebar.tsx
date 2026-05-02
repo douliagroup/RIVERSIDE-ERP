@@ -36,7 +36,6 @@ const menuItems = [
   { icon: Package, label: "Inventaire", href: "/admin/stocks", roles: ['patron', 'major'] },
   { icon: Activity, label: "Patron (Insight)", href: "/patron", roles: ['patron'] },
   { icon: FileText, label: "Comptabilité", href: "/comptabilite", roles: ['patron', 'comptable'] },
-  { icon: Megaphone, label: "Community", href: "/cm", roles: ['patron', 'comptable'] },
   { icon: MessageCircle, label: "DOULIA Love", href: "/doulia-love", roles: ['patron', 'communication'] },
 ];
 
@@ -117,7 +116,7 @@ export default function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
         <Link href="/" className="flex items-center gap-3 group">
           <div className="relative">
             <Image 
-              src="https://i.postimg.cc/qRmsjmD7/Background-Eraser-20241231-212658879.png" 
+              src="https://i.postimg.cc/jj9x2wr9/92953051-100850928268975-2573263542966812672-n.png" 
               alt="Logo Riverside" 
               width={96}
               height={96}

@@ -183,7 +183,7 @@ export default function DashboardPage() {
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-6 bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm relative overflow-hidden group">
         <div className="absolute top-0 right-0 p-4 opacity-[0.03] group-hover:opacity-[0.05] transition-opacity">
            <Image 
-             src="https://i.postimg.cc/qRmsjmD7/Background-Eraser-20241231-212658879.png" 
+             src="https://i.postimg.cc/jj9x2wr9/92953051-100850928268975-2573263542966812672-n.png" 
              alt="Riverside Logo Watermark" 
              width={150}
              height={150}
@@ -199,7 +199,7 @@ export default function DashboardPage() {
             className="w-24 h-24 bg-white rounded-2xl shadow-xl shadow-red-50 flex items-center justify-center border border-slate-50 overflow-hidden"
           >
              <Image 
-               src="https://i.postimg.cc/qRmsjmD7/Background-Eraser-20241231-212658879.png" 
+               src="https://i.postimg.cc/jj9x2wr9/92953051-100850928268975-2573263542966812672-n.png" 
                alt="Riverside Logo" 
                width={80}
                height={80}
@@ -235,7 +235,7 @@ export default function DashboardPage() {
         <motion.button 
           whileTap={{ scale: 0.95 }}
           onClick={() => router.push("/admission")}
-          className="bg-riverside-red text-white px-8 py-4 rounded-xl shadow-lg shadow-red-100 font-black text-[10px] uppercase tracking-widest flex items-center gap-3 hover:scale-[1.02] transition-all relative z-10"
+          className="w-full md:w-auto bg-riverside-red text-white px-8 py-4 rounded-xl shadow-lg shadow-red-100 font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-3 hover:scale-[1.02] transition-all relative z-10"
         >
           <PlusCircle size={18} />
           Nouvelle Admission

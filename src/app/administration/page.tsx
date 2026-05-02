@@ -136,9 +136,8 @@ export default function AdministrationPage() {
   });
 
   const fetchData = React.useCallback(async () => {
+    setLoading(true);
     try {
-      setLoading(true);
-      
       const [
         { data: persData, error: persErr }, 
         { data: rhData, error: rhErr },
@@ -160,7 +159,7 @@ export default function AdministrationPage() {
       ]);
       
       if (persErr) console.error("Erreur personnel:", persErr);
-      if (rhErr) console.warn("Erreur dossiers_rh (possible table manquante):", rhErr);
+      if (rhErr) console.warn("Erreur dossiers_rh:", rhErr);
       if (chmErr) console.error("Erreur chambres:", chmErr);
       if (patErr) console.error("Erreur patients:", patErr);
       if (stockErr) console.error("Erreur stocks:", stockErr);
@@ -168,7 +167,6 @@ export default function AdministrationPage() {
       if (archiveErr) console.error("Erreur archives:", archiveErr);
       if (auditErr) console.error("Erreur audit:", auditErr);
 
-      // Fusionner ou préférer dossiers_rh si disponible
       const finalPersonnel = rhData && rhData.length > 0 ? rhData : persData || [];
       setPersonnel(finalPersonnel);
       setChambres(chmData || []);
@@ -178,21 +176,25 @@ export default function AdministrationPage() {
       setArchives(archiveData || []);
       setAuditLogs(auditData || []);
 
-      if (activeTab === "taches") {
-        const { data, error } = await supabase
-          .from("taches_clinique")
-          .select("*")
-          .order("created_at", { ascending: false });
-        
-        if (error) throw error;
-        setTasks(data || []);
-      }
+      const { data: taskData, error: taskErr } = await supabase
+        .from("taches_clinique")
+        .select("*")
+        .order("created_at", { ascending: false });
+      
+      if (!taskErr) setTasks(taskData || []);
+
     } catch (err) {
-      console.warn(`[Admin] Erreur lors du chargement des données:`, err);
+      console.warn(`[Admin] Erreur fatale lors du chargement:`, err);
     } finally {
       setLoading(false);
     }
-  }, [activeTab]);
+  }, []);
+
+  useEffect(() => {
+    if (mounted) {
+      fetchData();
+    }
+  }, [mounted, fetchData]);
 
   const recordAudit = async (action: string, details: string) => {
     await supabase.from('audit_logs').insert([{

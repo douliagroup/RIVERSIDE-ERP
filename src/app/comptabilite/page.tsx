@@ -244,7 +244,22 @@ export default function AccountingPage() {
   };
 
   const filteredCategories = useMemo(() => {
-    return categories.filter(c => c.flux_associe === form.flux);
+    const fetched = categories.filter(c => c.flux_associe === form.flux);
+    if (fetched.length > 0) return fetched;
+    
+    // Fallback if DB is empty
+    const fallbacks = [
+      { id: 'f1', nom: 'Achats et Fournitures', flux_associe: 'SORTIE' },
+      { id: 'f2', nom: 'Salaires', flux_associe: 'SORTIE' },
+      { id: 'f3', nom: 'Loyer', flux_associe: 'SORTIE' },
+      { id: 'f4', nom: 'Taxes', flux_associe: 'SORTIE' },
+      { id: 'f5', nom: 'Maintenance', flux_associe: 'SORTIE' },
+      { id: 'f6', nom: 'Consultations', flux_associe: 'ENTREE' },
+      { id: 'f7', nom: 'Pharmacie', flux_associe: 'ENTREE' },
+      { id: 'f8', nom: 'Laboratoire', flux_associe: 'ENTREE' },
+      { id: 'f9', nom: 'Hospitalisation', flux_associe: 'ENTREE' },
+    ];
+    return fallbacks.filter(c => c.flux_associe === form.flux) as CategoryOption[];
   }, [categories, form.flux]);
 
   const handlePrint = async () => {

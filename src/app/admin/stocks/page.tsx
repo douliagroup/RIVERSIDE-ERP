@@ -105,7 +105,7 @@ export default function AdminStocksPage() {
   };
 
   const filteredStocks = stocks.filter(item => 
-    item.article.toLowerCase().includes(searchTerm.toLowerCase())
+    (item?.article || "").toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const stats = {

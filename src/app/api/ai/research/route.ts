@@ -28,6 +28,35 @@ DIRECTIVES STRICTES DE FORMATAGE DE LA RÉPONSE : 1. INTERDICTION ABSOLUE d'util
       return NextResponse.json({ error: 'Configuration API manquante' }, { status: 500 });
     }
 
+    // 2b. Récupération du contexte Réel de la Clinique (Supabase)
+    const { supabaseAdmin } = await import('@/src/lib/supabaseAdmin');
+    const now = new Date();
+    const todayStart = new Date(now.setHours(0,0,0,0)).toISOString();
+
+    // Dettes détaillées
+    const { data: debts } = await supabaseAdmin
+      .from('transactions_caisse')
+      .select(`
+        reste_a_payer,
+        patients (nom_complet),
+        hospitalisations (compagnie_assurance)
+      `)
+      .gt('reste_a_payer', 0);
+    
+    const detailedDebts = (debts || []).map(d => ({
+      entite: d.patients?.nom_complet || d.hospitalisations?.compagnie_assurance || "Inconnu",
+      montant: d.reste_a_payer,
+      type: d.hospitalisations?.compagnie_assurance ? "Assurance" : "Patient"
+    }));
+
+    // Activité du jour
+    const { count: consults } = await supabaseAdmin.from('consultations').select('*', { count: 'exact', head: true }).gte('created_at', todayStart);
+    const { data: caData } = await supabaseAdmin.from('transactions_caisse').select('montant_verse').gte('date_transaction', todayStart);
+    const caTotal = (caData || []).reduce((acc, curr) => acc + (curr.montant_verse || 0), 0);
+
+    // Triage
+    const { data: triage } = await supabaseAdmin.from('file_attente').select('patients(nom_complet), motif_visite, degre_urgence').eq('statut', 'En attente');
+
     // 3. Recherche Tavily
     let searchResults = "Aucune donnée de recherche web disponible.";
     try {
@@ -42,7 +71,11 @@ DIRECTIVES STRICTES DE FORMATAGE DE LA RÉPONSE : 1. INTERDICTION ABSOLUE d'util
     }
 
     // 4. Synthèse Gemini
-    const ai = new GoogleGenAI({ apiKey: geminiKey });
+    const ai = new GoogleGenAI(geminiKey);
+    const model = ai.getGenerativeModel({ 
+      model: "gemini-2.0-flash-exp",
+      systemInstruction: "Tu es 'Riverside Intelligence V3', l'IA stratégique du Riverside Medical Center à Douala. " + formattingDirectives,
+    });
     
     const appStructure = `
       CONTEXTE DE L'APPLICATION RIVERSIDE ERP:
@@ -51,36 +84,39 @@ DIRECTIVES STRICTES DE FORMATAGE DE LA RÉPONSE : 1. INTERDICTION ABSOLUE d'util
       - Système de validation: Les dépenses saisies par le caissier doivent être approuvées par le Patron dans son dashboard.
     `;
 
-    const context = `
+    const fullContext = `
       ${appStructure}
       
-      DONNÉES TEMPS RÉEL (Stats Dashboard):
-      ${JSON.stringify(clinicData, null, 2)}
+      --- DONNÉES TEMPS RÉEL (BASE DE DONNÉES RIVERSIDE) ---
       
-      RÉSULTATS DE RECHERCHE WEB (Tavily):
+      1. LISTE DÉTAILLÉE DES DETTES (PATIENTS & ASSURANCES) :
+      ${detailedDebts.length > 0 
+        ? detailedDebts.map(d => `- ${d.entite} [${d.type}] : ${d.montant.toLocaleString()} FCFA`).join('\n')
+        : "Aucune dette."}
+      
+      2. PERFORMANCE DU JOUR (${new Date().toLocaleDateString()}) :
+      - Chiffre d'affaires encaissé : ${caTotal.toLocaleString()} FCFA
+      - Consultations effectuées : ${consults}
+      
+      3. PATIENTS EN ATTENTE AU TRIAGE :
+      ${(triage || []).length > 0
+        ? (triage || []).map(t => `- ${t.patients?.nom_complet} : ${t.motif_visite} (Urgence: ${t.degre_urgence})`).join('\n')
+        : "File d'attente vide."}
+      
+      -------------------------------------------------------
+      
+      RÉSULTATS DE RECHERCHE WEB (Tavily - Contexte Marché):
       ${searchResults}
       
       CONSIGNE:
-      Analyse la demande du patron en comparant nos données internes avec les réalités du marché.
-      Produis une réponse structurée en deux parties : 
-      1. ANALYSE INTERNE (basée sur nos chiffres et structure de l'APP)
-      2. ANALYSE DU MARCHÉ & RECOMMANDATIONS (basée sur le web)
-      
-      Sois analytique, précis et suggère des actions concrètes.
+      Tu es l'IA stratégique du Patron. Réponds de manière précise en citant les noms des patients ou assurances si nécessaire.
+      Si le patron demande "Comment se portent les activités ?", fais une synthèse entre les finances, le flux médical (triage/consults) et les risques (dettes).
       
       QUESTION DU PATRON: ${prompt}
     `;
 
-    const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      systemInstruction: "Tu es 'Riverside Intelligence V3', l'IA stratégique du Riverside Medical Center à Douala. " + formattingDirectives,
-      contents: [{ role: 'user', parts: [{ text: context }] }],
-      generationConfig: {
-        maxOutputTokens: 2000,
-      }
-    });
-
-    const text = response.text;
+    const result = await model.generateContent(fullContext);
+    const text = result.response.text();
 
     return NextResponse.json({ text });
 

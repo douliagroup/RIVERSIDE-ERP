@@ -48,7 +48,7 @@ export default function LoginPage() {
         <div className="relative z-10 text-white space-y-8 max-w-md">
           <div className="w-32 h-32 bg-white rounded-3xl flex items-center justify-center shadow-2xl relative overflow-hidden p-3">
             <Image 
-              src="https://i.postimg.cc/qRmsjmD7/Background-Eraser-20241231-212658879.png"
+              src="https://i.postimg.cc/jj9x2wr9/92953051-100850928268975-2573263542966812672-n.png"
               alt="Logo Riverside"
               fill
               className="object-contain p-2"
