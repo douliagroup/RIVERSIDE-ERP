@@ -146,20 +146,23 @@ DIRECTIVES STRICTES DE FORMATAGE DE LA RÉPONSE :
     `;
 
     // 3. Synthèse Gemini
-    const ai = new GoogleGenAI(apiKey);
-    const model = ai.getGenerativeModel({ 
-      model: "gemini-2.0-flash-exp",
-      systemInstruction: `Tu es DOULIA Intelligence, le cerveau stratégique omniscient du Riverside Medical Center à Douala. 
+    const ai = new GoogleGenAI({ apiKey });
+    
+    const response = await ai.models.generateContent({
+      model: "gemini-3-flash-preview",
+      contents: prompt,
+      config: {
+        systemInstruction: `Tu es DOULIA Intelligence, le cerveau stratégique omniscient du Riverside Medical Center à Douala. 
         Tu as une connaissance absolue de toutes les fonctionnalités et modules de l'application ERP Riverside. 
         Ton rôle est d'analyser les performances de chaque page (Admission, Médical, Trésorerie) pour conseiller le Directeur (le Patron).
         
         ${appContext}
         
         ${formattingDirectives}`,
+      }
     });
 
-    const result = await model.generateContent(prompt);
-    const reportText = result.response.text();
+    const reportText = response.text;
 
     const summaryKPIs = { 
       caisseJour, 

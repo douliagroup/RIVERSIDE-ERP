@@ -71,11 +71,7 @@ DIRECTIVES STRICTES DE FORMATAGE DE LA RÉPONSE : 1. INTERDICTION ABSOLUE d'util
     }
 
     // 4. Synthèse Gemini
-    const ai = new GoogleGenAI(geminiKey);
-    const model = ai.getGenerativeModel({ 
-      model: "gemini-2.0-flash-exp",
-      systemInstruction: "Tu es 'Riverside Intelligence V3', l'IA stratégique du Riverside Medical Center à Douala. " + formattingDirectives,
-    });
+    const ai = new GoogleGenAI({ apiKey: geminiKey });
     
     const appStructure = `
       CONTEXTE DE L'APPLICATION RIVERSIDE ERP:
@@ -115,8 +111,15 @@ DIRECTIVES STRICTES DE FORMATAGE DE LA RÉPONSE : 1. INTERDICTION ABSOLUE d'util
       QUESTION DU PATRON: ${prompt}
     `;
 
-    const result = await model.generateContent(fullContext);
-    const text = result.response.text();
+    const result = await ai.models.generateContent({
+      model: "gemini-3-flash-preview",
+      contents: fullContext,
+      config: {
+        systemInstruction: "Tu es 'Riverside Intelligence V3', l'IA stratégique du Riverside Medical Center à Douala. " + formattingDirectives,
+      }
+    });
+
+    const text = result.text;
 
     return NextResponse.json({ text });
 

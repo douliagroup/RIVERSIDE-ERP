@@ -17,12 +17,6 @@ export async function POST(req: Request) {
     const formattingDirectives = `
 DIRECTIVES STRICTES DE FORMATAGE DE LA RÉPONSE : 1. INTERDICTION ABSOLUE d'utiliser des balises HTML (pas de <p>, <ul>, <li>, <strong>, etc.). 2. Utilise UNIQUEMENT des listes avec des puces numériques (1., 2., 3.) pour énumérer les étapes ou les niveaux. 3. Mets les titres et les mots-clés importants en gras (avec des doubles astérisques markdown). 4. Sépare chaque paragraphe par un double saut de ligne pour bien aérer le texte.`;
 
-    const ai = new GoogleGenAI(geminiKey);
-    const model = ai.getGenerativeModel({ 
-      model: "gemini-2.0-flash-exp",
-      systemInstruction: formattingDirectives,
-    });
-
     const context = `
       CONTEXTE CLINIQUE RIVERSIDE MEDICAL CENTER (DOUALA, CAMEROUN):
       - Localisation: Douala, quartier d'affaires.
@@ -35,8 +29,16 @@ DIRECTIVES STRICTES DE FORMATAGE DE LA RÉPONSE : 1. INTERDICTION ABSOLUE d'util
       FORMAT DE RÉPONSE: Structuré, ton de Conseil en Stratégie, focus sur la rentabilité et l'excellence clinique.
     `;
 
-    const result = await model.generateContent(context);
-    const text = result.response.text();
+    const ai = new GoogleGenAI({ apiKey: geminiKey });
+    const result = await ai.models.generateContent({
+      model: "gemini-3-flash-preview",
+      contents: context,
+      config: {
+        systemInstruction: formattingDirectives,
+      }
+    });
+
+    const text = result.text;
 
     return NextResponse.json({ text });
   } catch (error: any) {

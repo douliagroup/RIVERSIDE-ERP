@@ -13,11 +13,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Configuration IA incomplète. Contactez l'administrateur." }, { status: 500 });
     }
 
-    const ai = new GoogleGenAI(apiKey);
-    const model = ai.getGenerativeModel({ 
-      model: "gemini-2.0-flash-exp",
-    });
-
     const formattingDirectives = `
 DIRECTIVES STRICTES DE FORMATAGE DE LA RÉPONSE : 
 1. INTERDICTION ABSOLUE d'utiliser des balises HTML (pas de <p>, <ul>, <li>, <strong>, etc.). 
@@ -44,15 +39,18 @@ DIRECTIVES STRICTES DE FORMATAGE DE LA RÉPONSE :
       ${formattingDirectives}
     `;
 
+    const ai = new GoogleGenAI({ apiKey });
+
     try {
-      const result = await model.generateContent({
-        contents: [{ role: 'user', parts: [{ text: promptText }] }],
-        generationConfig: {
+      const result = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: promptText,
+        config: {
           maxOutputTokens: 2000,
         }
       });
       
-      const responseText = result.response.text();
+      const responseText = result.text;
       
       if (!responseText) {
         throw new Error("Réponse vide de l'IA");
