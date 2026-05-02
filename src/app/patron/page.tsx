@@ -64,13 +64,46 @@ export default function PatronInsight() {
   });
 
   const [alerts, setAlerts] = useState<any[]>([]);
-  const [chatMessages, setChatMessages] = useState<{role: 'user' | 'model', text: string}[]>([
-    { role: 'model', text: "Bienvenue dans Riverside Intelligence. Je suis prêt à analyser vos opérations stratégiques. Que souhaitez-vous examiner ?" }
-  ]);
+  const [chatMessages, setChatMessages] = useState<{role: 'user' | 'model', text: string}[]>([]);
   const [userInput, setUserInput] = useState("");
   const [chatLoading, setChatLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [pendingExpenses, setPendingExpenses] = useState<any[]>([]);
+
+  // Scroll to bottom on chat update
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [chatMessages, chatLoading]);
+
+  // 0. Chargement de l'historique du chat
+  const fetchChatHistory = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('conversations_patron')
+        .select('*')
+        .order('created_at', { ascending: true });
+      
+      if (error) throw error;
+
+      if (data && data.length > 0) {
+        setChatMessages(data.map((m: any) => ({
+          role: m.role === 'assistant' ? 'model' : 'user',
+          text: m.content
+        })));
+      } else {
+        setChatMessages([
+          { role: 'model', text: "Bienvenue dans Riverside Intelligence. Je suis prêt à analyser vos opérations stratégiques. Que souhaitez-vous examiner ?" }
+        ]);
+      }
+    } catch (err) {
+      console.error("Erreur chargement historique chat:", err);
+      setChatMessages([
+        { role: 'model', text: "Bienvenue dans Riverside Intelligence. (Historique non chargé)" }
+      ]);
+    }
+  };
 
   const fetchPatronData = async () => {
     try {
@@ -215,6 +248,7 @@ export default function PatronInsight() {
 
   useEffect(() => {
     fetchPatronData();
+    fetchChatHistory();
   }, []);
 
   const handleChat = async (e: React.FormEvent) => {

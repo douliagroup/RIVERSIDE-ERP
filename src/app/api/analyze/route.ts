@@ -2,40 +2,42 @@ import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/src/lib/supabaseAdmin';
 import { GoogleGenAI } from '@google/genai';
 
+export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
 export async function POST(req: Request) {
   try {
     const { query } = await req.json();
-    const apiKey = process.env.GEMINI_API_KEY; // Using standardized key
+    const apiKey = process.env.GEMINI_API_KEY; 
 
     if (!apiKey) {
       console.error("[ANALYZE API] Clé API GEMINI_API_KEY manquante.");
       return NextResponse.json({ error: 'Configuration IA incomplète' }, { status: 500 });
     }
 
+    const currentDateTime = new Date().toLocaleString('fr-FR', { timeZone: 'Africa/Douala' });
+    const contextDateHeader = `[CONTEXTE TEMPS RÉEL] Nous sommes le ${currentDateTime} (Heure de Douala).`;
+
     const appContext = `
 CONSTITUTION DE L'ECOSYSTÈME RIVERSIDE (VOTRE CONTEXTE GLOBAL) :
-1. **Module ADMISSION** (/admission) : Gestion critique du flux entrant. Triage avec score de gravité (IA), monitoring des temps d'attente, et orientation intelligente vers les box de soins.
-2. **Module MÉDICAL** (/medical) : Le cœur clinique. Système de consultation assisté par IA (Transcription et aide au diagnostic), calculateurs pédiatriques dynamiques, et assistant DOULIA Insight pour la pharmacovigilance.
-3. **Module TRÉSORERIE** (/tresorerie) : Centre névralgique financier. Encaissement des soins, facturation hospitalisation, suivi des flux de caisse en temps réel et réconciliation.
-4. **Module PATRON** (/patron) : Tour de contrôle stratégique. Intègre toutes les données pour une analyse SWOT multi-dimensionnelle (RH, Finance, Médical).
-5. **Module DOULIA LOVE** (/doulia-love) : Gestion de la relation patient et marketing communautaire. Génération de messages empathiques et éducation thérapeutique.
-6. **Module ADMINISTRATION/RH** : Gestion du planning des gardes, des stocks pharmacie et des archives.
+1. **Module ADMISSION** : Triage avec score de gravité IA et monitoring des attentes.
+2. **Module MÉDICAL** : Aide au diagnostic et transcription.
+3. **Module TRÉSORERIE** : Centre financier. Encaissement et facturation.
+4. **Module PATRON** : Dashboard stratégique multi-dimensionnel.
 `;
 
     const formattingDirectives = `
-DIRECTIVES STRICTES DE FORMATAGE DE LA RÉPONSE : 
-1. INTERDICTION ABSOLUE d'utiliser des balises HTML (pas de <p>, <ul>, <li>, <strong>, etc.). 
-2. Utilise UNIQUEMENT des listes avec des puces numériques (1., 2., 3.) pour énumérer les étapes ou les niveaux. 
-3. Mets les titres et les mots-clés importants en gras (avec des doubles astérisques markdown). 
-4. Sépare chaque paragraphe par un double saut de ligne pour bien aérer le texte.`;
+DIRECTIVES STRICTES DE FORMATAGE : 
+1. PAS de balises HTML. 
+2. Listes numériques uniquement (1., 2.). 
+3. Mots-clés importants en **gras markdown**. 
+4. Double saut de ligne entre paragraphes.`;
 
-    // 1. Récupération des données Supabase en temps réel
+    // 1. Récupération des données Supabase
     const now = new Date();
     const todayStart = new Date(now.setHours(0,0,0,0)).toISOString();
     
-    // a. Récupération des DETTES (Noms exacts patients + assurances)
+    // a. Récupération des DETTES réelles (Patients et Assureurs)
     const { data: debts } = await supabaseAdmin
       .from('transactions_caisse')
       .select(`
@@ -49,20 +51,19 @@ DIRECTIVES STRICTES DE FORMATAGE DE LA RÉPONSE :
 
     const debtorsList = (debts || []).map(d => ({
       nom: d.patients?.nom_complet || "Inconnu",
-      telephone: d.patients?.telephone || "N/A",
       montant: d.reste_a_payer,
       assurance: d.hospitalisations?.compagnie_assurance || "Particulier"
     }));
 
-    // b. Activité du jour (Finances)
+    // b. Finances du jour
     const { data: todayTransactions } = await supabaseAdmin
       .from('transactions_caisse')
-      .select('montant_verse, mode_paiement')
+      .select('montant_verse')
       .gte('date_transaction', todayStart);
 
     const caisseJour = (todayTransactions || []).reduce((acc, curr) => acc + (curr.montant_verse || 0), 0);
 
-    // c. Activité Médicale (Consultations & Triage)
+    // c. Activité Médicale
     const { count: consultsToday } = await supabaseAdmin
       .from('consultations')
       .select('*', { count: 'exact', head: true })
@@ -73,11 +74,11 @@ DIRECTIVES STRICTES DE FORMATAGE DE LA RÉPONSE :
       .select('*', { count: 'exact', head: true })
       .eq('statut', 'En attente');
 
-    // d. Alertes Stocks
+    // d. Stocks Critiques
     const { data: stocks } = await supabaseAdmin.from('stocks').select('designation, quantite_actuelle, seuil_alerte');
     const criticalStocks = (stocks || []).filter(s => s.quantite_actuelle <= s.seuil_alerte);
 
-    // e. Dépenses (Comptabilité Manuelle)
+    // e. Dépenses récentes
     const { data: expenses } = await supabaseAdmin
       .from('comptabilite_manuelle')
       .select('montant, categorie, libelle')
@@ -85,105 +86,52 @@ DIRECTIVES STRICTES DE FORMATAGE DE LA RÉPONSE :
     
     const totalExpenses = (expenses || []).reduce((acc, curr) => acc + (curr.montant || 0), 0);
 
-    // 2. Recherche Tavily (Contexte externe)
-    let searchContext = "Pas de données externes trouvées.";
-    if (process.env.TAVILY_API_KEY) {
-      try {
-        const tavilyResponse = await fetch('https://api.tavily.com/search', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            api_key: process.env.TAVILY_API_KEY,
-            query: query ? `Marché santé Douala 2024: ${query}` : "Tendances santé Douala Cameroun 2024 et tarifs cliniques",
-            search_depth: "advanced"
-          })
-        });
-        
-        const externalData = await tavilyResponse.json();
-        searchContext = externalData.results?.map((r: any) => r.content).join('\n') || searchContext;
-      } catch (err) {
-        console.error("Tavily Error:", err);
-      }
-    }
-
     const prompt = `
-      ANALYSE STRATÉGIQUE TRANSVERSALE POUR LE PATRON.
+      ${contextDateHeader}
       
-      DONNÉES EN TEMPS RÉEL (BASE DE DONNÉES RIVERSIDE) :
+      [DONNÉES ERP RIVERSIDE - SOURCE DE VÉRITÉ]
       
-      1. ÉTAT DES DETTES (RECUPÉRATION ET RECOUVREMENT) :
-      Voici la liste exacte des débiteurs (Patients et Compagnies d'Assurance) :
+      1. ÉTAT DES CRÉANCES (DETTES) :
       ${debtorsList.length > 0 
-        ? debtorsList.map(d => `- ${d.nom} (${d.assurance}) : ${d.montant.toLocaleString()} FCFA [Tel: ${d.telephone}]`).join('\n')
-        : "Aucune dette active détectée."}
+        ? debtorsList.map(d => `- ${d.nom} (${d.assurance}) : ${d.montant.toLocaleString()} FCFA`).join('\n')
+        : "Aucune dette active enregistrée dans le système."}
       
-      2. ACTIVITÉ FINANCIÈRE DE CE JOUR (${new Date().toLocaleDateString()}) :
-      - Encaissements totaux : ${caisseJour.toLocaleString()} FCFA
+      2. FLUX FINANCIER DU JOUR :
+      - Encaissements : ${caisseJour.toLocaleString()} FCFA
       - Dépenses décaissées : ${totalExpenses.toLocaleString()} FCFA
-      - Solde journalier : ${(caisseJour - totalExpenses).toLocaleString()} FCFA
+      - Net Journalier : ${(caisseJour - totalExpenses).toLocaleString()} FCFA
       
-      3. ACTIVITÉ MÉDICALE DU JOUR :
-      - Consultations terminées : ${consultsToday || 0}
-      - Patients actuellement en attente au Triage : ${triageActive || 0}
+      3. ACTIVITÉ MÉDICALE :
+      - Consultations ce jour : ${consultsToday || 0}
+      - Patients en file d'attente (Triage) : ${triageActive || 0}
       
-      4. ALERTES STOCKS CRITIQUES :
+      4. ALERTE STOCKS :
       ${criticalStocks.length > 0 
-        ? criticalStocks.map(s => `- ${s.designation} : ${s.quantite_actuelle} restants (Seuil: ${s.seuil_alerte})`).join('\n')
+        ? criticalStocks.map(s => `- ${s.designation} (${s.quantite_actuelle} restants)`).join('\n')
         : "Stocks optimaux."}
 
-      CONTEXTE MARCHE EXTERNE (Recherche Web):
-      ${searchContext}
+      QUESTION DU PATRON : ${query || "Fais une analyse stratégique globale."}
 
-      QUESTION DU PATRON:
-      ${query || "Génère un rapport stratégique global pour Riverside."}
-
-      FORMAT DE RÉPONSE ATTENDU :
-      - Titre frappant
-      - Résumé exécutif (3 lignes)
-      - Analyse SWOT rapide
-      - 3 Recommandations stratégiques concrètes
-      - Ton: Professionnel, direct, ambitieux (Editorial Aesthetic).
+      INSTRUCTION CRITIQUE : Tu es l'IA stratégique de l'ERP Riverside. Tu dois te baser STRICTEMENT sur les [DONNÉES ERP] fournies ci-dessus. Si une information financière n'est pas dans ces données, réponds que tu n'as pas l'information, N'INVENTE RIEN. Ne dis surtout pas que nous sommes en Février si la date ci-dessus indique le contraire.
     `;
 
-    // 3. Synthèse Gemini
     const ai = new GoogleGenAI({ apiKey });
-    
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
       contents: prompt,
       config: {
-        systemInstruction: `Tu es DOULIA Intelligence, le cerveau stratégique omniscient du Riverside Medical Center à Douala. 
-        Tu as une connaissance absolue de toutes les fonctionnalités et modules de l'application ERP Riverside. 
-        Ton rôle est d'analyser les performances de chaque page (Admission, Médical, Trésorerie) pour conseiller le Directeur (le Patron).
-        
+        systemInstruction: `Tu es DOULIA Intelligence, l'IA décisionnelle du Riverside Medical Center.
         ${appContext}
+        ${formattingDirectives}
         
-        ${formattingDirectives}`,
+        RAPPEL : Ton analyse doit être clinique, précise et basée exclusivement sur les faits fournis.`,
       }
     });
 
     const reportText = response.text;
+    const summaryKPIs = { caisseJour, consultsToday, triageActive, totalDebt: debtorsList.reduce((acc, curr) => acc + curr.montant, 0) };
 
-    const summaryKPIs = { 
-      caisseJour, 
-      consultsToday, 
-      triageActive, 
-      debtorsCount: debtorsList.length,
-      totalDebt: debtorsList.reduce((acc, curr) => acc + curr.montant, 0)
-    };
-
-    // 4. Persistence dans Supabase
-    const { error: insertError } = await supabaseAdmin
-      .from('rapports_ia')
-      .insert([
-        { 
-          titre: "Analyse Stratégique - " + new Date().toLocaleDateString(), 
-          contenu: reportText,
-          metadata: { summaryKPIs, query }
-        }
-      ]);
-
-    if (insertError) console.error("Erreur insertion rapport:", insertError);
+    await supabaseAdmin.from('rapports_ia').insert([{ titre: "Analyse Stratégique - " + currentDateTime, contenu: reportText, metadata: { summaryKPIs, query } }]);
 
     return NextResponse.json({ report: reportText, kpis: summaryKPIs });
   } catch (error: any) {

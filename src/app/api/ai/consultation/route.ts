@@ -1,17 +1,16 @@
 import { NextResponse } from 'next/server';
 import { GoogleGenAI } from '@google/genai';
 
-export const maxDuration = 60; // Prevent timeouts
+export const dynamic = 'force-dynamic';
+export const maxDuration = 60; 
 
 export async function POST(req: Request) {
   try {
     const { transcription } = await req.json();
     const apiKey = process.env.GEMINI_API_KEY;
+    const currentDateTime = new Date().toLocaleString('fr-FR', { timeZone: 'Africa/Douala' });
 
-    if (!apiKey) {
-      console.error("[IA ROUTE] ERREUR : Clé API manquante (GEMINI_API_KEY).");
-      return NextResponse.json({ error: "Configuration IA incomplète. Contactez l'administrateur." }, { status: 500 });
-    }
+    if (!apiKey) return NextResponse.json({ error: "Config IA incomplète." }, { status: 500 });
 
     const formattingDirectives = `
 DIRECTIVES STRICTES DE FORMATAGE DE LA RÉPONSE : 

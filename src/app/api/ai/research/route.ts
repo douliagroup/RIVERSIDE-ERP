@@ -3,11 +3,11 @@ import { tavily } from "@tavily/core";
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 
+export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
 export async function POST(req: Request) {
   try {
-    // 1. Protection par Rôle (Patron uniquement)
     const cookieStore = cookies();
     const role = cookieStore.get('riverside_role')?.value;
     
@@ -15,116 +15,115 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Accès refusé. Rôle Patron requis." }, { status: 403 });
     }
 
-    const { prompt, clinicData } = await req.json();
+    const { prompt } = await req.json();
+    const currentDateTime = new Date().toLocaleString('fr-FR', { timeZone: 'Africa/Douala' });
 
     const formattingDirectives = `
-DIRECTIVES STRICTES DE FORMATAGE DE LA RÉPONSE : 1. INTERDICTION ABSOLUE d'utiliser des balises HTML (pas de <p>, <ul>, <li>, <strong>, etc.). 2. Utilise UNIQUEMENT des listes avec des puces numériques (1., 2., 3.) pour énumérer les étapes ou les niveaux. 3. Mets les titres et les mots-clés importants en gras (avec des doubles astérisques markdown). 4. Sépare chaque paragraphe par un double saut de ligne pour bien aérer le texte.`;
+DIRECTIVES STRICTES DE FORMATAGE : 
+1. PAS de balises HTML. 
+2. Listes numériques uniquement (1., 2.). 
+3. Titres et mots-clés en **gras markdown**. 
+4. Double saut de ligne entre paragraphes.`;
 
-    // 2. Validation Clés API
     const geminiKey = process.env.GEMINI_API_KEY; 
     const tavilyKey = process.env.TAVILY_API_KEY;
 
-    if (!geminiKey || !tavilyKey) {
-      return NextResponse.json({ error: 'Configuration API manquante' }, { status: 500 });
-    }
+    if (!geminiKey) return NextResponse.json({ error: 'Configuration API Gemini manquante' }, { status: 500 });
 
-    // 2b. Récupération du contexte Réel de la Clinique (Supabase)
+    // RAG Interne (Supabase)
     const { supabaseAdmin } = await import('@/src/lib/supabaseAdmin');
     const now = new Date();
     const todayStart = new Date(now.setHours(0,0,0,0)).toISOString();
 
-    // Dettes détaillées
     const { data: debts } = await supabaseAdmin
       .from('transactions_caisse')
-      .select(`
-        reste_a_payer,
-        patients (nom_complet),
-        hospitalisations (compagnie_assurance)
-      `)
+      .select(`reste_a_payer, patients(nom_complet), hospitalisations(compagnie_assurance)`)
       .gt('reste_a_payer', 0);
     
     const detailedDebts = (debts || []).map(d => ({
       entite: d.patients?.nom_complet || d.hospitalisations?.compagnie_assurance || "Inconnu",
-      montant: d.reste_a_payer,
-      type: d.hospitalisations?.compagnie_assurance ? "Assurance" : "Patient"
+      montant: d.reste_a_payer
     }));
 
-    // Activité du jour
     const { count: consults } = await supabaseAdmin.from('consultations').select('*', { count: 'exact', head: true }).gte('created_at', todayStart);
     const { data: caData } = await supabaseAdmin.from('transactions_caisse').select('montant_verse').gte('date_transaction', todayStart);
     const caTotal = (caData || []).reduce((acc, curr) => acc + (curr.montant_verse || 0), 0);
-
-    // Triage
     const { data: triage } = await supabaseAdmin.from('file_attente').select('patients(nom_complet), motif_visite, degre_urgence').eq('statut', 'En attente');
 
-    // 3. Recherche Tavily
-    let searchResults = "Aucune donnée de recherche web disponible.";
-    try {
-      const tvly = tavily({ apiKey: tavilyKey });
-      const searchResponse = await tvly.search(prompt, {
-        searchDepth: "advanced",
-        maxResults: 5,
-      });
-      searchResults = JSON.stringify(searchResponse.results);
-    } catch (tavErr) {
-      console.error("Tavily Search Error:", tavErr);
+    // Recherche Tavily (Uniquement si nécessaire ou pour contexte externe)
+    let searchResults = "Recherche externe non sollicitée.";
+    if (tavilyKey && (prompt.toLowerCase().includes("marché") || prompt.toLowerCase().includes("concurrence"))) {
+      try {
+        const tvly = tavily({ apiKey: tavilyKey });
+        const res = await tvly.search(prompt, { searchDepth: "advanced", maxResults: 3 });
+        searchResults = JSON.stringify(res.results);
+      } catch (err) { console.error("Tavily Error:", err); }
     }
 
-    // 4. Synthèse Gemini
-    const ai = new GoogleGenAI({ apiKey: geminiKey });
-    
-    const appStructure = `
-      CONTEXTE DE L'APPLICATION RIVERSIDE ERP:
-      - Modules: Admission, Médical, Trésorerie, Pharmacie, Administration.
-      - Tables Clés: patients, sejours_actifs (file d'attente), transactions_caisse (finance), comptabilite_manuelle (dépenses), stocks, consultations, chambres.
-      - Système de validation: Les dépenses saisies par le caissier doivent être approuvées par le Patron dans son dashboard.
-    `;
-
     const fullContext = `
-      ${appStructure}
+      [CONTEXTE TEMPS RÉEL] Nous sommes le : ${currentDateTime} (Heure de Douala).
       
-      --- DONNÉES TEMPS RÉEL (BASE DE DONNÉES RIVERSIDE) ---
+      [SOURCE DE VÉRITÉ - DONNÉES ERP RIVERSIDE]
       
-      1. LISTE DÉTAILLÉE DES DETTES (PATIENTS & ASSURANCES) :
+      1. CRÉANCES / DETTES ACTIVES :
       ${detailedDebts.length > 0 
-        ? detailedDebts.map(d => `- ${d.entite} [${d.type}] : ${d.montant.toLocaleString()} FCFA`).join('\n')
-        : "Aucune dette."}
+        ? detailedDebts.map(d => `- ${d.entite} : ${d.montant.toLocaleString()} FCFA`).join('\n')
+        : "Le système n'indique aucune dette actuelle."}
       
-      2. PERFORMANCE DU JOUR (${new Date().toLocaleDateString()}) :
-      - Chiffre d'affaires encaissé : ${caTotal.toLocaleString()} FCFA
-      - Consultations effectuées : ${consults}
+      2. PERFORMANCE DU JOUR :
+      - Encaissements : ${caTotal.toLocaleString()} FCFA
+      - Nombre de consultations : ${consults || 0}
       
-      3. PATIENTS EN ATTENTE AU TRIAGE :
+      3. TRIAGE ET FILE D'ATTENTE :
       ${(triage || []).length > 0
-        ? (triage || []).map(t => `- ${t.patients?.nom_complet} : ${t.motif_visite} (Urgence: ${t.degre_urgence})`).join('\n')
+        ? (triage || []).map(t => `- ${t.patients?.nom_complet} (${t.motif_visite})`).join('\n')
         : "File d'attente vide."}
       
-      -------------------------------------------------------
-      
-      RÉSULTATS DE RECHERCHE WEB (Tavily - Contexte Marché):
+      [RÉSULTATS RECHERCHE EXTERNE]
       ${searchResults}
       
-      CONSIGNE:
-      Tu es l'IA stratégique du Patron. Réponds de manière précise en citant les noms des patients ou assurances si nécessaire.
-      Si le patron demande "Comment se portent les activités ?", fais une synthèse entre les finances, le flux médical (triage/consults) et les risques (dettes).
-      
-      QUESTION DU PATRON: ${prompt}
+      [QUESTION DU PATRON] : ${prompt}
+
+      [CONSIGNES IA] :
+      Tu es 'Riverside Intelligence V3'. Tu dois te baser EXCLUSIVEMENT sur les [DONNÉES ERP] pour répondre aux questions sur la clinique. 
+      Si on te demande "Comment vont les affaires ?", analyse les dettes (${detailedDebts.length}) vs les encaissements (${caTotal}).
+      NE DIT JAMAIS que nous sommes en février si la date actuelle indique une autre période.
+      Si une donnée interne manque, déclare-le, n'invente rien.
     `;
+
+    const ai = new GoogleGenAI({ apiKey: geminiKey });
+
+    // Sauvegarde du Message Utilisateur (Optionnel: pour historique)
+    try {
+      await supabaseAdmin.from('conversations_patron').insert([
+        { role: 'user', content: prompt }
+      ]);
+    } catch (saveErr) {
+      console.error("Erreur sauvegarde message utilisateur:", saveErr);
+    }
 
     const result = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
       contents: fullContext,
       config: {
-        systemInstruction: "Tu es 'Riverside Intelligence V3', l'IA stratégique du Riverside Medical Center à Douala. " + formattingDirectives,
+        systemInstruction: "Tu es l'IA décisionnelle stratégique de Riverside Medical Center. " + formattingDirectives,
       }
     });
 
-    const text = result.text;
+    const assistantText = result.text;
 
-    return NextResponse.json({ text });
+    // Sauvegarde de la Réponse Assistant
+    try {
+      await supabaseAdmin.from('conversations_patron').insert([
+        { role: 'assistant', content: assistantText }
+      ]);
+    } catch (saveErr) {
+      console.error("Erreur sauvegarde réponse assistant:", saveErr);
+    }
 
+    return NextResponse.json({ text: assistantText });
   } catch (error: any) {
     console.error("Research API Error:", error);
-    return NextResponse.json({ error: "Une erreur est survenue lors de l'analyse stratégique : " + error.message }, { status: 500 });
+    return NextResponse.json({ error: "Erreur stratégique : " + error.message }, { status: 500 });
   }
 }
