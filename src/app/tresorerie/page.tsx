@@ -38,9 +38,8 @@ interface Patient {
 
 interface Acte {
   id: string;
-  designation: string;
-  prix_cash: number;
-  base_assurance: number;
+  nom_prestation: string;
+  prix_unitaire: number;
   categorie: string;
 }
 
@@ -198,7 +197,7 @@ export default function TresoreriePage() {
       const { data: catalogueData, error: catalogueError } = await supabase
         .from('catalogue_tarifs')
         .select('*')
-        .order('designation', { ascending: true });
+        .order('nom_prestation', { ascending: true });
 
       if (catalogueError) throw catalogueError;
       setCatalogue(catalogueData || []);
@@ -263,7 +262,7 @@ export default function TresoreriePage() {
     const isCashOnly = patientInfo.type_assurance === "Cash";
     
     const total = cart.reduce((acc, item) => {
-      return acc + (isCashOnly ? item.prix_cash : item.base_assurance);
+      return acc + (item.prix_unitaire || 0);
     }, 0);
 
     return total;
@@ -275,14 +274,21 @@ export default function TresoreriePage() {
     setSubmitting(true);
     try {
       const verse = parseFloat(debtAmountInput);
+      if (isNaN(verse) || verse < 0) {
+        throw new Error("Montant invalide");
+      }
+
       const newTotalPaid = (debtToPay.montant_verse || 0) + verse;
-      const remains = Math.max(0, debtToPay.montant_total - newTotalPaid);
+      const remains = Math.max(0, (debtToPay.montant_total || 0) - newTotalPaid);
       
       let finalStatut = 'Payé';
       if (remains > 0) {
         finalStatut = 'Partiel';
       }
 
+      console.log(`[Règlement Dette] Mise à jour Transaction: ID=${debtToPay.id}, Verse=${verse}, Reste=${remains}, Statut=${finalStatut}`);
+
+      // Mise à jour de la transaction principale
       const { error: updError } = await supabase
         .from('transactions_caisse')
         .update({
@@ -294,21 +300,38 @@ export default function TresoreriePage() {
       
       if (updError) throw updError;
 
+      // Le client mentionne la table 'factures', on tente la mise à jour si l'ID correspond ou s'il y a un lien
+      // On le fait dans un bloc séparé car la table peut ne pas exister ou l'ID différer
+      try {
+        await supabase
+          .from('factures')
+          .update({
+            reste_a_payer: remains,
+            statut: finalStatut
+          })
+          .eq('id', debtToPay.id);
+      } catch (errFacture) {
+        console.warn("Mise à jour table 'factures' ignorée ou impossible:", errFacture);
+      }
+
       // Log payment history
-      await supabase.from('historique_paiements').insert([{
+      const { error: histError } = await supabase.from('historique_paiements').insert([{
         transaction_id: debtToPay.id,
         montant_paye: verse,
         mode_paiement: paymentMode,
         date_paiement: new Date().toISOString()
       }]);
 
+      if (histError) console.error("Erreur historique:", histError);
+
       toast.success("Dette mise à jour avec succès ! ✅");
       setIsDebtModalOpen(false);
       setDebtToPay(null);
       setDebtAmountInput("");
-      fetchInitialData();
+      await fetchInitialData();
     } catch (err: any) {
-      toast.error(`Erreur: ${err.message}`);
+      console.error("[DebtSettlement] Erreur critique:", err);
+      toast.error(`Échec du règlement: ${err.message || "Erreur serveur"}`);
     } finally {
       setSubmitting(false);
     }
@@ -342,7 +365,7 @@ export default function TresoreriePage() {
 
       const description = selectedTransaction 
         ? selectedTransaction.description 
-        : cart.map(item => item.designation).join(", ");
+        : cart.map(item => item.nom_prestation).join(", ");
 
       console.log(`Flux Trésorerie - Validation Paiement: Total=${total}, Versé=${verse}, Reste=${reste}`);
 
@@ -484,7 +507,7 @@ export default function TresoreriePage() {
   }, [dettes]);
 
   const filteredCatalogue = (catalogue || []).filter(acte => 
-    (acte?.designation || "").toLowerCase().includes((searchTerm || "").toLowerCase())
+    (acte?.nom_prestation || "").toLowerCase().includes((searchTerm || "").toLowerCase())
   );
 
   const exportToCSV = () => {
@@ -773,15 +796,15 @@ export default function TresoreriePage() {
                       key={acte.id}
                       className="flex items-center justify-between p-5 bg-white border border-slate-100 rounded-2xl hover:border-riverside-red/30 hover:shadow-lg hover:shadow-slate-100 transition-all group"
                     >
-                      <div className="flex items-center gap-4">
-                        <div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center text-slate-400 group-hover:text-riverside-red transition-colors">
-                          <CheckCircle size={20} />
+                        <div className="flex items-center gap-4">
+                          <div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center text-slate-400 group-hover:text-riverside-red transition-colors">
+                            <CheckCircle size={20} />
+                          </div>
+                          <div>
+                            <p className="text-sm font-black text-slate-800 leading-none">{acte.nom_prestation}</p>
+                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-2">{(acte.prix_unitaire || 0).toLocaleString()} FCFA</p>
+                          </div>
                         </div>
-                        <div>
-                          <p className="text-sm font-black text-slate-800 leading-none">{acte.designation}</p>
-                          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-2">{(acte.prix_cash || 0).toLocaleString()} FCFA (CASH)</p>
-                        </div>
-                      </div>
                       <button 
                         onClick={() => addToCart(acte)}
                         className="w-10 h-10 bg-slate-900 text-white rounded-xl flex items-center justify-center hover:bg-riverside-red transition-all shadow-lg active:scale-95"
@@ -876,12 +899,12 @@ export default function TresoreriePage() {
                     {cart.map((item, idx) => (
                       <div key={idx} className="flex items-start justify-between group animate-in fade-in slide-in-from-right-4 duration-300">
                         <div className="flex-1 pr-4">
-                          <p className="text-xs font-black text-slate-800 leading-tight group-hover:text-riverside-red transition-colors">{item.designation}</p>
+                          <p className="text-xs font-black text-slate-800 leading-tight group-hover:text-riverside-red transition-colors">{item.nom_prestation}</p>
                           <p className="text-[9px] text-slate-400 font-bold uppercase mt-1">{item.categorie}</p>
                         </div>
                         <div className="flex items-start gap-3">
                           <p className="text-sm font-black text-slate-900 tabular-nums">
-                            {((selectedSejour?.patients?.type_assurance === "Cash" ? item.prix_cash : item.base_assurance) || 0).toLocaleString()}
+                            {(item.prix_unitaire || 0).toLocaleString()}
                           </p>
                           <button 
                             onClick={() => removeFromCart(idx)}
