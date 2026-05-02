@@ -100,6 +100,13 @@ function AdmissionDashboard() {
   const [editingQueueEntry, setEditingQueueEntry] = useState<QueueEntry | null>(null);
 
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
+  const [showPatientCard, setShowPatientCard] = useState(false);
+
+  useEffect(() => {
+    if (selectedPatient) {
+      setShowPatientCard(true);
+    }
+  }, [selectedPatient]);
 
   const handleCreateSuccess = (patientId: string) => {
     fetchWaitingList();
@@ -176,7 +183,7 @@ function AdmissionDashboard() {
   const [showTriageModal, setShowTriageModal] = useState(false);
   const [triageData, setTriageData] = useState({
     motif: "",
-    orientation: "Consultation",
+    orientation: "File d'attente",
     service: "Médecine Générale",
     urgence: "Normale",
     personne_confiance: "",
@@ -186,6 +193,13 @@ function AdmissionDashboard() {
     pouls: "",
     spo2: ""
   });
+
+  const orientationOptions = [
+    "File d'attente",
+    "Consultation directe",
+    "Urgence",
+    "Hospitalisation"
+  ];
 
   const services = ["Médecine Générale", "Pédiatrie", "Gynécologie", "Infirmerie/Soins", "Laboratoire", "Chirurgie"];
 
@@ -340,6 +354,23 @@ function AdmissionDashboard() {
     }
   };
 
+  const calculateAge = (birthDate?: string) => {
+    if (!birthDate) return null;
+    try {
+      const today = new Date();
+      const birth = new Date(birthDate);
+      if (isNaN(birth.getTime())) return null;
+      let age = today.getFullYear() - birth.getFullYear();
+      const m = today.getMonth() - birth.getMonth();
+      if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) {
+        age--;
+      }
+      return age;
+    } catch (e) {
+      return null;
+    }
+  };
+
   const printTicket = (entry: QueueEntry) => {
     // ... no changes to print ticket logic requested
     const printWindow = window.open('', '_blank');
@@ -464,8 +495,17 @@ function AdmissionDashboard() {
             <div className="space-y-3">
               {foundPatients.map(p => (
                 <div key={p.id} className="relative">
-                  <div className="w-full p-5 bg-white border border-slate-50 rounded-2xl flex items-center justify-between hover:border-riverside-red hover:shadow-lg hover:shadow-red-500/5 transition-all group">
-                    <div className="flex-1 text-left">
+                    <div className={cn(
+                      "w-full p-5 bg-white border rounded-2xl flex items-center justify-between hover:border-riverside-red hover:shadow-lg hover:shadow-red-500/5 transition-all group",
+                      selectedPatient?.id === p.id ? "border-riverside-red bg-red-50/10 shadow-lg shadow-red-500/5" : "border-slate-50"
+                    )}>
+                    <div 
+                      className="flex-1 text-left cursor-pointer"
+                      onClick={() => {
+                        setSelectedPatient(p);
+                        setIsEditTriageMode(false);
+                      }}
+                    >
                       <p className="text-sm font-black text-slate-900 uppercase">{p.nom_complet}</p>
                       <p className="text-[10px] text-slate-400 font-bold mt-1 uppercase tracking-widest">{p.telephone || 'Aucun Tel'} • {p.type_assurance}</p>
                     </div>
@@ -554,6 +594,103 @@ function AdmissionDashboard() {
 
         {/* Right Column: Waiting List */}
         <div className="lg:col-span-12 xl:col-span-8 space-y-8">
+           
+           {/* Patient Detail Card */}
+           <AnimatePresence>
+             {selectedPatient && showPatientCard && (
+               <motion.div
+                 initial={{ opacity: 0, y: -20 }}
+                 animate={{ opacity: 1, y: 0 }}
+                 exit={{ opacity: 0, y: -20 }}
+                 className="bg-white rounded-[40px] p-8 border border-slate-100 shadow-2xl shadow-slate-200/50 relative overflow-hidden"
+               >
+                 <div className="absolute top-0 right-0 w-64 h-64 bg-red-50/50 rounded-full blur-3xl -translate-y-32 translate-x-32" />
+                 
+                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-8 relative z-10">
+                   <div className="flex items-center gap-6">
+                     <div className="w-24 h-24 bg-slate-900 rounded-[2.5rem] flex items-center justify-center text-white text-3xl font-black shadow-xl">
+                       {selectedPatient.nom_complet.charAt(0)}
+                     </div>
+                     <div>
+                       <div className="flex items-center gap-3 mb-2">
+                         <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tighter">{selectedPatient.nom_complet}</h2>
+                         <span className={cn(
+                           "px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest",
+                           selectedPatient.type_assurance === "Cash" ? "bg-amber-100 text-amber-600" : "bg-blue-600 text-white shadow-lg shadow-blue-100"
+                         )}>
+                           {selectedPatient.type_assurance}
+                         </span>
+                       </div>
+                       <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+                         <div className="flex items-center gap-1.5 text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                           <Phone size={12} className="text-riverside-red" /> {selectedPatient.telephone}
+                         </div>
+                         <div className="flex items-center gap-1.5 text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                           <User size={12} className="text-riverside-red" /> {selectedPatient.sexe}
+                         </div>
+                         <div className="flex items-center gap-1.5 text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                           <Activity size={12} className="text-riverside-red" /> {calculateAge(selectedPatient.date_naissance) || selectedPatient.age || "?"} ans
+                         </div>
+                       </div>
+                     </div>
+                   </div>
+
+                   <div className="flex items-center gap-4">
+                     <button 
+                       onClick={() => setShowTriageModal(true)}
+                       className="flex-1 md:flex-none flex items-center justify-center gap-3 px-8 py-5 bg-riverside-red text-white text-[11px] font-black uppercase rounded-3xl shadow-2xl shadow-red-200 hover:bg-slate-900 hover:shadow-slate-200 transition-all active:scale-95 whitespace-nowrap"
+                     >
+                       <Stethoscope size={20} />
+                       🩺 Nouveau Séjour / Triage
+                     </button>
+                     
+                     <div className="relative">
+                        <button 
+                          onClick={() => setActiveDropdown(activeDropdown === 'selected-patient' ? null : 'selected-patient')}
+                          className="w-14 h-14 bg-slate-50 text-slate-400 rounded-2xl flex items-center justify-center hover:bg-slate-100 transition-all border border-slate-100 shadow-sm"
+                        >
+                          <MoreVertical size={20} />
+                        </button>
+                        
+                        <AnimatePresence>
+                          {activeDropdown === 'selected-patient' && (
+                            <>
+                              <motion.div 
+                                initial={{ opacity: 0, scale: 0.9, y: 10 }}
+                                animate={{ opacity: 1, scale: 1, y: 0 }}
+                                exit={{ opacity: 0, scale: 0.9, y: 10 }}
+                                className="absolute right-0 top-16 w-56 bg-white rounded-2xl shadow-2xl border border-slate-100 z-50 overflow-hidden"
+                              >
+                                 <button 
+                                   onClick={() => router.push(`/patients?id=${selectedPatient.id}`)}
+                                   className="w-full p-4 flex items-center gap-3 text-[10px] font-black text-slate-600 hover:bg-slate-50 transition-all uppercase"
+                                 >
+                                   <FileText size={14} className="text-blue-500" /> Dossier Médical
+                                 </button>
+                                 <button 
+                                   onClick={() => handleEditPatient(selectedPatient)}
+                                   className="w-full p-4 flex items-center gap-3 text-[10px] font-black text-slate-600 hover:bg-slate-50 transition-all uppercase border-t border-slate-50"
+                                 >
+                                   <Edit2 size={14} className="text-amber-500" /> Modifier Profil
+                                 </button>
+                                 <button 
+                                   onClick={() => setShowPatientCard(false)}
+                                   className="w-full p-4 flex items-center gap-3 text-[10px] font-black text-red-500 hover:bg-red-50 transition-all uppercase border-t border-slate-50"
+                                 >
+                                   <X size={14} /> Fermer Fiche
+                                 </button>
+                              </motion.div>
+                              <div className="fixed inset-0 z-40" onClick={() => setActiveDropdown(null)} />
+                            </>
+                          )}
+                        </AnimatePresence>
+                     </div>
+                   </div>
+                 </div>
+               </motion.div>
+             )}
+           </AnimatePresence>
+
            <div className="bg-white rounded-[32px] overflow-hidden border border-slate-100 shadow-xl shadow-slate-100/50">
               <div className="p-8 border-b border-slate-50 flex items-center justify-between bg-white">
                 <div>
@@ -759,7 +896,19 @@ function AdmissionDashboard() {
                       </div>
 
                       <div className="space-y-1.5">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Service de destination *</label>
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Orientation / Statut *</label>
+                        <select 
+                          required
+                          className="w-full p-5 bg-slate-50 border border-slate-100 rounded-2xl text-[11px] font-black uppercase outline-none focus:border-riverside-red focus:bg-white appearance-none cursor-pointer"
+                          value={triageData.orientation}
+                          onChange={e => setTriageData({...triageData, orientation: e.target.value})}
+                        >
+                          {orientationOptions.map(o => <option key={o} value={o}>{o}</option>)}
+                        </select>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Département / Service *</label>
                         <select 
                           required
                           className="w-full p-5 bg-slate-50 border border-slate-100 rounded-2xl text-[11px] font-black uppercase outline-none focus:border-riverside-red focus:bg-white appearance-none cursor-pointer"
