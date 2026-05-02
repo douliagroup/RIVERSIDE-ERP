@@ -5,9 +5,12 @@ import { ShieldCheck } from 'lucide-react';
 
 interface PDFTemplateProps {
   id: string;
-  type: 'RAPPORT_GARDE' | 'FACTURE' | 'BILAN_COMPTABLE';
+  type: 'RAPPORT_GARDE' | 'RAPPORT_REUNION' | 'FACTURE' | 'BILAN_COMPTABLE';
   data: any;
 }
+
+const CHAMBRES = ["211", "210", "209", "208", "207", "205", "204", "202", "P4"];
+const ESPACES = ["Accueil", "Couloirs", "Toilettes", "Salle Cons. 1/2", "Laboratoire", "Cour", "Cuisine"];
 
 export const PDFTemplates = ({ id, type, data }: PDFTemplateProps) => {
   const [isMounted, setIsMounted] = React.useState(false);
@@ -18,73 +21,169 @@ export const PDFTemplates = ({ id, type, data }: PDFTemplateProps) => {
 
   if (!isMounted) return null;
 
+  const isGarde = data?.type_rapport === 'GARDE' || type === 'RAPPORT_GARDE';
+  const isReunion = data?.type_rapport === 'REUNION' || type === 'RAPPORT_REUNION';
+  const c = data?.contenu || {};
+
   return (
     <div 
       id={id} 
-      className="fixed -left-[9999px] top-0 w-[800px] bg-white p-10 font-sans"
-      style={{ minHeight: '1122px' }} // A4 height approx
+      className="fixed -left-[9999px] top-0 w-[1000px] bg-white p-16 font-sans text-slate-900"
+      style={{ minHeight: '1414px' }} // Adjusted for 1000px width scaling
     >
-      {/* Header Riverside */}
-      <div className="flex items-center justify-between border-b-4 border-red-600 pb-6 mb-8">
-        <div className="flex items-center gap-4">
-          <div className="w-16 h-16 bg-red-600 rounded-2xl flex items-center justify-center text-white">
-            <ShieldCheck size={40} />
-          </div>
-          <div>
-            <h1 className="text-3xl font-black text-slate-900 tracking-tighter">RIVERSIDE MEDICAL CENTER</h1>
-            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Excellence Clinique & Innovation</p>
-            <p className="text-[9px] text-slate-400 mt-1">Douala, Cameroun | BP: 1234 | Tel: +237 6XX XXX XXX</p>
-          </div>
+      {/* Header Riverside Official */}
+      <div className="text-center mb-16 pb-12 border-b-2 border-red-600 relative">
+        <div className="absolute top-0 left-0">
+           <ShieldCheck size={60} className="text-red-900 opacity-10" />
         </div>
-        <div className="text-right">
-          <div className="bg-slate-900 text-white px-4 py-1 text-[10px] font-black uppercase mb-2 inline-block">
-            Document Officiel
-          </div>
-          <p className="text-xs font-bold text-slate-500 italic">Réf: {Math.random().toString(36).substring(7).toUpperCase()}</p>
-        </div>
+        <h1 className="text-4xl font-black text-red-600 tracking-[0.2em] mb-2">R I S I M E D</h1>
+        <h2 className="text-2xl font-bold uppercase tracking-widest text-slate-900 mb-6">CLINIQUE RIVERSIDE MEDICAL CENTER SARL</h2>
+        <div className="w-24 h-1.5 bg-slate-900 mx-auto rounded-full mb-6" />
+        <p className="text-sm font-black text-slate-400 uppercase tracking-[0.5em]">
+          {isGarde ? "RAPPORT DE GARDE MÉDICALE" : isReunion ? "RAPPORT DE RÉUNION TECHNIQUE" : "DOCUMENT OFFICIEL"}
+        </p>
       </div>
 
-      {type === 'RAPPORT_GARDE' && (
-        <div className="space-y-8">
-          <div className="text-center bg-slate-50 py-4 rounded-xl">
-            <h2 className="text-xl font-black uppercase text-slate-800">Rapport de Garde Clinique</h2>
-            <p className="text-sm font-bold text-slate-500">Date: {new Date().toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })}</p>
-          </div>
-
-          <div className="grid grid-cols-2 gap-8">
-            <div className="p-4 border border-slate-100 rounded-xl">
-              <h3 className="text-xs font-black text-slate-400 uppercase mb-2">Médecin Responsable</h3>
-              <p className="text-base font-bold text-slate-900">{data?.auteur || 'N/A'}</p>
+      {(isGarde || isReunion) && (
+        <div className="space-y-12">
+          {/* Header Data */}
+          <div className="grid grid-cols-4 gap-8 bg-slate-50 p-8 rounded-2xl border border-slate-100">
+            <div>
+              <p className="text-[10px] font-black text-slate-400 uppercase mb-1">Date</p>
+              <p className="text-lg font-bold">{c.date || 'N/A'}</p>
             </div>
-            <div className="p-4 border border-slate-100 rounded-xl">
-              <h3 className="text-xs font-black text-slate-400 uppercase mb-2">Service</h3>
-              <p className="text-base font-bold text-slate-900">Urgences / Médecine Générale</p>
+            <div>
+              <p className="text-[10px] font-black text-slate-400 uppercase mb-1">Heure Début</p>
+              <p className="text-lg font-bold">{c.heure_debut || 'N/A'}</p>
             </div>
-          </div>
-
-          <div className="space-y-4">
-            <h3 className="text-xs font-black text-slate-900 uppercase border-b pb-1">Évènements Majeurs</h3>
-            <div className="p-6 bg-slate-50 rounded-2xl text-sm leading-relaxed min-h-[100px]">
-              {data?.contenu?.evenements || 'Aucun évènement majeur signalé.'}
+            <div>
+              <p className="text-[10px] font-black text-slate-400 uppercase mb-1">Heure Fin</p>
+              <p className="text-lg font-bold">{c.heure_fin || 'N/A'}</p>
+            </div>
+            <div>
+              <p className="text-[10px] font-black text-slate-400 uppercase mb-1">Responsable</p>
+              <p className="text-lg font-bold">{data?.auteur || 'N/A'}</p>
             </div>
           </div>
 
-          <div className="space-y-4">
-            <h3 className="text-xs font-black text-slate-900 uppercase border-b pb-1">Transmissions Clés</h3>
-            <div className="p-6 bg-white border border-slate-100 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap min-h-[300px]">
-              {data?.contenu?.transmissions || 'Aucune transmission particulière.'}
-            </div>
-          </div>
+          {isGarde ? (
+            <div className="space-y-10">
+              {/* I - Prise de service */}
+              <section className="space-y-4">
+                <h3 className="text-sm font-black uppercase bg-slate-900 text-white px-4 py-2 inline-block">I - Prise de service</h3>
+                <div className="grid grid-cols-2 gap-8">
+                  {c.prise_service?.map((ps: any, idx: number) => (
+                    <p key={idx} className="text-lg border-b border-slate-200 pb-2">
+                       <span className="font-black text-slate-300 mr-4">{idx+1}.</span>
+                       <span className="font-bold">{ps.nom} {ps.prenom}</span>
+                    </p>
+                  ))}
+                </div>
+              </section>
 
-          <div className="mt-20 flex justify-between pt-10 border-t border-slate-100">
-            <div className="text-center w-48">
-              <p className="text-[10px] font-black uppercase mb-16 underline">Signature Médecin</p>
-              <div className="h-px w-full bg-slate-200" />
+              {/* II - Patients */}
+              <section className="space-y-4">
+                <h3 className="text-sm font-black uppercase bg-slate-900 text-white px-4 py-2 inline-block">II - Patients en salle(s)</h3>
+                <table className="w-full border-collapse border border-slate-300">
+                  <thead>
+                    <tr className="bg-slate-50">
+                      {CHAMBRES.map(num => <th key={num} className="border border-slate-300 p-3 text-xs font-black uppercase">{num}</th>)}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      {CHAMBRES.map(num => <td key={num} className="border border-slate-300 p-4 text-center font-bold">{c.patients_en_salle?.[num] || '-'}</td>)}
+                    </tr>
+                  </tbody>
+                </table>
+              </section>
+
+              {/* III - Soins */}
+              <section className="space-y-4">
+                <h3 className="text-sm font-black uppercase bg-slate-900 text-white px-4 py-2 inline-block">III - Soins effectués</h3>
+                <div className="space-y-6">
+                  <div>
+                    <p className="text-xs font-black text-slate-500 uppercase mb-2 italic">1. Surveillance clinique</p>
+                    <div className="p-4 bg-slate-50 border border-slate-200 rounded-lg text-sm min-h-[60px] whitespace-pre-wrap">{c.soins?.surveillance}</div>
+                  </div>
+                  <div>
+                    <p className="text-xs font-black text-slate-500 uppercase mb-2 italic">2. Soins techniques</p>
+                    <div className="p-4 bg-slate-50 border border-slate-200 rounded-lg text-sm min-h-[60px] whitespace-pre-wrap">{c.soins?.technique}</div>
+                  </div>
+                </div>
+              </section>
+
+              {/* IV - Admissions/Sorties */}
+              <section className="space-y-4">
+                <h3 className="text-sm font-black uppercase bg-slate-900 text-white px-4 py-2 inline-block">IV - Gestion des admissions et sorties</h3>
+                <table className="w-full border-collapse border border-slate-300 text-[11px]">
+                  <thead className="bg-slate-50">
+                    <tr><th className="border border-slate-300 p-2 text-left">CHAMBRE</th>{CHAMBRES.map(num => <th key={num} className="border border-slate-300 p-2 text-center">{num}</th>)}</tr>
+                  </thead>
+                   <tbody>
+                     <tr><td className="border border-slate-300 p-2 font-black bg-slate-50">NOM PATIENT</td>{CHAMBRES.map(num => <td key={num} className="border border-slate-300 p-2 text-center font-bold">{c.admissions_sorties?.[num]?.patient || '-'}</td>)}</tr>
+                     <tr><td className="border border-slate-300 p-2 font-black bg-slate-50">HEURE ADM.</td>{CHAMBRES.map(num => <td key={num} className="border border-slate-300 p-2 text-center">{c.admissions_sorties?.[num]?.heure_adm || '-'}</td>)}</tr>
+                   </tbody>
+                </table>
+              </section>
+
+              {/* Autres */}
+              <section className="grid grid-cols-2 gap-12">
+                 <div className="space-y-2">
+                    <h4 className="text-xs font-black uppercase border-b border-slate-900 pb-1">Transmission Relève</h4>
+                    <div className="text-xs leading-relaxed whitespace-pre-wrap">{c.transmissions}</div>
+                 </div>
+                 <div className="space-y-2">
+                    <h4 className="text-xs font-black uppercase border-b border-slate-900 pb-1">Difficultés/Remarques</h4>
+                    <div className="text-xs leading-relaxed whitespace-pre-wrap">{c.difficultes}</div>
+                 </div>
+              </section>
             </div>
-            <div className="text-center w-48">
-              <p className="text-[10px] font-black uppercase mb-16 underline">Visa Direction</p>
-              <div className="h-px w-full bg-slate-200" />
+          ) : (
+            <div className="space-y-10">
+              {/* Reunion sections */}
+              <section className="space-y-4">
+                <h3 className="text-sm font-black uppercase bg-slate-900 text-white px-4 py-2 inline-block">I - Présences</h3>
+                <div className="grid grid-cols-2 gap-x-12 gap-y-2 text-lg">
+                  {c.presences?.map((p: any, idx: number) => (
+                    <p key={idx} className="border-b border-dashed border-slate-300 pb-1">
+                       <span className="font-black text-slate-300 mr-4 w-6 inline-block">{idx+1}.</span>
+                       <span className="font-bold">{p.nom} {p.prenom}</span>
+                    </p>
+                  ))}
+                </div>
+              </section>
+
+              <section className="space-y-4">
+                <h3 className="text-sm font-black uppercase bg-slate-900 text-white px-4 py-2 inline-block">II - Rapport veille</h3>
+                <div className="p-4 bg-slate-50 rounded-lg text-sm">{c.rapport_veille?.technique}</div>
+              </section>
+
+              <section className="space-y-4">
+                <h3 className="text-sm font-black uppercase bg-slate-900 text-white px-4 py-2 inline-block">IV - Planification Salles</h3>
+                <table className="w-full border-collapse border border-slate-300 text-[10px]">
+                  <thead className="bg-slate-50">
+                    <tr><th className="border border-slate-300 p-2"></th>{CHAMBRES.map(num => <th key={num} className="border border-slate-300 p-2">{num}</th>)}</tr>
+                  </thead>
+                  <tbody>
+                    <tr><td className="border border-slate-300 p-2 font-black">Nom Patient</td>{CHAMBRES.map(num => <td key={num} className="border border-slate-300 p-2 text-center">{c.planification?.patients?.[num]?.nom || '-'}</td>)}</tr>
+                    <tr><td className="border border-slate-300 p-2 font-black">Pers. Médical</td>{CHAMBRES.map(num => <td key={num} className="border border-slate-300 p-2 text-center">{c.planification?.personnel_med?.[num] || '-'}</td>)}</tr>
+                  </tbody>
+                </table>
+              </section>
             </div>
+          )}
+
+          {/* Signatures */}
+          <div className="mt-32 grid grid-cols-2 gap-24 pt-20 border-t border-slate-100">
+             <div className="text-center">
+               <p className="text-xs font-black uppercase mb-32 underline underline-offset-8">Médecin/Intervenant</p>
+               <div className="h-px bg-slate-900 w-full" />
+             </div>
+             <div className="text-center">
+               <p className="text-xs font-black uppercase mb-32 underline underline-offset-8">Direction Générale</p>
+               <div className="h-px bg-slate-900 w-full" />
+             </div>
           </div>
         </div>
       )}

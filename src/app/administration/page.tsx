@@ -127,12 +127,38 @@ export default function AdministrationPage() {
   const [printingRapport, setPrintingRapport] = useState<RapportClinique | null>(null);
   const [rapportType, setRapportType] = useState<"GARDE" | "REUNION">("GARDE");
 
+  const CHAMBRES = ["211", "210", "209", "208", "207", "205", "204", "202", "P4"];
+  const ESPACES = ["Accueil", "Couloirs", "Toilettes", "Salle Cons. 1/2", "Laboratoire", "Cour", "Cuisine"];
+
   const [gardeForm, setGardeForm] = useState({
+    date: new Date().toISOString().split('T')[0],
+    heure_debut: "19:00",
+    heure_fin: "08:00",
     medecin_id: "",
-    soins: "",
-    evenements: "",
+    prise_service: [{ nom: "", prenom: "" }, { nom: "", prenom: "" }],
+    patients_en_salle: CHAMBRES.reduce((acc, c) => ({ ...acc, [c]: "" }), {} as Record<string, string>),
+    soins: { surveillance: "", technique: "", relationnel: "" },
+    admissions_sorties: CHAMBRES.reduce((acc, c) => ({ ...acc, [c]: { patient: "", heure_adm: "", heure_sortie: "" } }), {} as Record<string, any>),
+    difficultes: "",
     transmissions: "",
-    chambre_transmissions: [] as { chambre_id: string, patient_id: string, note: string }[]
+    espaces_nettoyes: ""
+  });
+
+  const [reunionForm, setReunionForm] = useState({
+    date: new Date().toISOString().split('T')[0],
+    heure_debut: "08:00",
+    heure_fin: "09:00",
+    dirige_par: "",
+    presences: Array(10).fill({ nom: "", prenom: "" }),
+    rapport_veille: { technique: "", autres: "" },
+    besoins: Array(5).fill(""),
+    planification: {
+      stats: { nbPatients: 0, assures: 0, nonAssures: 0 },
+      patients: CHAMBRES.reduce((acc, c) => ({ ...acc, [c]: { nom: "", assurance: "", entreprise: "" } }), {} as Record<string, any>),
+      personnel_med: CHAMBRES.reduce((acc, c) => ({ ...acc, [c]: "" }), {} as Record<string, string>),
+    },
+    espaces: ESPACES.reduce((acc, e) => ({ ...acc, [e]: "" }), {} as Record<string, string>),
+    autres_activites: ""
   });
 
   const fetchData = React.useCallback(async () => {
@@ -306,24 +332,57 @@ export default function AdministrationPage() {
     e.preventDefault();
     setSubmitting(true);
     try {
+      const isGarde = rapportType === "GARDE";
+      const currentForm = isGarde ? gardeForm : reunionForm;
+      const auteurId = isGarde ? gardeForm.medecin_id : reunionForm.dirige_par;
+      const auteurName = personnel.find(p => p.id === auteurId)?.nom_complet || "Inconnu";
+
       const { error } = await supabase
         .from("rapports_clinique")
         .insert([{
           type_rapport: rapportType,
-          auteur: personnel.find(p => p.id === gardeForm.medecin_id)?.nom_complet || "Inconnu",
-          contenu: { ...gardeForm, type_selection: rapportType }
+          auteur: auteurName,
+          contenu: { ...currentForm, type_selection: rapportType }
         }]);
       
       if (error) throw error;
-      toast.success("Rapport Enregistré");
-      recordAudit(`RAPPORT_${rapportType}`, `Enregistrement d'un nouveau rapport de ${rapportType.toLowerCase()}`);
-      setGardeForm({
-        medecin_id: "",
-        soins: "",
-        evenements: "",
-        transmissions: "",
-        chambre_transmissions: []
-      });
+      toast.success("Rapport Officiel Enregistré et Scellé");
+      recordAudit(`RAPPORT_${rapportType}`, `Enregistrement d'un rapport premium de ${rapportType.toLowerCase()}`);
+      
+      // Reset logic
+      if (isGarde) {
+        setGardeForm({
+          date: new Date().toISOString().split('T')[0],
+          heure_debut: "19:00",
+          heure_fin: "08:00",
+          medecin_id: "",
+          prise_service: [{ nom: "", prenom: "" }, { nom: "", prenom: "" }],
+          patients_en_salle: CHAMBRES.reduce((acc, c) => ({ ...acc, [c]: "" }), {} as Record<string, string>),
+          soins: { surveillance: "", technique: "", relationnel: "" },
+          admissions_sorties: CHAMBRES.reduce((acc, c) => ({ ...acc, [c]: { patient: "", heure_adm: "", heure_sortie: "" } }), {} as Record<string, any>),
+          difficultes: "",
+          transmissions: "",
+          espaces_nettoyes: ""
+        });
+      } else {
+        setReunionForm({
+          date: new Date().toISOString().split('T')[0],
+          heure_debut: "08:00",
+          heure_fin: "09:00",
+          dirige_par: "",
+          presences: Array(10).fill({ nom: "", prenom: "" }),
+          rapport_veille: { technique: "", autres: "" },
+          besoins: Array(5).fill(""),
+          planification: {
+            stats: { nbPatients: 0, assures: 0, nonAssures: 0 },
+            patients: CHAMBRES.reduce((acc, c) => ({ ...acc, [c]: { nom: "", assurance: "", entreprise: "" } }), {} as Record<string, any>),
+            personnel_med: CHAMBRES.reduce((acc, c) => ({ ...acc, [c]: "" }), {} as Record<string, string>),
+          },
+          espaces: ESPACES.reduce((acc, e) => ({ ...acc, [e]: "" }), {} as Record<string, string>),
+          autres_activites: ""
+        });
+      }
+      
       fetchData();
     } catch (err: any) {
       toast.error(err.message);
@@ -548,88 +607,494 @@ export default function AdministrationPage() {
             </div>
           ) : activeTab === "rapports" ? (
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-              <div className="lg:col-span-12 bg-slate-950 p-8 rounded-[2.5rem] text-white">
-                <div className="flex items-center justify-between mb-8">
-                   <div className="flex gap-4">
-                     <button type="button" onClick={() => setRapportType("GARDE")} className={cn("px-4 py-2 rounded-xl text-[10px] font-black uppercase transition-all", rapportType === "GARDE" ? "bg-riverside-red text-white" : "bg-white/5 text-slate-500 hover:text-white")}>Garde</button>
-                     <button type="button" onClick={() => setRapportType("REUNION")} className={cn("px-4 py-2 rounded-xl text-[10px] font-black uppercase transition-all", rapportType === "REUNION" ? "bg-riverside-red text-white" : "bg-white/5 text-slate-500 hover:text-white")}>Réunion</button>
-                   </div>
-                   <div>
-                     <h3 className="text-xl font-black uppercase tracking-tight text-right">Rapport Officiel</h3>
-                     <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-1">Saisie assistée Riverside</p>
-                   </div>
+              <div className="lg:col-span-12 bg-slate-100 p-4 md:p-8 rounded-[2.5rem]">
+                {/* Tabs selection */}
+                <div className="flex justify-center mb-8 gap-4">
+                  <button 
+                    onClick={() => setRapportType("GARDE")}
+                    className={cn("px-8 py-3 rounded-2xl text-[10px] font-black uppercase transition-all tracking-widest", 
+                      rapportType === "GARDE" ? "bg-riverside-red text-white shadow-lg shadow-red-200" : "bg-white text-slate-400 hover:text-riverside-red shadow-sm")}
+                  >
+                    Rapport de Garde
+                  </button>
+                  <button 
+                    onClick={() => setRapportType("REUNION")}
+                    className={cn("px-8 py-3 rounded-2xl text-[10px] font-black uppercase transition-all tracking-widest", 
+                      rapportType === "REUNION" ? "bg-riverside-red text-white shadow-lg shadow-red-200" : "bg-white text-slate-400 hover:text-riverside-red shadow-sm")}
+                  >
+                    Réunion Technique
+                  </button>
                 </div>
-                
-                <form onSubmit={handleCreateGardeRapport} className="space-y-8">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div className="space-y-2">
-                      <label className="text-[9px] font-black uppercase text-slate-500 ml-1">Médecin de Garde</label>
-                      <select required className="w-full p-4 bg-white/5 border border-white/10 rounded-2xl text-white outline-none focus:border-riverside-red text-xs transition-all" value={gardeForm.medecin_id} onChange={e => setGardeForm({...gardeForm, medecin_id: e.target.value})}>
-                        <option value="" className="text-slate-900">Identifier le responsable...</option>
-                        {personnel.map(p => <option key={p.id} value={p.id} className="text-slate-900">{p.nom_complet}</option>)}
-                      </select>
-                    </div>
-                    <div className="md:col-span-2 space-y-2">
-                      <label className="text-[9px] font-black uppercase text-slate-500 ml-1">Évènements Notables (Urgences, Décès, Sorties)</label>
-                      <input className="w-full p-4 bg-white/5 border border-white/10 rounded-2xl text-white outline-none focus:border-riverside-red text-xs transition-all" placeholder="Décrire les moments forts de la garde..." value={gardeForm.evenements} onChange={e => setGardeForm({...gardeForm, evenements: e.target.value})} />
-                    </div>
+
+                {/* A4 Document Container */}
+                <div className="bg-white shadow-[0_20px_50px_rgba(0,0,0,0.1)] rounded-sm p-12 max-w-5xl mx-auto border border-slate-200 min-h-[29.7cm]">
+                  {/* Official Header */}
+                  <div className="text-center mb-12 space-y-4 border-b-2 border-riverside-red pb-8">
+                    <h2 className="text-2xl font-black text-riverside-red tracking-[0.1em] uppercase leading-tight">
+                      R I S I M E D
+                    </h2>
+                    <h3 className="text-xl font-bold text-slate-900 tracking-wider uppercase">
+                      Clinique Riverside Medical Center SARL
+                    </h3>
+                    <div className="w-16 h-1 bg-slate-900 mx-auto rounded-full" />
+                    <p className="text-[12px] font-black text-slate-400 uppercase tracking-[0.3em]">
+                      {rapportType === "GARDE" ? "RAPPORT DE GARDE MÉDICALE" : "RAPPORT DE RÉUNION TECHNIQUE"}
+                    </p>
                   </div>
 
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between border-b border-white/5 pb-2">
-                      <h4 className="text-[10px] font-black uppercase text-slate-400 tracking-widest flex items-center gap-2">
-                        <History size={14} className="text-riverside-red" /> Transmissions par Services
-                      </h4>
-                      <button type="button" onClick={() => setGardeForm({...gardeForm, transmissions: gardeForm.transmissions + "\n- Nouveau patient: "})} className="text-[9px] font-black text-riverside-red uppercase hover:underline">Ajouter un bloc</button>
+                  <form onSubmit={handleCreateGardeRapport} className="space-y-12 text-slate-800">
+                    
+                    {/* Header Fields */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-6 bg-slate-50 p-6 rounded-xl border border-slate-100">
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-black uppercase text-slate-400">Date</label>
+                        <input 
+                          type="date" 
+                          className="w-full bg-transparent font-bold text-sm outline-none border-b border-slate-300 focus:border-riverside-red transition-all"
+                          value={rapportType === "GARDE" ? gardeForm.date : reunionForm.date}
+                          onChange={(e) => rapportType === "GARDE" ? setGardeForm({...gardeForm, date: e.target.value}) : setReunionForm({...reunionForm, date: e.target.value})}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-black uppercase text-slate-400">Début</label>
+                        <input 
+                          type="time" 
+                          className="w-full bg-transparent font-bold text-sm outline-none border-b border-slate-300 focus:border-riverside-red transition-all"
+                          value={rapportType === "GARDE" ? gardeForm.heure_debut : reunionForm.heure_debut}
+                          onChange={(e) => rapportType === "GARDE" ? setGardeForm({...gardeForm, heure_debut: e.target.value}) : setReunionForm({...reunionForm, heure_debut: e.target.value})}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-black uppercase text-slate-400">Fin</label>
+                        <input 
+                          type="time" 
+                          className="w-full bg-transparent font-bold text-sm outline-none border-b border-slate-300 focus:border-riverside-red transition-all"
+                          value={rapportType === "GARDE" ? gardeForm.heure_fin : reunionForm.heure_fin}
+                          onChange={(e) => rapportType === "GARDE" ? setGardeForm({...gardeForm, heure_fin: e.target.value}) : setReunionForm({...reunionForm, heure_fin: e.target.value})}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-black uppercase text-slate-400">{rapportType === "GARDE" ? "Médecin" : "Dirigé par"}</label>
+                        <select 
+                          required
+                          className="w-full bg-transparent font-bold text-[10px] outline-none border-b border-slate-300 focus:border-riverside-red transition-all"
+                          value={rapportType === "GARDE" ? gardeForm.medecin_id : reunionForm.dirige_par}
+                          onChange={(e) => rapportType === "GARDE" ? setGardeForm({...gardeForm, medecin_id: e.target.value}) : setReunionForm({...reunionForm, dirige_par: e.target.value})}
+                        >
+                          <option value="">Sélectionner...</option>
+                          {personnel.map(p => <option key={p.id} value={p.id}>{p.nom_complet}</option>)}
+                        </select>
+                      </div>
                     </div>
-                    <textarea className="w-full p-6 bg-white/5 border border-white/10 rounded-3xl text-white outline-none focus:border-riverside-red text-xs h-48 resize-none transition-all leading-relaxed" placeholder="Détaillez ici les soins administrés, les patients critiques et les consignes pour la relève..." value={gardeForm.transmissions} onChange={e => setGardeForm({...gardeForm, transmissions: e.target.value})} />
-                  </div>
 
-                  <div className="flex justify-end">
-                    <button disabled={submitting} className="group px-12 py-5 bg-riverside-red text-white font-black text-[11px] uppercase tracking-[0.3em] rounded-[2rem] shadow-2xl shadow-red-900/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center gap-4">
-                      {submitting ? <Loader2 className="animate-spin" size={18} /> : <ShieldCheck size={18} />}
-                      SCELLER LE RAPPORT OFFICIEL
-                    </button>
-                  </div>
-                </form>
+                    {rapportType === "GARDE" ? (
+                      <div className="space-y-12">
+                        {/* I - Prise de service */}
+                        <section className="space-y-4">
+                          <h4 className="text-[11px] font-black uppercase bg-slate-900 text-white px-4 py-2 rounded-sm inline-block">I - Prise de service</h4>
+                          <div className="grid grid-cols-2 gap-8">
+                            {gardeForm.prise_service.map((ps, idx) => (
+                              <div key={idx} className="flex gap-4">
+                                <input placeholder="Nom" className="flex-1 p-2 border-b border-slate-300 outline-none text-xs" value={ps.nom} onChange={e => {
+                                  const newPS = [...gardeForm.prise_service];
+                                  newPS[idx].nom = e.target.value;
+                                  setGardeForm({...gardeForm, prise_service: newPS});
+                                }} />
+                                <input placeholder="Prénom" className="flex-1 p-2 border-b border-slate-300 outline-none text-xs" value={ps.prenom} onChange={e => {
+                                  const newPS = [...gardeForm.prise_service];
+                                  newPS[idx].prenom = e.target.value;
+                                  setGardeForm({...gardeForm, prise_service: newPS});
+                                }} />
+                              </div>
+                            ))}
+                          </div>
+                        </section>
+
+                        {/* II - Patients en salle */}
+                        <section className="space-y-4">
+                          <h4 className="text-[11px] font-black uppercase bg-slate-900 text-white px-4 py-2 rounded-sm inline-block">II - Patients en salle(s)</h4>
+                          <div className="overflow-x-auto">
+                            <table className="w-full border-collapse border border-slate-200">
+                              <thead>
+                                <tr>
+                                  {CHAMBRES.map(c => <th key={c} className="border border-slate-200 p-2 text-[10px] font-black bg-slate-50 uppercase">{c}</th>)}
+                                </tr>
+                              </thead>
+                              <tbody>
+                                <tr>
+                                  {CHAMBRES.map(c => (
+                                    <td key={c} className="border border-slate-200 p-0">
+                                      <input 
+                                        className="w-full p-2 text-center text-[10px] outline-none h-12"
+                                        value={gardeForm.patients_en_salle[c]}
+                                        onChange={e => setGardeForm({
+                                          ...gardeForm, 
+                                          patients_en_salle: { ...gardeForm.patients_en_salle, [c]: e.target.value }
+                                        })}
+                                      />
+                                    </td>
+                                  ))}
+                                </tr>
+                              </tbody>
+                            </table>
+                          </div>
+                        </section>
+
+                        {/* III - Soins effectués */}
+                        <section className="space-y-4">
+                          <h4 className="text-[11px] font-black uppercase bg-slate-900 text-white px-4 py-2 rounded-sm inline-block">III - Soins effectués</h4>
+                          <div className="space-y-6">
+                            <div className="space-y-2">
+                              <label className="text-[10px] font-black uppercase text-slate-500">1. Surveillance clinique</label>
+                              <textarea className="w-full p-4 border border-slate-200 rounded text-xs h-24 resize-none" value={gardeForm.soins.surveillance} onChange={e => setGardeForm({...gardeForm, soins: {...gardeForm.soins, surveillance: e.target.value}})} />
+                            </div>
+                            <div className="space-y-2">
+                              <label className="text-[10px] font-black uppercase text-slate-500">2. Soins techniques</label>
+                              <textarea className="w-full p-4 border border-slate-200 rounded text-xs h-24 resize-none" value={gardeForm.soins.technique} onChange={e => setGardeForm({...gardeForm, soins: {...gardeForm.soins, technique: e.target.value}})} />
+                            </div>
+                            <div className="space-y-2">
+                              <label className="text-[10px] font-black uppercase text-slate-500">3. Soins relationnels</label>
+                              <textarea className="w-full p-4 border border-slate-200 rounded text-xs h-24 resize-none" value={gardeForm.soins.relationnel} onChange={e => setGardeForm({...gardeForm, soins: {...gardeForm.soins, relationnel: e.target.value}})} />
+                            </div>
+                          </div>
+                        </section>
+
+                        {/* IV - Gestion admissions/sorties */}
+                        <section className="space-y-4">
+                          <h4 className="text-[11px] font-black uppercase bg-slate-900 text-white px-4 py-2 rounded-sm inline-block">IV - Gestion des admissions et sorties</h4>
+                          <div className="overflow-x-auto">
+                            <table className="w-full border-collapse border border-slate-200">
+                              <thead>
+                                <tr>
+                                  <th className="border border-slate-200 p-2 text-[10px] font-black bg-slate-50 uppercase text-left w-32">Information</th>
+                                  {CHAMBRES.map(c => <th key={c} className="border border-slate-200 p-2 text-[10px] font-black bg-slate-50 uppercase w-28">{c}</th>)}
+                                </tr>
+                              </thead>
+                              <tbody>
+                                <tr>
+                                  <td className="border border-slate-200 p-2 text-[9px] font-black uppercase text-slate-500 bg-white">Pat.</td>
+                                  {CHAMBRES.map(c => (
+                                    <td key={c} className="border border-slate-200 p-0">
+                                      <input 
+                                        className="w-full p-2 text-center text-[10px] outline-none"
+                                        placeholder="Nom..."
+                                        value={gardeForm.admissions_sorties[c].patient}
+                                        onChange={e => {
+                                          const newAS = {...gardeForm.admissions_sorties};
+                                          newAS[c].patient = e.target.value;
+                                          setGardeForm({...gardeForm, admissions_sorties: newAS});
+                                        }}
+                                      />
+                                    </td>
+                                  ))}
+                                </tr>
+                                <tr>
+                                  <td className="border border-slate-200 p-2 text-[9px] font-black uppercase text-slate-500 bg-white">Adm.</td>
+                                  {CHAMBRES.map(c => (
+                                    <td key={c} className="border border-slate-200 p-0">
+                                      <input 
+                                        type="time"
+                                        className="w-full p-2 text-center text-[10px] outline-none"
+                                        value={gardeForm.admissions_sorties[c].heure_adm}
+                                        onChange={e => {
+                                          const newAS = {...gardeForm.admissions_sorties};
+                                          newAS[c].heure_adm = e.target.value;
+                                          setGardeForm({...gardeForm, admissions_sorties: newAS});
+                                        }}
+                                      />
+                                    </td>
+                                  ))}
+                                </tr>
+                                <tr>
+                                  <td className="border border-slate-200 p-2 text-[9px] font-black uppercase text-slate-500 bg-white">Sortie</td>
+                                  {CHAMBRES.map(c => (
+                                    <td key={c} className="border border-slate-200 p-0">
+                                      <input 
+                                        type="time"
+                                        className="w-full p-2 text-center text-[10px] outline-none"
+                                        value={gardeForm.admissions_sorties[c].heure_sortie}
+                                        onChange={e => {
+                                          const newAS = {...gardeForm.admissions_sorties};
+                                          newAS[c].heure_sortie = e.target.value;
+                                          setGardeForm({...gardeForm, admissions_sorties: newAS});
+                                        }}
+                                      />
+                                    </td>
+                                  ))}
+                                </tr>
+                              </tbody>
+                            </table>
+                          </div>
+                        </section>
+
+                        {/* V-VII - Textareas Finales */}
+                        <section className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                          <div className="space-y-4">
+                            <h4 className="text-[11px] font-black uppercase bg-slate-900 text-white px-4 py-2 rounded-sm inline-block">V - Difficultés rencontrées</h4>
+                            <textarea className="w-full p-4 border border-slate-200 rounded text-xs h-32 resize-none" value={gardeForm.difficultes} onChange={e => setGardeForm({...gardeForm, difficultes: e.target.value})} />
+                          </div>
+                          <div className="space-y-4">
+                            <h4 className="text-[11px] font-black uppercase bg-slate-900 text-white px-4 py-2 rounded-sm inline-block">VI - Transmissions inform.</h4>
+                            <textarea className="w-full p-4 border border-slate-200 rounded text-xs h-32 resize-none" value={gardeForm.transmissions} onChange={e => setGardeForm({...gardeForm, transmissions: e.target.value})} />
+                          </div>
+                        </section>
+                        
+                        <section className="space-y-4">
+                          <h4 className="text-[11px] font-black uppercase bg-slate-900 text-white px-4 py-2 rounded-sm inline-block">VII - Salles et espaces nettoyés</h4>
+                          <textarea className="w-full p-4 border border-slate-200 rounded text-xs h-24 resize-none" value={gardeForm.espaces_nettoyes} onChange={e => setGardeForm({...gardeForm, espaces_nettoyes: e.target.value})} />
+                        </section>
+                      </div>
+                    ) : (
+                      <div className="space-y-12">
+                        {/* I - Présences */}
+                        <section className="space-y-4">
+                          <h4 className="text-[11px] font-black uppercase bg-slate-900 text-white px-4 py-2 rounded-sm inline-block">I - Présences</h4>
+                          <div className="grid grid-cols-2 gap-x-8 gap-y-2">
+                            {reunionForm.presences.map((p, idx) => (
+                              <div key={idx} className="flex gap-4 items-center">
+                                <span className="text-[10px] font-black text-slate-300 w-4">{idx + 1}.</span>
+                                <input placeholder="Nom" className="flex-1 p-1 border-b border-slate-200 outline-none text-[10px]" value={p.nom} onChange={e => {
+                                  const newP = [...reunionForm.presences];
+                                  newP[idx] = {...newP[idx], nom: e.target.value};
+                                  setReunionForm({...reunionForm, presences: newP});
+                                }} />
+                                <input placeholder="Prénom" className="flex-1 p-1 border-b border-slate-200 outline-none text-[10px]" value={p.prenom} onChange={e => {
+                                  const newP = [...reunionForm.presences];
+                                  newP[idx] = {...newP[idx], prenom: e.target.value};
+                                  setReunionForm({...reunionForm, presences: newP});
+                                }} />
+                              </div>
+                            ))}
+                          </div>
+                        </section>
+
+                        {/* II - Rapport de garde veille */}
+                        <section className="space-y-4">
+                          <h4 className="text-[11px] font-black uppercase bg-slate-900 text-white px-4 py-2 rounded-sm inline-block">II - Rapport de garde de la veille</h4>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                            <div className="space-y-2">
+                              <label className="text-[10px] font-black uppercase text-slate-500">Informations techniques/médicales</label>
+                              <textarea className="w-full p-4 border border-slate-200 rounded text-xs h-32 resize-none" value={reunionForm.rapport_veille.technique} onChange={e => setReunionForm({...reunionForm, rapport_veille: {...reunionForm.rapport_veille, technique: e.target.value}})} />
+                            </div>
+                            <div className="space-y-2">
+                              <label className="text-[10px] font-black uppercase text-slate-500">Autres informations</label>
+                              <textarea className="w-full p-4 border border-slate-200 rounded text-xs h-32 resize-none" value={reunionForm.rapport_veille.autres} onChange={e => setReunionForm({...reunionForm, rapport_veille: {...reunionForm.rapport_veille, autres: e.target.value}})} />
+                            </div>
+                          </div>
+                        </section>
+
+                        {/* III - Besoins et commandes */}
+                        <section className="space-y-4">
+                          <h4 className="text-[11px] font-black uppercase bg-slate-900 text-white px-4 py-2 rounded-sm inline-block">III - Besoins et commandes</h4>
+                          <div className="space-y-2">
+                            {reunionForm.besoins.map((b, idx) => (
+                              <div key={idx} className="flex gap-4 items-center">
+                                <span className="text-[10px] font-black text-slate-300 w-4">{idx + 1}.</span>
+                                <input className="flex-1 p-2 border-b border-slate-200 outline-none text-xs" value={b} onChange={e => {
+                                  const newB = [...reunionForm.besoins];
+                                  newB[idx] = e.target.value;
+                                  setReunionForm({...reunionForm, besoins: newB});
+                                }} />
+                              </div>
+                            ))}
+                          </div>
+                        </section>
+
+                        {/* IV - Planification */}
+                        <section className="space-y-8">
+                          <h4 className="text-[11px] font-black uppercase bg-slate-900 text-white px-4 py-2 rounded-sm inline-block">IV - Planification</h4>
+                          
+                          <div className="grid grid-cols-3 gap-8 bg-slate-50 p-6 rounded-xl">
+                            <div className="space-y-2 text-center">
+                              <label className="text-[9px] font-black uppercase text-slate-400">Nb Patients en salle</label>
+                              <input type="number" className="w-16 mx-auto text-xl font-black bg-transparent text-center outline-none border-b-2 border-slate-200 focus:border-riverside-red" value={reunionForm.planification.stats.nbPatients} onChange={e => setReunionForm({...reunionForm, planification: {...reunionForm.planification, stats: {...reunionForm.planification.stats, nbPatients: parseInt(e.target.value) || 0}}})} />
+                            </div>
+                            <div className="space-y-2 text-center">
+                              <label className="text-[9px] font-black uppercase text-slate-400">Assurés</label>
+                              <input type="number" className="w-16 mx-auto text-xl font-black bg-transparent text-center outline-none border-b-2 border-slate-200 focus:border-riverside-red text-emerald-600" value={reunionForm.planification.stats.assures} onChange={e => setReunionForm({...reunionForm, planification: {...reunionForm.planification, stats: {...reunionForm.planification.stats, assures: parseInt(e.target.value) || 0}}})} />
+                            </div>
+                            <div className="space-y-2 text-center">
+                              <label className="text-[9px] font-black uppercase text-slate-400">Non Assurés</label>
+                              <input type="number" className="w-16 mx-auto text-xl font-black bg-transparent text-center outline-none border-b-2 border-slate-200 focus:border-riverside-red text-amber-600" value={reunionForm.planification.stats.nonAssures} onChange={e => setReunionForm({...reunionForm, planification: {...reunionForm.planification, stats: {...reunionForm.planification.stats, nonAssures: parseInt(e.target.value) || 0}}})} />
+                            </div>
+                          </div>
+
+                          <div className="space-y-4">
+                            <p className="text-[10px] font-black uppercase text-slate-500 italic">Tableau 1 - Patients par chambre</p>
+                            <div className="overflow-x-auto">
+                              <table className="w-full border-collapse border border-slate-200">
+                                <thead>
+                                  <tr>
+                                    <th className="border border-slate-200 p-2 text-[9px] font-black bg-slate-50 uppercase text-left w-24">Infos</th>
+                                    {CHAMBRES.map(c => <th key={c} className="border border-slate-200 p-2 text-[9px] font-black bg-slate-50 uppercase w-28">{c}</th>)}
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  <tr>
+                                    <td className="border border-slate-200 p-2 text-[8px] font-black uppercase text-slate-400 bg-white">Pat.</td>
+                                    {CHAMBRES.map(c => (
+                                      <td key={c} className="border border-slate-200 p-0">
+                                        <input className="w-full p-2 text-center text-[9px] outline-none" value={reunionForm.planification.patients[c].nom} onChange={e => {
+                                          const newP = {...reunionForm.planification.patients};
+                                          newP[c].nom = e.target.value;
+                                          setReunionForm({...reunionForm, planification: {...reunionForm.planification, patients: newP}});
+                                        }} />
+                                      </td>
+                                    ))}
+                                  </tr>
+                                  <tr>
+                                    <td className="border border-slate-200 p-2 text-[8px] font-black uppercase text-slate-400 bg-white">Assur.</td>
+                                    {CHAMBRES.map(c => (
+                                      <td key={c} className="border border-slate-200 p-0">
+                                        <input className="w-full p-2 text-center text-[9px] outline-none" value={reunionForm.planification.patients[c].assurance} onChange={e => {
+                                          const newP = {...reunionForm.planification.patients};
+                                          newP[c].assurance = e.target.value;
+                                          setReunionForm({...reunionForm, planification: {...reunionForm.planification, patients: newP}});
+                                        }} />
+                                      </td>
+                                    ))}
+                                  </tr>
+                                  <tr>
+                                    <td className="border border-slate-200 p-2 text-[8px] font-black uppercase text-slate-400 bg-white">Entr.</td>
+                                    {CHAMBRES.map(c => (
+                                      <td key={c} className="border border-slate-200 p-0">
+                                        <input className="w-full p-2 text-center text-[9px] outline-none" value={reunionForm.planification.patients[c].entreprise} onChange={e => {
+                                          const newP = {...reunionForm.planification.patients};
+                                          newP[c].entreprise = e.target.value;
+                                          setReunionForm({...reunionForm, planification: {...reunionForm.planification, patients: newP}});
+                                        }} />
+                                      </td>
+                                    ))}
+                                  </tr>
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+
+                          <div className="space-y-4">
+                            <p className="text-[10px] font-black uppercase text-slate-500 italic">Tableau 2 - Personnel par chambre</p>
+                            <div className="overflow-x-auto">
+                              <table className="w-full border-collapse border border-slate-200">
+                                <thead>
+                                  <tr>
+                                    <th className="border border-slate-200 p-2 text-[9px] font-black bg-slate-50 uppercase text-left w-24">Poste</th>
+                                    {CHAMBRES.map(c => <th key={c} className="border border-slate-200 p-2 text-[9px] font-black bg-slate-50 uppercase w-28">{c}</th>)}
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  <tr>
+                                    <td className="border border-slate-200 p-2 text-[8px] font-black uppercase text-slate-400 bg-white h-10">Médicaux</td>
+                                    {CHAMBRES.map(c => (
+                                      <td key={c} className="border border-slate-200 p-0">
+                                        <input className="w-full p-2 text-center text-[9px] outline-none" value={reunionForm.planification.personnel_med[c]} onChange={e => {
+                                          const newP = {...reunionForm.planification.personnel_med};
+                                          newP[c] = e.target.value;
+                                          setReunionForm({...reunionForm, planification: {...reunionForm.planification, personnel_med: newP}});
+                                        }} />
+                                      </td>
+                                    ))}
+                                  </tr>
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+
+                          <div className="space-y-4">
+                            <p className="text-[10px] font-black uppercase text-slate-500 italic">Tableau 3 - Personnels par espaces</p>
+                            <div className="overflow-x-auto">
+                              <table className="w-full border-collapse border border-slate-200">
+                                <thead>
+                                  <tr>
+                                    {ESPACES.map(e => <th key={e} className="border border-slate-200 p-2 text-[9px] font-black bg-slate-50 uppercase w-32">{e}</th>)}
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  <tr>
+                                    {ESPACES.map(esp => (
+                                      <td key={esp} className="border border-slate-200 p-0">
+                                        <input className="w-full p-2 text-center text-[9px] outline-none" value={reunionForm.espaces[esp]} onChange={e => {
+                                          setReunionForm({...reunionForm, espaces: {...reunionForm.espaces, [esp]: e.target.value}});
+                                        }} />
+                                      </td>
+                                    ))}
+                                  </tr>
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        </section>
+
+                        <section className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-8 border-t border-slate-200">
+                          <div className="space-y-2">
+                            <label className="text-[10px] font-black uppercase text-slate-500 italic">Autres activités</label>
+                            <textarea className="w-full p-4 border border-slate-200 rounded text-xs h-24 resize-none" value={reunionForm.autres_activites} onChange={e => setReunionForm({...reunionForm, autres_activites: e.target.value})} />
+                          </div>
+                          <div className="flex flex-col justify-end">
+                            <label className="text-[10px] font-black uppercase text-slate-500 italic mb-2">Réunion dirigée par</label>
+                            <input className="w-full p-4 bg-slate-50 border border-slate-200 rounded font-bold text-sm" placeholder="Nom du responsable..." value={personnel.find(p => p.id === reunionForm.dirige_par)?.nom_complet || ""} readOnly />
+                          </div>
+                        </section>
+                      </div>
+                    )}
+
+                    {/* Submit Button */}
+                    <div className="pt-12 text-center">
+                      <button 
+                        disabled={submitting}
+                        type="submit"
+                        className="px-16 py-6 bg-riverside-red text-white text-[12px] font-black uppercase tracking-[0.4em] rounded-sm shadow-2xl hover:scale-[1.02] active:scale-95 transition-all flex items-center gap-4 mx-auto"
+                      >
+                        {submitting ? <Loader2 className="animate-spin" size={24} /> : <ClipboardList size={24} />}
+                        SCELLER ET ARCHIVER LE DOCUMENT
+                      </button>
+                      <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest mt-4">
+                        Ce document sera scellé numériquement et archivé dans Supabase.
+                      </p>
+                    </div>
+                  </form>
+                </div>
               </div>
 
-              <div className="lg:col-span-12 bg-white border border-slate-100 rounded-3xl overflow-hidden shadow-xl shadow-slate-100/50">
-                <div className="px-8 py-6 border-b border-slate-100 flex items-center justify-between">
-                  <h3 className="text-sm font-black uppercase text-slate-900 tracking-tight">Historique des Gardes</h3>
-                  <div className="flex gap-2">
-                    <Search size={16} className="text-slate-300" />
+              {/* Historique simple en bas */}
+              <div className="lg:col-span-12 mt-8">
+                <div className="bg-white border border-slate-100 rounded-[2rem] overflow-hidden shadow-xl">
+                  <div className="px-8 py-6 border-b border-slate-100 bg-slate-50/50">
+                    <h3 className="text-sm font-black uppercase text-slate-900 tracking-tight">Archives des Rapports Premium</h3>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead className="bg-slate-50 text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                        <tr>
+                          <th className="px-8 py-4 text-left">Date</th>
+                          <th className="px-8 py-4 text-left">Type de Document</th>
+                          <th className="px-8 py-4 text-left">Signataire</th>
+                          <th className="px-8 py-4 text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-50">
+                        {rapports.map(r => (
+                          <tr key={r.id} className="hover:bg-slate-50/50 transition-colors group">
+                            <td className="px-8 py-4 text-[11px] font-black text-slate-900 uppercase">
+                              {r.created_at ? new Date(r.created_at).toLocaleDateString() : 'N/A'}
+                            </td>
+                            <td className="px-8 py-4">
+                              <span className={cn("px-2 py-1 rounded-md text-[8px] font-black uppercase border", 
+                                r.type_rapport === "GARDE" ? "bg-blue-50 text-blue-600 border-blue-100" : "bg-purple-50 text-purple-600 border-purple-100")}>
+                                {r.type_rapport === "GARDE" ? "Rapport de Garde" : "Réunion Technique"}
+                              </span>
+                            </td>
+                            <td className="px-8 py-4 text-[11px] font-bold text-slate-600 uppercase">{r.auteur}</td>
+                            <td className="px-8 py-4 text-right">
+                              <button onClick={() => handleDownloadRapportPDF(r)} className="p-2 text-slate-300 hover:text-riverside-red transition-all">
+                                 <FileDown size={18} />
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
-                <table className="w-full">
-                  <thead className="bg-slate-50 text-[9px] font-black text-slate-400 uppercase tracking-widest">
-                    <tr><th className="px-8 py-4 text-left">Horodatage</th><th className="px-8 py-4 text-left">Officier de Garde</th><th className="px-8 py-4 text-left">Statut</th><th className="px-8 py-4 text-right">Documents</th></tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-50">
-                    {rapports.map(r => (
-                      <tr key={r.id} className="hover:bg-slate-50/50 transition-colors group">
-                        <td className="px-8 py-4 text-[11px] font-black text-slate-900 uppercase">
-                          <div className="flex items-center gap-2">
-                            <Calendar size={12} className="text-slate-300" />
-                            {r.created_at ? new Date(r.created_at).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' }) : 'N/A'}
-                          </div>
-                        </td>
-                        <td className="px-8 py-4 text-[11px] font-bold text-slate-600 uppercase flex items-center gap-2">
-                          <div className="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center text-[10px] text-slate-400 group-hover:bg-riverside-red group-hover:text-white transition-colors">{r.auteur[0]}</div>
-                          {r.auteur}
-                        </td>
-                        <td className="px-8 py-4">
-                          <span className="px-2 py-1 bg-emerald-50 text-emerald-600 rounded-md text-[8px] font-black uppercase border border-emerald-100">Archivé</span>
-                        </td>
-                        <td className="px-8 py-4 text-right">
-                          <button onClick={() => handleDownloadRapportPDF(r)} className="p-2 text-slate-300 hover:text-riverside-red hover:bg-red-50 rounded-lg transition-all">
-                             <FileDown size={18} />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
               </div>
             </div>
           ) : activeTab === "archives" ? (
