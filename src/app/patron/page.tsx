@@ -1,290 +1,593 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { 
-  TrendingUp, Wallet, ShieldCheck, Activity, CheckCircle, 
-  XCircle, Clock, AlertTriangle, Loader2, ArrowRight, FileText
+  TrendingUp, 
+  Users, 
+  Target, 
+  Zap, 
+  ArrowUpRight, 
+  Activity,
+  CreditCard,
+  AlertTriangle,
+  Layout,
+  PieChart as PieChartIcon,
+  ShieldCheck,
+  BrainCircuit,
+  Loader2,
+  Calendar,
+  CheckCircle2,
+  PackageSearch,
+  MessageSquare,
+  Send,
+  Sparkles,
+  ArrowDownLeft,
+  Bell,
+  Box,
+  Scale,
+  Wallet
 } from "lucide-react";
 import { supabase } from "@/src/lib/supabase";
+import Link from "next/link";
 import { cn } from "@/src/lib/utils";
 import { motion, AnimatePresence } from "motion/react";
-import toast from "react-hot-toast";
+import Markdown from "react-markdown";
 import { useAuth } from "@/src/context/AuthContext";
 import { useRouter } from "next/navigation";
+import toast from "react-hot-toast";
 
-export default function PatronDashboard() {
+export default function PatronInsight() {
   const { userRole, loading: authLoading } = useAuth();
   const router = useRouter();
-  
+  const [mounted, setMounted] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [processingId, setProcessingId] = useState<string | null>(null);
-
-  // KPIs
-  const [stats, setStats] = useState({
-    encaisseJour: 0,
-    caJour: 0,
-    dettesGlobales: 0,
-    depensesJour: 0
-  });
-
-  const [pendingExpenses, setPendingExpenses] = useState<any[]>([]);
-  const [recentActivity, setRecentActivity] = useState<any[]>([]);
 
   useEffect(() => {
-    if (!authLoading && userRole !== 'patron') {
-      router.push('/');
-    } else if (userRole === 'patron') {
-      fetchDashboardData();
-    }
-  }, [userRole, authLoading, router]);
+    setMounted(true);
+  }, []);
 
-  const fetchDashboardData = async () => {
+  useEffect(() => {
+    if (mounted && !authLoading && userRole !== 'patron') {
+      router.push('/');
+    }
+  }, [userRole, router, mounted, authLoading]);
+
+  const [stats, setStats] = useState({
+    ca_jour: 0,
+    ca_manuel_jour: 0,
+    methode_dominante: "Calcul en cours...",
+    taux_occupation: 0,
+    articles_alerte: 0,
+    chambres_totales: 0,
+    chambres_occupees: 0,
+    dettes_totales: 0
+  });
+
+  const [alerts, setAlerts] = useState<any[]>([]);
+  const [chatMessages, setChatMessages] = useState<{role: 'user' | 'model', text: string}[]>([]);
+  const [userInput, setUserInput] = useState("");
+  const [chatLoading, setChatLoading] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [pendingExpenses, setPendingExpenses] = useState<any[]>([]);
+
+  // Scroll to bottom on chat update
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [chatMessages, chatLoading]);
+
+  // 0. Chargement de l'historique du chat
+  const fetchChatHistory = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('conversations_patron')
+        .select('*')
+        .order('created_at', { ascending: true });
+      
+      if (error) throw error;
+
+      if (data && data.length > 0) {
+        setChatMessages(data.map((m: any) => ({
+          role: m.role === 'assistant' ? 'model' : 'user',
+          text: m.content
+        })));
+      } else {
+        setChatMessages([
+          { role: 'model', text: "Bienvenue dans Riverside Intelligence. Je suis prêt à analyser vos opérations stratégiques. Que souhaitez-vous examiner ?" }
+        ]);
+      }
+    } catch (err) {
+      console.error("Erreur chargement historique chat:", err);
+      setChatMessages([
+        { role: 'model', text: "Bienvenue dans Riverside Intelligence. (Historique non chargé)" }
+      ]);
+    }
+  };
+
+  const fetchPatronData = async () => {
     try {
       setLoading(true);
-      
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
+      const today = new Date().toISOString().split('T')[0];
 
-      // 1. Synchronisation parfaite avec la Caisse (Transactions du jour)
-      const { data: txJour } = await supabase
+      // 1. Chiffre d'Affaires du Jour (Système)
+      const { data: txJour, error: txErr } = await supabase
         .from('transactions_caisse')
-        .select('montant_total, montant_verse')
-        .gte('date_transaction', today.toISOString());
+        .select('montant_total, methode_paiement, reste_a_payer')
+        .gte('date_transaction', `${today}T00:00:00Z`)
+        .lte('date_transaction', `${today}T23:59:59Z`);
+      
+      const caToday = txJour?.reduce((acc, curr) => acc + (curr.montant_total || 0), 0) || 0;
 
-      let encaisse = 0;
-      let ca = 0;
-      if (txJour) {
-        txJour.forEach(tx => {
-          encaisse += parseFloat(tx.montant_verse || 0);
-          ca += parseFloat(tx.montant_total || 0);
+      // 2. Chiffre d'Affaires du Jour (Manuel / Comptable)
+      const { data: manualData } = await supabase
+        .from('comptabilite_manuelle')
+        .select('montant')
+        .eq('date_operation', today)
+        .eq('flux', 'ENTREE');
+      
+      const caManual = manualData?.reduce((acc, curr) => acc + (curr.montant || 0), 0) || 0;
+
+      // 2b. Dépenses en attente
+      const { data: pendingExp } = await supabase
+        .from('comptabilite_manuelle')
+        .select('*')
+        .eq('statut', 'En attente')
+        .eq('flux', 'SORTIE');
+      
+      setPendingExpenses(pendingExp || []);
+
+      // 3. Dettes Totales & 30+ Days Alert
+      const { data: dettesData } = await supabase
+        .from('transactions_caisse')
+        .select('reste_a_payer, date_transaction')
+        .gt('reste_a_payer', 0);
+      
+      const totalDettes = dettesData?.reduce((acc, curr) => acc + (curr.reste_a_payer || 0), 0) || 0;
+      
+      // Check for 30+ days old debts
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      const oldDebts = dettesData?.filter(d => new Date(d.date_transaction) < thirtyDaysAgo) || [];
+      const oldDebtsAmount = oldDebts.reduce((acc, curr) => acc + (curr.reste_a_payer || 0), 0);
+
+      // 4. Occupation Chambres
+      const { data: chmData } = await supabase
+        .from('chambres')
+        .select('id, est_occupee');
+      
+      const totalChm = chmData?.length || 0;
+      const occChm = chmData?.filter(c => c.est_occupee).length || 0;
+      const tauxOcc = totalChm > 0 ? Math.round((occChm / totalChm) * 100) : 0;
+
+      // 5. Stocks Alerte
+      const { data: stockData } = await supabase
+        .from('stocks')
+        .select('designation, quantite_actuelle, seuil_alerte');
+      
+      const lowStocksList = stockData?.filter(s => (s.quantite_actuelle || 0) <= (s.seuil_alerte || 0)) || [];
+
+      setStats({
+        ca_jour: caToday,
+        ca_manuel_jour: caManual,
+        methode_dominante: "Auto",
+        taux_occupation: tauxOcc,
+        articles_alerte: lowStocksList.length,
+        chambres_totales: totalChm,
+        chambres_occupees: occChm,
+        dettes_totales: totalDettes
+      });
+
+      // Generate Alerts Logic
+      const newAlerts = [];
+      
+      // Finalcial Gap Alert (> 5%)
+      const variance = caToday > 0 ? Math.abs((caToday - caManual) / caToday) * 100 : 0;
+      if (variance > 5) {
+        newAlerts.push({
+          type: 'CRITICAL',
+          title: 'Écart Financier Suspect',
+          desc: `Écart de ${variance.toFixed(1)}% détecté entre caisse (${caToday.toLocaleString()}) et comptabilité (${caManual.toLocaleString()}).`,
+          icon: Scale
         });
       }
 
-      // 2. Dettes Globales (Reste à payer)
-      const { data: dettesData } = await supabase
-        .from('transactions_caisse')
-        .select('reste_a_payer')
-        .gt('reste_a_payer', 0);
-      
-      const dettesTotal = dettesData ? dettesData.reduce((acc, curr) => acc + parseFloat(curr.reste_a_payer || 0), 0) : 0;
-
-      // 3. Dépenses Validées du jour
-      const { data: depensesJourData } = await supabase
-        .from('comptabilite_manuelle')
-        .select('montant')
-        .eq('flux', 'SORTIE')
-        .eq('statut', 'Validé')
-        .gte('created_at', today.toISOString());
-        
-      const depensesTotal = depensesJourData ? depensesJourData.reduce((acc, curr) => acc + parseFloat(curr.montant || 0), 0) : 0;
-
-      setStats({
-        encaisseJour: encaisse,
-        caJour: ca,
-        dettesGlobales: dettesTotal,
-        depensesJour: depensesTotal
+      // Stock Rupture Alerts
+      lowStocksList.slice(0, 3).forEach(s => {
+        newAlerts.push({
+          type: 'STOCK',
+          title: `Seuil Critique: ${s.designation}`,
+          desc: `Stock à ${s.quantite_actuelle} unités (Seuil: ${s.seuil_alerte}). Rupture imminente.`,
+          icon: Box
+        });
       });
 
-      // 4. Dépenses en attente d'approbation
-      const { data: pendingData } = await supabase
-        .from('comptabilite_manuelle')
-        .select('*')
-        .eq('flux', 'SORTIE')
-        .eq('statut', 'En attente')
-        .order('created_at', { ascending: false });
-        
-      setPendingExpenses(pendingData || []);
+      // 30 Days Debt Alert
+      if (oldDebtsAmount > 0) {
+        newAlerts.push({
+          type: 'CRITICAL',
+          title: 'Impayés Hors-Délai',
+          desc: `${oldDebtsAmount.toLocaleString()} FCFA d'impayés dépassent 30 jours d'ancienneté. Action recommandée.`,
+          icon: AlertTriangle
+        });
+      }
 
-      // 5. Activité Récente / Audits (Remplace les fausses données)
-      const { data: activityData } = await supabase
-        .from('transactions_caisse')
-        .select('id, description, montant_total, statut_paiement, date_transaction, patients(nom_complet)')
-        .order('date_transaction', { ascending: false })
-        .limit(6);
-        
-      setRecentActivity(activityData || []);
+      // Impayés (General volume)
+      if (totalDettes > 500000) {
+        newAlerts.push({
+          type: 'RECOVERY',
+          title: 'Volume Impayés Critique',
+          desc: `Le montant total des restes à payer dépasse 500,000 FCFA. Plan de recouvrement nécessaire.`,
+          icon: ArrowDownLeft
+        });
+      }
 
-    } catch (err: any) {
-      console.error("Erreur Dashboard Patron:", err);
-      toast.error("Erreur de synchronisation des données");
+      setAlerts(newAlerts);
+
+    } catch (err) {
+      console.error("[Patron] Error:", err);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleApproveExpense = async (id: string, action: 'Validé' | 'Rejeté') => {
-    setProcessingId(id);
+  const handleApproveExpense = async (id: string) => {
     try {
       const { error } = await supabase
         .from('comptabilite_manuelle')
-        .update({ statut: action })
+        .update({ statut: 'Approuvé' })
         .eq('id', id);
-
+      
       if (error) throw error;
-
-      toast.success(action === 'Validé' ? "Dépense approuvée ✅" : "Dépense rejetée ❌");
-      await fetchDashboardData(); // Rafraîchir les données
+      toast.success("Dépense approuvée");
+      fetchPatronData();
     } catch (err: any) {
-      toast.error(`Erreur: ${err.message}`);
-    } finally {
-      setProcessingId(null);
+      toast.error(`Erreur d'approbation: ${err.message}`);
     }
   };
 
-  if (loading) {
+  useEffect(() => {
+    fetchPatronData();
+    fetchChatHistory();
+  }, []);
+
+  const handleChat = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!userInput) return;
+
+    const userMsg = userInput;
+    setUserInput("");
+    setChatMessages(prev => [...prev, { role: 'user', text: userMsg }]);
+    setChatLoading(true);
+
+    try {
+      const response = await fetch('/api/ai/research', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          prompt: userMsg,
+          clinicData: stats
+        })
+      });
+
+      const data = await response.json();
+      
+      if (data.error) {
+        throw new Error(data.error);
+      }
+
+      setChatMessages(prev => [...prev, { role: 'model', text: data.text }]);
+    } catch (err: any) {
+      setChatMessages(prev => [...prev, { role: 'model', text: `Erreur Stratégique : ${err.message || "Lien rompu avec Riverside Intelligence."}` }]);
+    } finally {
+      setChatLoading(false);
+    }
+  };
+
+  if (!mounted || loading) {
     return (
-      <div className="flex items-center justify-center h-screen bg-slate-50">
-        <Loader2 className="animate-spin text-slate-900" size={48} />
+      <div className="min-h-screen bg-[#020617] flex flex-col items-center justify-center gap-4">
+        <Loader2 className="animate-spin text-red-600" size={48} />
+        <p className="text-slate-500 font-mono text-[10px] uppercase tracking-[0.4em]">Initialisation Riverside Intelligence...</p>
       </div>
     );
   }
 
   return (
-    <div className="w-full max-w-7xl mx-auto space-y-8 p-4 md:p-8 pb-20">
-      
-      {/* HEADER */}
-      <div className="bg-slate-950 rounded-[3rem] p-10 md:p-12 text-white relative overflow-hidden shadow-2xl">
-        <div className="absolute top-0 right-0 w-96 h-96 bg-emerald-500/10 rounded-full blur-[100px] -translate-y-1/2 translate-x-1/2" />
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div>
-            <h1 className="text-3xl md:text-4xl font-black tracking-tighter flex items-center gap-4">
-              <ShieldCheck className="text-emerald-400" size={36} />
-              BUREAU <span className="text-slate-400">DIRECTION</span>
-            </h1>
-            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-2">Vue Stratégique & Contrôle Financier</p>
-          </div>
-          <div className="bg-white/10 border border-white/20 px-6 py-3 rounded-2xl flex items-center gap-3 backdrop-blur-md">
-            <span className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" />
-            <span className="text-[10px] font-black uppercase tracking-widest text-emerald-400">Temps Réel</span>
-          </div>
-        </div>
-      </div>
-
-      {/* KPIs (Indicateurs Clés) */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xl shadow-slate-100">
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2"><Wallet size={14} /> Encaisse du Jour</p>
-          <p className="text-3xl font-black text-emerald-600 tabular-nums leading-none">{stats.encaisseJour.toLocaleString()}</p>
-          <p className="text-[9px] font-bold text-slate-400 uppercase mt-2">Cash & Mobile Money réels</p>
-        </motion.div>
-
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xl shadow-slate-100">
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2"><TrendingUp size={14} /> Total Facturé (CA)</p>
-          <p className="text-3xl font-black text-slate-900 tabular-nums leading-none">{stats.caJour.toLocaleString()}</p>
-          <p className="text-[9px] font-bold text-slate-400 uppercase mt-2">Facturation brute (jour)</p>
-        </motion.div>
-
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xl shadow-slate-100">
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2"><AlertTriangle size={14} /> Créances & Dettes</p>
-          <p className="text-3xl font-black text-amber-600 tabular-nums leading-none">{stats.dettesGlobales.toLocaleString()}</p>
-          <p className="text-[9px] font-bold text-slate-400 uppercase mt-2">Reste à recouvrer (Global)</p>
-        </motion.div>
-
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xl shadow-slate-100">
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2"><Activity size={14} /> Dépenses du Jour</p>
-          <p className="text-3xl font-black text-riverside-red tabular-nums leading-none">{stats.depensesJour.toLocaleString()}</p>
-          <p className="text-[9px] font-bold text-slate-400 uppercase mt-2">Décaissements validés</p>
-        </motion.div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        
-        {/* MODULE: APPROBATION DES DÉPENSES */}
-        <div className="bg-white p-8 rounded-[3rem] border border-slate-200 shadow-xl shadow-slate-100 flex flex-col h-[500px]">
-          <div className="flex items-center justify-between mb-8">
-            <div>
-              <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight flex items-center gap-3">
-                <Clock className="text-amber-500" />
-                Approbations Requises
-              </h3>
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Dépenses en attente de validation</p>
-            </div>
-            <div className="bg-amber-100 text-amber-600 px-3 py-1 rounded-lg text-xs font-black">{pendingExpenses.length}</div>
-          </div>
-
-          <div className="flex-1 overflow-y-auto space-y-4 pr-2">
-            {pendingExpenses.length === 0 ? (
-              <div className="h-full flex flex-col items-center justify-center text-slate-300 space-y-4">
-                <ShieldCheck size={48} className="opacity-20" />
-                <p className="text-xs font-black uppercase tracking-widest">Aucune dépense en attente</p>
-              </div>
-            ) : (
-              pendingExpenses.map(depense => (
-                <div key={depense.id} className="p-5 bg-slate-50 border border-slate-100 rounded-2xl flex flex-col gap-4">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <p className="text-xs font-black text-slate-900 uppercase">{depense.description}</p>
-                      <p className="text-[9px] font-bold text-slate-400 mt-1 uppercase">Saisi le {new Date(depense.created_at).toLocaleDateString()}</p>
-                    </div>
-                    <span className="text-lg font-black text-slate-900 tabular-nums">{(parseFloat(depense.montant) || 0).toLocaleString()} <span className="text-[10px]">FCFA</span></span>
-                  </div>
-                  
-                  <div className="flex gap-3">
-                    <button 
-                      onClick={() => handleApproveExpense(depense.id, 'Validé')}
-                      disabled={processingId === depense.id}
-                      className="flex-1 py-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2"
-                    >
-                      {processingId === depense.id ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle size={14} />} Valider
-                    </button>
-                    <button 
-                      onClick={() => handleApproveExpense(depense.id, 'Rejeté')}
-                      disabled={processingId === depense.id}
-                      className="flex-1 py-3 bg-red-50 hover:bg-red-100 text-riverside-red rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 border border-red-100"
-                    >
-                      {processingId === depense.id ? <Loader2 size={14} className="animate-spin" /> : <XCircle size={14} />} Rejeter
-                    </button>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
+    <div className="min-h-screen bg-slate-50 text-slate-900 selection:bg-riverside-red/10 selection:text-riverside-red">
+      {/* Top Header section */}
+      <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-8 mb-12">
+        <div className="flex items-center gap-5">
+           <div className="w-16 h-16 bg-white rounded-3xl flex items-center justify-center shadow-xl shadow-red-100 border border-slate-100 group transition-all duration-500">
+             <ShieldCheck size={32} className="text-riverside-red" />
+           </div>
+           <div>
+             <h1 className="text-3xl font-black tracking-tight text-slate-950 uppercase leading-none">Riverside <span className="text-riverside-red">Insight</span></h1>
+             <div className="flex items-center gap-4 mt-2">
+                <span className="text-[10px] text-slate-400 font-black uppercase tracking-[0.3em]">Directeur Général & Stratégie</span>
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+             </div>
+           </div>
         </div>
 
-        {/* MODULE: AUDIT LOGS (Données réelles) */}
-        <div className="bg-slate-950 p-8 rounded-[3rem] border border-slate-800 shadow-2xl flex flex-col h-[500px]">
-          <div className="flex items-center justify-between mb-8">
-            <div>
-              <h3 className="text-xl font-black text-white uppercase tracking-tight flex items-center gap-3">
-                <FileText className="text-slate-400" />
-                Dernières Transactions
-              </h3>
-              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-1">Audit de la caisse en direct</p>
-            </div>
-            <button onClick={fetchDashboardData} className="w-10 h-10 bg-white/10 rounded-xl flex items-center justify-center text-white hover:bg-white/20 transition-all">
-              <Activity size={18} />
+        <div className="flex items-center gap-4">
+          <div className="hidden md:flex flex-col items-end mr-4">
+            <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Douala, Littoral</span>
+            <span className="text-xs font-bold text-slate-400">SESSION AUDIT LIVE</span>
+          </div>
+          <Link href="/administration">
+            <button className="px-6 py-3 bg-white border border-slate-100 rounded-xl text-[10px] font-black uppercase tracking-widest hover:border-riverside-red/30 transition-all active:scale-95 flex items-center gap-2 group shadow-sm">
+              <Layout size={16} className="text-slate-400 group-hover:text-riverside-red transition-colors" /> Admin
             </button>
+          </Link>
+          <button className="relative w-11 h-11 bg-white border border-slate-100 rounded-xl flex items-center justify-center hover:border-riverside-red/30 transition-all active:scale-95 shadow-sm">
+            <Bell size={20} className="text-slate-400" />
+            {alerts.length > 0 && <span className="absolute top-2.5 right-2.5 w-1.5 h-1.5 bg-riverside-red rounded-full" />}
+          </button>
+        </div>
+      </div>
+
+      <div className="relative z-10 grid grid-cols-1 xl:grid-cols-12 gap-8">
+        
+        {/* Left Column: Analytics & Alerts */}
+        <div className="xl:col-span-12 space-y-8">
+          
+          {/* KPI Cards section */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="p-8 bg-white border border-slate-100 rounded-[2rem] shadow-[0_10px_0_0_rgba(15,23,42,0.05)] hover:shadow-[0_15px_0_0_rgba(15,23,42,0.1)] transition-all group">
+              <p className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-4">Recettes Système (Jour)</p>
+              <h3 className="text-3xl font-black text-slate-950">{stats.ca_jour.toLocaleString()} <span className="text-xs text-slate-400 font-bold">FCFA</span></h3>
+              <div className="mt-5 flex items-center gap-2 text-[11px] font-black text-emerald-500">
+                <TrendingUp size={14} /> +12% vs hier
+              </div>
+            </motion.div>
+
+            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="p-8 bg-white border border-slate-100 rounded-[2rem] shadow-[0_10px_0_0_rgba(15,23,42,0.05)] hover:shadow-[0_15px_0_0_rgba(15,23,42,0.1)] transition-all group">
+              <p className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-4">Occupation</p>
+              <h3 className="text-3xl font-black text-slate-950">{stats.taux_occupation}%</h3>
+              <div className="mt-5 w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                <div className="bg-riverside-red h-full transition-all duration-1000" style={{ width: `${stats.taux_occupation}%` }} />
+              </div>
+            </motion.div>
+
+            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="p-8 bg-white border border-slate-100 rounded-[2rem] shadow-[0_10px_0_0_rgba(15,23,42,0.05)] hover:shadow-[0_15px_0_0_rgba(15,23,42,0.1)] transition-all group">
+              <p className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-4">Dettes Total</p>
+              <h3 className="text-3xl font-black text-riverside-red">{stats.dettes_totales.toLocaleString()} <span className="text-xs text-slate-400 font-bold">FCFA</span></h3>
+              <div className="mt-5 text-[11px] font-black text-slate-400 uppercase tracking-tight">Recouvrement nécessaire</div>
+            </motion.div>
+
+            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="p-8 bg-white border border-slate-100 rounded-[2rem] shadow-[0_10px_0_0_rgba(15,23,42,0.05)] hover:shadow-[0_15px_0_0_rgba(15,23,42,0.1)] transition-all group">
+              <p className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-4">Stocks Alertes</p>
+              <h3 className="text-3xl font-black text-slate-950">{stats.articles_alerte} <span className="text-xs text-slate-400 font-bold">UNITÉS</span></h3>
+              <div className="mt-5 flex items-center gap-2 text-[11px] font-black text-riverside-red animate-pulse">
+                <AlertTriangle size={14} /> Seuil critique atteint
+              </div>
+            </motion.div>
           </div>
 
-          <div className="flex-1 overflow-y-auto space-y-4 pr-2">
-            {recentActivity.length === 0 ? (
-               <div className="h-full flex items-center justify-center">
-                  <p className="text-xs font-black text-slate-600 uppercase tracking-widest">Aucune transaction récente</p>
-               </div>
-            ) : (
-              recentActivity.map(activity => (
-                <div key={activity.id} className="group p-4 bg-white/5 border border-white/5 rounded-2xl hover:bg-white/10 transition-colors flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <div className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
-                    <div>
-                      <p className="text-xs font-bold text-white leading-none line-clamp-1">{activity.patients?.nom_complet || "Client Externe"}</p>
-                      <p className="text-[9px] text-slate-500 font-bold uppercase tracking-widest mt-1">
-                        {new Date(activity.date_transaction).toLocaleTimeString()} • {activity.statut_paiement}
-                      </p>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            {/* Alerts Center section */}
+            <div className="bg-white border border-slate-100 p-8 rounded-[3rem] shadow-[0_12px_0_0_rgba(15,23,42,0.05)]">
+              <h2 className="text-sm font-black text-slate-950 uppercase tracking-[0.3em] mb-8 flex items-center gap-3">
+                <Bell size={18} className="text-riverside-red" /> Notifications Stratégiques
+              </h2>
+              <div className="space-y-4">
+                {alerts.length === 0 ? (
+                  <div className="py-20 text-center text-slate-400 font-bold uppercase tracking-widest text-xs">Silence Ops • Aucune anomalie</div>
+                ) : (
+                  alerts.map((alert, idx) => (
+                    <motion.div 
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      key={idx} 
+                      className="p-6 bg-slate-50 border border-slate-100 rounded-[1.5rem] hover:border-riverside-red/30 transition-all flex gap-5"
+                    >
+                      <div className={cn(
+                        "w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 shadow-sm",
+                        alert.type === 'CRITICAL' ? 'bg-riverside-red/10 text-riverside-red' : 
+                        alert.type === 'STOCK' ? 'bg-amber-500/10 text-amber-500' : 'bg-blue-500/10 text-blue-500'
+                      )}>
+                        <alert.icon size={24} />
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-black text-slate-950 uppercase mb-2">{alert.title}</h4>
+                        <p className="text-xs text-slate-500 leading-relaxed font-bold uppercase tracking-tight">{alert.desc}</p>
+                      </div>
+                    </motion.div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            {/* Financial Gap section */}
+            <div className="bg-white border border-slate-100 p-8 rounded-[3rem] shadow-[0_12px_0_0_rgba(15,23,42,0.05)]">
+              <div className="flex items-center justify-between mb-8">
+                <div>
+                    <h3 className="text-sm font-black text-slate-950 uppercase tracking-widest mb-1">Audit Flux Financiers</h3>
+                    <p className="text-[11px] text-slate-400 font-bold uppercase tracking-widest">Contrôle quotidien Douala</p>
+                </div>
+                <button className="px-6 py-3 bg-slate-950 text-xs font-black text-white uppercase rounded-xl hover:bg-slate-800 transition-all active:scale-95 shadow-lg">Exporter</button>
+              </div>
+              <div className="space-y-4">
+                  {[1,2,3].map(i => (
+                    <details key={i} className="group overflow-hidden rounded-2xl border border-slate-100 transition-all bg-white hover:border-slate-300">
+                      <summary className="flex items-center justify-between p-5 cursor-pointer list-none">
+                        <div className="flex items-center gap-5">
+                          <span className="text-xs font-black text-slate-400 uppercase tracking-widest">2{i} AVRIL</span>
+                          <span className="text-sm font-black text-slate-950">Audit T0{i}</span>
+                        </div>
+                        <div className="flex items-center gap-10">
+                          <span className="text-[11px] font-black text-emerald-500 uppercase italic">Conforme</span>
+                          <Send size={14} className="text-slate-300 group-open:rotate-90 transition-transform" />
+                        </div>
+                      </summary>
+                      <div className="px-5 pb-5 pt-3 border-t border-slate-50 bg-slate-50/50 grid grid-cols-3 gap-8">
+                        <div>
+                            <p className="text-[10px] font-black text-slate-400 uppercase mb-1">Système</p>
+                            <p className="text-sm font-black text-slate-950">412.000 FCFA</p>
+                        </div>
+                        <div>
+                            <p className="text-[10px] font-black text-slate-400 uppercase mb-1">Manuel</p>
+                            <p className="text-sm font-black text-slate-950">412.000 FCFA</p>
+                        </div>
+                        <div>
+                            <p className="text-[10px] font-black text-slate-400 uppercase mb-1">Variance</p>
+                            <p className="text-sm font-black text-emerald-600">0 FCFA</p>
+                        </div>
+                      </div>
+                    </details>
+                  ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Dépenses en attente d'approbation */}
+          <div className="bg-white border border-slate-100 p-8 rounded-[3rem] shadow-[0_12px_0_0_rgba(15,23,42,0.05)]">
+            <div className="flex items-center justify-between mb-8">
+              <h2 className="text-sm font-black text-slate-950 uppercase tracking-[0.3em] flex items-center gap-3">
+                <CreditCard size={18} className="text-riverside-red" /> Validation Dépenses
+              </h2>
+              <span className="text-[10px] bg-red-50 text-riverside-red px-3 py-1 rounded-full font-black uppercase">
+                {pendingExpenses.length} À VALIDER
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+              {pendingExpenses.length === 0 ? (
+                <div className="col-span-full py-12 text-center text-slate-300 font-bold uppercase tracking-widest text-xs">
+                  Aucune dépense en attente de validation
+                </div>
+              ) : (
+                pendingExpenses.map((exp) => (
+                  <motion.div 
+                    layout
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    key={exp.id}
+                    className="p-6 bg-slate-50 border border-slate-100 rounded-[2rem] hover:shadow-xl hover:shadow-slate-200/50 transition-all group"
+                  >
+                    <div className="flex justify-between items-start mb-4">
+                      <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-riverside-red shadow-sm">
+                        <Wallet size={20} />
+                      </div>
+                      <span className="text-[10px] font-mono font-black text-slate-400">#{exp.id.slice(0, 6)}</span>
                     </div>
+                    
+                    <h4 className="text-lg font-black text-slate-950 mb-1">{exp.montant.toLocaleString()} FCFA</h4>
+                    <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mb-4 line-clamp-1">{exp.description}</p>
+                    
+                    <div className="flex items-center justify-between pt-4 border-t border-slate-200/60">
+                      <span className="text-[9px] font-bold text-slate-400 uppercase">{exp.date_operation}</span>
+                      <button 
+                        onClick={() => handleApproveExpense(exp.id)}
+                        className="px-4 py-2 bg-emerald-500 text-white text-[9px] font-black uppercase rounded-lg hover:bg-emerald-600 transition-all shadow-lg active:scale-95 flex items-center gap-2"
+                      >
+                        <ShieldCheck size={14} /> Approuver
+                      </button>
+                    </div>
+                  </motion.div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Bottom Column: AI Strategic Chat - Google AI Studio Style */}
+        <div className="xl:col-span-12">
+           <div className="bg-white border border-slate-100 rounded-[3.5rem] h-[850px] flex flex-col shadow-[0_20px_0_0_rgba(15,23,42,0.05)] relative overflow-hidden transition-all duration-700">
+              {/* Header section */}
+              <div className="p-10 border-b border-slate-50 flex items-center justify-between">
+                <div className="flex items-center gap-5">
+                  <div className="w-14 h-14 bg-riverside-red rounded-2xl flex items-center justify-center text-white shadow-2xl shadow-red-100 animate-pulse-border">
+                    <BrainCircuit size={28} />
                   </div>
-                  <div className="text-right">
-                    <p className="text-sm font-black text-white tabular-nums">{(parseFloat(activity.montant_total) || 0).toLocaleString()}</p>
-                    <p className="text-[8px] font-black text-slate-500 uppercase">FCFA</p>
+                  <div>
+                    <h3 className="text-lg font-black text-slate-950 uppercase tracking-tighter">Riverside Intelligence</h3>
+                    <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">Assistant Stratégique Haut de Gamme</p>
                   </div>
                 </div>
-              ))
-            )}
-          </div>
-          
-          <button onClick={() => router.push('/tresorerie')} className="w-full mt-6 py-4 bg-white/5 hover:bg-white/10 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-all">
-            Voir le journal complet <ArrowRight size={14} />
-          </button>
+                <div className="flex items-center gap-4">
+                   <Link href="/patron/chat">
+                     <button className="px-5 py-2.5 bg-slate-900 hover:bg-riverside-red text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all active:scale-95 flex items-center gap-2 shadow-lg">
+                       <Zap size={14} className="animate-pulse" /> Mode Plein Écran
+                     </button>
+                   </Link>
+                   <div className="hidden sm:block px-4 py-2 bg-slate-50 rounded-xl text-[10px] font-black text-slate-500 uppercase tracking-widest border border-slate-100">AUDIT LIVE CONNECTÉ</div>
+                </div>
+              </div>
+
+              {/* Chat Viewport */}
+              <div ref={scrollRef} className="flex-1 overflow-y-auto p-12 lg:p-16 space-y-12 scrollbar-hide max-w-5xl mx-auto w-full">
+                {chatMessages.map((msg, i) => (
+                  <motion.div 
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    key={i} 
+                    className="flex flex-col gap-6"
+                  >
+                    <div className="flex items-center gap-4">
+                       <div className={cn(
+                         "text-[10px] font-black uppercase tracking-[0.3em] px-3 py-1.5 rounded-lg border",
+                         msg.role === 'user' ? "text-slate-500 bg-slate-50 border-slate-100" : "text-riverside-red bg-red-50 border-red-100"
+                       )}>
+                         {msg.role === 'user' ? 'DIRECTEUR GÉNÉRAL' : 'ANALYSTE RIVERSIDE'}
+                       </div>
+                    </div>
+                    <div className="text-lg leading-[1.8] font-medium text-slate-800 max-w-none">
+                      <div className="markdown-content">
+                        <Markdown
+                          components={{
+                            p: ({ children }) => <p className="mb-8 last:mb-0">{children}</p>,
+                            h1: ({ children }) => <h1 className="text-2xl font-black text-slate-950 mb-6 uppercase tracking-tight">{children}</h1>,
+                            h2: ({ children }) => <h2 className="text-xl font-black text-slate-950 mb-5 uppercase tracking-tight">{children}</h2>,
+                            h3: ({ children }) => <h3 className="text-lg font-black text-slate-950 mb-4 uppercase tracking-tight">{children}</h3>,
+                            strong: ({ children }) => <strong className="font-black text-slate-950">{children}</strong>,
+                            ul: ({ children }) => <ul className="space-y-4 mb-8">{children}</ul>,
+                            li: ({ children }) => (
+                              <li className="flex gap-4 items-start">
+                                <span className="w-1.5 h-1.5 rounded-full bg-riverside-red mt-[1em] shrink-0" />
+                                <span>{children}</span>
+                              </li>
+                            ),
+                          }}
+                        >
+                          {msg.text}
+                        </Markdown>
+                      </div>
+                    </div>
+                  </motion.div>
+                ))}
+                {chatLoading && (
+                  <div className="flex items-center gap-4 p-8 bg-slate-50 rounded-[2rem] w-fit">
+                    <div className="w-2.5 h-2.5 bg-riverside-red rounded-full animate-bounce" />
+                    <div className="w-2.5 h-2.5 bg-riverside-red rounded-full animate-bounce [animation-delay:0.2s]" />
+                    <div className="w-2.5 h-2.5 bg-riverside-red rounded-full animate-bounce [animation-delay:0.4s]" />
+                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Analyse des flux en cours...</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Prompt Bar section */}
+              <div className="p-12 pt-0 flex justify-center">
+                <form onSubmit={handleChat} className="relative w-full max-w-3xl">
+                  <div className="relative bg-slate-50 rounded-[2.5rem] border border-slate-100 shadow-inner group hover:border-riverside-red/30 transition-all p-2 pr-4 flex items-center">
+                    <input 
+                      value={userInput}
+                      onChange={(e) => setUserInput(e.target.value)}
+                      placeholder="Comment se portent nos finances aujourd'hui ?"
+                      className="flex-1 bg-transparent px-6 py-4 text-sm font-bold text-slate-800 outline-none placeholder:text-slate-400"
+                    />
+                    <button 
+                      type="submit"
+                      disabled={chatLoading}
+                      className="w-12 h-12 bg-slate-900 rounded-full flex items-center justify-center text-white hover:bg-riverside-red transition-all shadow-lg active:scale-90 disabled:opacity-50"
+                    >
+                      <Send size={18} />
+                    </button>
+                  </div>
+                </form>
+              </div>
+           </div>
         </div>
 
       </div>
