@@ -245,6 +245,13 @@ export default function PatronChatPage() {
                 <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Connecté • Strategist v4</span>
              </div>
+             <div className="w-px h-6 bg-slate-100 hidden md:block" />
+             <Link href="/patron">
+               <button className="flex items-center gap-2 px-3 py-2 bg-slate-50 text-slate-400 hover:bg-riverside-red hover:text-white rounded-lg transition-all text-[10px] font-black uppercase tracking-widest group">
+                 <Layout size={16} />
+                 <span>Quitter Chat</span>
+               </button>
+             </Link>
              <ShieldCheck size={20} className="text-riverside-red" />
           </div>
         </header>

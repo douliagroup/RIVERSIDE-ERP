@@ -44,6 +44,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   useEffect(() => {
+    // TODO: RETIRER LE BYPASS AVANT LA PROD
+    if (process.env.NODE_ENV === 'development') {
+      setUser({
+        id: 'dev-user-id',
+        email: 'dev@riverside.com',
+        user_metadata: {},
+        app_metadata: {},
+        aud: 'authenticated',
+        created_at: new Date().toISOString(),
+      } as User);
+      setUserRole('patron');
+      Cookies.set('riverside_role', 'patron', { expires: 7 });
+      setLoading(false);
+      return;
+    }
+
     let mounted = true;
 
     const initAuth = async () => {

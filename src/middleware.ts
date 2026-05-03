@@ -2,6 +2,11 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
 export function middleware(request: NextRequest) {
+  // TODO: RETIRER LE BYPASS AVANT LA PROD
+  if (process.env.NODE_ENV === 'development') {
+    return NextResponse.next();
+  }
+
   const role = request.cookies.get('riverside_role')?.value;
   const path = request.nextUrl.pathname;
 
