@@ -284,12 +284,37 @@ export default function PatronChatPage() {
                   </div>
                   
                   <div className={cn(
-                    "p-5 rounded-2xl text-[15px] leading-relaxed text-left whitespace-pre-wrap",
+                    "p-5 rounded-2xl text-[15px] leading-relaxed text-left",
                     msg.role === 'user' 
                       ? "bg-slate-50 text-slate-800 border border-slate-100" 
                       : "bg-white text-slate-800"
                   )}>
-                    {msg.text.replace(/[*#]/g, '')}
+                    <div className="markdown-content">
+                      <Markdown
+                        components={{
+                          p: ({ children }) => {
+                            // Si le texte est court et tout en majuscules, on le considère comme un titre stratégique
+                            const isTitle = typeof children === 'string' && children.length > 3 && children.length < 100 && children === children.toUpperCase() && !children.includes('\n');
+                            return (
+                              <p className={cn(
+                                "mb-6 last:mb-0",
+                                isTitle ? "font-black text-slate-950 text-lg uppercase tracking-tight mt-8 first:mt-0 underline decoration-riverside-red/30 decoration-4 underline-offset-8 mb-8" : "font-medium"
+                              )}>
+                                {children}
+                              </p>
+                            );
+                          },
+                          ol: ({ children }) => <ol className="space-y-4 mb-8 list-decimal pl-6">{children}</ol>,
+                          li: ({ children }) => (
+                            <li className="text-slate-700 font-bold uppercase tracking-tight text-[13px] leading-relaxed">
+                              {children}
+                            </li>
+                          )
+                        }}
+                      >
+                        {msg.text}
+                      </Markdown>
+                    </div>
                   </div>
                 </div>
               </motion.div>

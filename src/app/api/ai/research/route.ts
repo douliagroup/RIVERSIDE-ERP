@@ -20,9 +20,13 @@ export async function POST(req: Request) {
 
     const formattingDirectives = `
 DIRECTIVES STRICTES DE FORMATAGE : 
-1. PAS de balises HTML. 
-2. N'utilise JAMAIS de formatage Markdown. Ne mets JAMAIS d'étoiles (**) ou de dièses (#). Génère uniquement du texte brut avec des sauts de ligne normaux entre les paragraphes.
-3. Listes numériques au format "1. " uniquement.`;
+1. PAS de balises HTML (aucun <b>, <i>, <br>, etc.).
+2. INTERDICTION ABSOLUE d'utiliser des astérisques (*) ou des étoiles (**) pour le gras.
+3. INTERDICTION ABSOLUE d'utiliser des dièses (#) pour les titres.
+4. TITRES : Pour les titres de section, utilise uniquement des LETTRES MAJUSCULES. Sépare chaque section par deux sauts de ligne pour une mise en page aérée.
+5. LISTES : Utilise uniquement des listes numérotées au format "1. ", "2. ", etc. (pas de tirets, pas de points).
+6. TON ET ANALYSE : Tu es un Conseiller Stratégique. Ne te contente pas de lister les données, ANALYSE-LES. Si les dettes sont élevées, suggère une action. À la fin de chaque réponse, propose une QUESTION STRATÉGIQUE ou une piste de réflexion pour le Patron.
+7. LANGUE : Réponds toujours en Français.`;
 
     const geminiKey = process.env.GEMINI_API_KEY; 
     const tavilyKey = process.env.TAVILY_API_KEY;
@@ -36,48 +40,49 @@ DIRECTIVES STRICTES DE FORMATAGE :
 
     // 1. Super-Fetch en parallèle pour contexte 360°
     const [
-      { data: activeDebts1 },
-      { data: activeDebts2 },
+      { data: activeDebtsData },
       { data: recentExpenses },
       { data: queueActivity },
       { data: pharmacyAlerts },
-      { data: lastShiftReport },
+      { data: catalogues },
       { count: consultCount },
       { data: todayRevenue }
     ] = await Promise.all([
-      // Dettes intemporelles (OMNISCIENT) - Jointure pour l'assurance
-      supabaseAdmin.from('transactions_caisse').select('reste_a_payer, patients(nom_complet, assurance)').gt('reste_a_payer', 0).limit(20),
-      // Factures avec assurance
-      supabaseAdmin.from('factures').select('*, patients(nom_complet, assurance)').gt('reste_a_payer', 0).limit(20),
-      // Dernières dépenses
-      supabaseAdmin.from('comptabilite_manuelle').select('*').order('created_at', { ascending: false }).limit(5),
+      // Dettes & Créances (Priorité 1)
+      supabaseAdmin.from('transactions_caisse').select('id, reste_a_payer, description, date_transaction, patients(nom_complet, type_assurance)').gt('reste_a_payer', 0).order('date_transaction', { ascending: false }).limit(50),
+      // Dépenses du jour (Priorité 2)
+      supabaseAdmin.from('comptabilite_manuelle').select('*').gte('created_at', todayStart).order('created_at', { ascending: false }),
       // Patients en cours
       supabaseAdmin.from('file_attente').select('patients(nom_complet), motif_visite, degre_urgence').eq('statut', 'En attente'),
       // Alertes stocks pharmacie
       supabaseAdmin.from('stocks_pharmacie').select('nom_article, quantite_actuelle, seuil_alerte').lte('quantite_actuelle', 'seuil_alerte'),
-      // Dernier rapport de garde (Équipe)
-      supabaseAdmin.from('rapports_clinique').select('*').order('created_at', { ascending: false }).limit(1),
+      // Catalogue des actes
+      supabaseAdmin.from('actes_catalogue').select('nom_acte, prix_cash, prix_assurance'),
       // Stats du jour
       supabaseAdmin.from('consultations').select('*', { count: 'exact', head: true }).gte('created_at', todayStart),
       supabaseAdmin.from('transactions_caisse').select('montant_verse').gte('date_transaction', todayStart)
     ]);
 
-    const activeDebts = [...(activeDebts1 || []), ...(activeDebts2 || [])];
-
     const caTotal = (todayRevenue || []).reduce((acc, curr) => acc + (curr.montant_verse || 0), 0);
 
     // Construction du Contexte Structuré
     const contextLines = [
-      `[CRÉANCES & DETTES] : ${activeDebts?.length ? activeDebts.map(d => `${d.patients?.nom_complet} (${d.patients?.assurance || 'Aucune'}) doit ${d.reste_a_payer.toLocaleString()} FCFA`).join(', ') : "Aucun impayé majeur."}`,
-      `[DÉPENSES RÉCENTES] : ${recentExpenses?.length ? recentExpenses.map(e => `${e.libelle} (${e.montant.toLocaleString()} FCFA)`).join(', ') : "Pas de sorties de fonds récentes."}`,
-      `[PHARMACIE - ALERTES RUPTURE] : ${pharmacyAlerts?.length ? pharmacyAlerts.map(p => `STOCK CRITIQUE: ${p.nom_article} (${p.quantite_actuelle} restants)`).join(' | ') : "Stocks conformes."}`,
-      `[FILE D'ATTENTE] : ${queueActivity?.length ? queueActivity.length + " patients attendent (" + queueActivity.map(q => q.patients?.nom_complet).join(', ') + ")" : "Aucun patient en attente."}`,
-      `[DERNIER RAPPORT DE GARDE] : ${lastShiftReport?.[0]?.auteur || "Inconnu"} signale : ${lastShiftReport?.[0]?.contenu?.transmissions?.substring(0, 100) || "RAS"}`
+      `[TRESORERIE DU JOUR] : Encaissements totaux = ${caTotal.toLocaleString()} FCFA.`,
+      `[DETTES ACTIVES] : ${activeDebtsData?.length ? activeDebtsData.map(d => `${d.patients?.nom_complet} (${d.patients?.type_assurance || 'Cash'}) doit ${d.reste_a_payer.toLocaleString()} FCFA pour ${d.description || 'Soin'}`).join('\n') : "Aucune dette active."}`,
+      `[DEPENSES DU JOUR] : ${recentExpenses?.length ? recentExpenses.map(e => `${e.description} : ${e.montant.toLocaleString()} FCFA (${e.statut})`).join('\n') : "Aucun décaissement effectué aujourd'hui."}`,
+      `[STOCKS CRITIQUES] : ${pharmacyAlerts?.length ? pharmacyAlerts.map(p => `${p.nom_article} (Reste: ${p.quantite_actuelle})`).join(' | ') : "Stocks OK."}`,
+      `[PATIENTS EN ATTENTE] : ${queueActivity?.length || 0} personnes en salle d'attente.`,
+      `[CATALOGUE SERVICES] : ${catalogues?.slice(0, 10).map(c => `${c.nom_acte} @ ${c.prix_cash} FCFA`).join(', ')}...`
     ];
 
-    // Recherche Tavily (Si besoin de contexte externe)
+    // Recherche Tavily (Si besoin de contexte externe - limité aux innovations ou marché)
     let searchResults = "";
-    if (tavilyKey && (prompt.toLowerCase().includes("marché") || prompt.toLowerCase().includes("innovation") || prompt.toLowerCase().includes("douala"))) {
+    const needsSearch = prompt.toLowerCase().includes("marché") || 
+                       prompt.toLowerCase().includes("innovation") || 
+                       prompt.toLowerCase().includes("externe") ||
+                       prompt.toLowerCase().includes("concours");
+
+    if (tavilyKey && needsSearch) {
       try {
         const tvly = tavily({ apiKey: tavilyKey });
         const res = await tvly.search(prompt, { searchDepth: "advanced", maxResults: 3 });
@@ -86,28 +91,21 @@ DIRECTIVES STRICTES DE FORMATAGE :
     }
 
     const fullContext = `
-      [CONTEXTE TEMPS RÉEL] Nous sommes le : ${currentDateTime} (Heure de Douala).
+      [DATE/HEURE] : ${currentDateTime} (Douala).
       
-      VOICI LA PHOTOGRAPHIE EXACTE DE LA CLINIQUE RIVERSIDE À LA SECONDE ACTUELLE :
+      DONNÉES DU RIVERSIDE ERP (SOURCE UNIQUE DE VÉRITÉ) :
+      ${contextLines.join('\n\n')}
       
-      STATISTIQUES DU JOUR :
-      - Encaissements : ${caTotal.toLocaleString()} FCFA
-      - Consultations : ${consultCount || 0}
+      CONSIGNES POUR L'IA :
+      1. Utilise UNIQUEMENT les données ci-dessus pour répondre aux questions sur la clinique.
+      2. ANALYSE : Si tu vois que les dettes sont concentrées sur les assurances, recommande une relance. Si les dépenses sont élevées par rapport aux recettes du jour, alerte le patron.
+      3. INTERDICTION de formatage spécial (pas de ** pas de #). Utilise l'UPPERCASE pour les titres.
+      4. MISSION : Devenir l'omniscience du Patron.
       
-      ANALYSE MULTI-DÉPARTEMENTALE :
-      ${contextLines.join('\n')}
-      
-      [CONSIGNES STRATÉGIQUES] :
-      Tu es 'Riverside Strategic Intelligence'. Tu as désormais accès à tous les départements. 
-      Analyse ces données de manière croisée pour répondre au Directeur. 
-      RÈGLE FINANCIÈRE : Si un patient a une dette ET qu'il possède une 'assurance', tu dois EXPLICITEMENT préciser que c'est la compagnie d'assurance qui est redevable de cette dette, et non le patient directement.
-      N'utilise JAMAIS de formatage Markdown (** ou #).
-      Sois précis, factuel et adopte un ton de conseiller de haut niveau.
-      
-      [RESULTATS EXTERNES (SANTÉ/MARCHÉ)] :
+      [SANTÉ INTERNE / MARCHÉ EXTERNE] :
       ${searchResults}
       
-      [INTERFACE DIRECTEUR] : ${prompt}
+      QUESTION DU PATRON : ${prompt}
     `;
 
     const ai = new GoogleGenAI({ apiKey: geminiKey });
