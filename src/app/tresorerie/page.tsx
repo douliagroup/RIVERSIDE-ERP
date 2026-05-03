@@ -205,7 +205,7 @@ export default function TresoreriePage() {
       // 3. Récupérer les dettes
       const { data: dettesData, error: dettesError } = await supabase
         .from('transactions_caisse')
-        .select('*, patients(nom_complet, type_assurance)')
+        .select('*, patients(id, nom_complet, type_assurance)')
         .gt('reste_a_payer', 0)
         .order('date_transaction', { ascending: false });
       
@@ -252,21 +252,29 @@ export default function TresoreriePage() {
   };
 
   const calculateTotal = () => {
-    if (selectedTransaction) return selectedTransaction.montant_total;
-    if (debtToPay) return debtToPay.montant_total;
+    if (selectedTransaction) return parseFloat(selectedTransaction.montant_total || 0);
+    if (debtToPay) return parseFloat(debtToPay.montant_total || 0);
     
     // Determine which patient info to use
     const patientInfo = selectedFreePatient || selectedSejour?.patients;
     if (!patientInfo) return 0;
 
-    const isCashOnly = patientInfo.type_assurance === "Cash";
-    
     const total = cart.reduce((acc, item) => {
-      return acc + (item.prix_unitaire || 0);
+      return acc + (parseFloat(item.prix_unitaire as any) || 0);
     }, 0);
 
     return total;
   };
+
+  const soldeEstime = useMemo(() => {
+    return journal.reduce((acc, tx) => {
+        if (tx.type_flux === 'Entrée' || !tx.type_flux) {
+            return acc + parseFloat(tx.montant_verse || 0);
+        } else {
+            return acc - parseFloat(tx.montant_total || 0);
+        }
+    }, 0);
+  }, [journal]);
 
   const handlePayDebt = async () => {
     if (!debtToPay || !debtAmountInput) return;
@@ -274,19 +282,20 @@ export default function TresoreriePage() {
     setSubmitting(true);
     try {
       const verse = parseFloat(debtAmountInput);
-      if (isNaN(verse) || verse < 0) {
+      const currentVerse = parseFloat(debtToPay.montant_verse || 0);
+      const totalAmount = parseFloat(debtToPay.montant_total || 0);
+
+      if (isNaN(verse) || verse <= 0) {
         throw new Error("Montant invalide");
       }
 
-      const newTotalPaid = (debtToPay.montant_verse || 0) + verse;
-      const remains = Math.max(0, (debtToPay.montant_total || 0) - newTotalPaid);
+      const newTotalPaid = currentVerse + verse;
+      const remains = Math.max(0, totalAmount - newTotalPaid);
       
       let finalStatut = 'Payé';
       if (remains > 0) {
         finalStatut = 'Partiel';
       }
-
-      console.log(`[Règlement Dette] Mise à jour Transaction: ID=${debtToPay.id}, Verse=${verse}, Reste=${remains}, Statut=${finalStatut}`);
 
       // Mise à jour de la transaction principale
       const { error: updError } = await supabase
@@ -300,26 +309,12 @@ export default function TresoreriePage() {
       
       if (updError) throw updError;
 
-      // Le client mentionne la table 'factures', on tente la mise à jour si l'ID correspond ou s'il y a un lien
-      // On le fait dans un bloc séparé car la table peut ne pas exister ou l'ID différer
-      try {
-        await supabase
-          .from('factures')
-          .update({
-            reste_a_payer: remains,
-            statut: finalStatut
-          })
-          .eq('id', debtToPay.id);
-      } catch (errFacture) {
-        console.warn("Mise à jour table 'factures' ignorée ou impossible:", errFacture);
-      }
-
-      // Log payment history
+      // Historique des paiements liés au patient pour les reçus
       const { error: histError } = await supabase.from('historique_paiements').insert([{
         transaction_id: debtToPay.id,
+        patient_id: debtToPay.patient_id,
         montant_paye: verse,
-        mode_paiement: paymentMode,
-        date_paiement: new Date().toISOString()
+        mode_paiement: paymentMode
       }]);
 
       if (histError) console.error("Erreur historique:", histError);
@@ -351,13 +346,10 @@ export default function TresoreriePage() {
     setSubmitting(true);
     try {
       const total = calculateTotal();
-      // Facturation logic: si vide, on considère payé totalement.
       const verse = montantVerse ? parseFloat(montantVerse) : total;
       
-      // CRITICAL LOGIC: reste_a_payer = total - verse
       const reste = Math.max(0, total - verse);
       
-      // Status update logic
       let finalStatut = 'Payé';
       if (reste > 0) {
         finalStatut = verse > 0 ? 'Partiel' : 'En attente';
@@ -367,16 +359,16 @@ export default function TresoreriePage() {
         ? selectedTransaction.description 
         : cart.map(item => item.nom_prestation).join(", ");
 
-      console.log(`Flux Trésorerie - Validation Paiement: Total=${total}, Versé=${verse}, Reste=${reste}`);
-
       let transactionId = "";
 
       if (selectedTransaction) {
         transactionId = selectedTransaction.id;
+        const currentVerse = parseFloat(selectedTransaction.montant_verse || 0);
+
         const { error: txUpdError } = await supabase
           .from('transactions_caisse')
           .update({
-            montant_verse: (selectedTransaction.montant_verse || 0) + verse,
+            montant_verse: currentVerse + verse,
             reste_a_payer: reste,
             statut_paiement: finalStatut
           })
@@ -406,6 +398,7 @@ export default function TresoreriePage() {
           }])
           .select()
           .single();
+        
         if (txError) throw txError;
         if (newTx) transactionId = newTx.id;
 
@@ -417,13 +410,12 @@ export default function TresoreriePage() {
         }
       }
 
-      // Historique des paiements
-      if (verse > 0) {
+      if (verse > 0 && transactionId) {
         await supabase.from('historique_paiements').insert([{
           transaction_id: transactionId,
+          patient_id: selectedFreePatient?.id || selectedSejour?.patient_id || selectedTransaction?.patient_id,
           montant_paye: verse,
-          mode_paiement: paymentMode,
-          date_paiement: new Date().toISOString()
+          mode_paiement: paymentMode
         }]);
       }
 
@@ -459,6 +451,7 @@ export default function TresoreriePage() {
     setSubmitting(true);
     try {
       const montant = parseFloat(expenseForm.montant);
+      const statutDernier = montant > 30000 ? 'En attente' : 'Validé';
 
       const { error: insertError } = await supabase
         .from('comptabilite_manuelle')
@@ -466,13 +459,16 @@ export default function TresoreriePage() {
           montant: montant,
           flux: 'SORTIE',
           description: expenseForm.motif,
-          statut: 'En attente',
-          date_operation: new Date().toISOString().split('T')[0]
+          statut: statutDernier
         }]);
 
       if (insertError) throw insertError;
 
-      toast.success("Dépense enregistrée. En attente d'approbation par la direction.");
+      if (statutDernier === 'En attente') {
+        toast.success("Dépense > 30 000 FCFA enregistrée. En attente d'approbation.");
+      } else {
+        toast.success("Décaissement de caisse validé avec succès.");
+      }
       
       setExpenseForm({ beneficiaire_id: "", montant: "", motif: "", file: null });
       fetchInitialData();
@@ -500,7 +496,7 @@ export default function TresoreriePage() {
           type: hasAssurance ? 'ASSURANCE' : 'PATIENT' 
         };
       }
-      groups[groupKey].total += d.reste_a_payer;
+      groups[groupKey].total += parseFloat(d.reste_a_payer || 0);
       groups[groupKey].items.push(d);
     });
     return Object.values(groups).sort((a,b) => b.total - a.total);
@@ -522,7 +518,6 @@ export default function TresoreriePage() {
         dataToExport = dettes;
         filename = `Riverside_Recouvrement_${new Date().toISOString().split('T')[0]}`;
       } else if (activeTab === 'depenses') {
-        // Assume there is a state for expenses, if not we export journal
         dataToExport = journal.filter(j => j.type_flux === 'Sortie');
         filename = `Riverside_Depenses_${new Date().toISOString().split('T')[0]}`;
       } else {
@@ -1053,12 +1048,12 @@ export default function TresoreriePage() {
                            
                            <div className="space-y-4">
                               <div className="flex items-start gap-3">
-                                 <div className="w-1.5 h-1.5 bg-red-400 rounded-full mt-1.5 shrink-0" />
-                                 <p className="text-[10px] font-bold text-slate-300">Toute dépense est saisie avec le statut &apos;En attente&apos;.</p>
+                                 <div className="w-1.5 h-1.5 bg-emerald-400 rounded-full mt-1.5 shrink-0" />
+                                 <p className="text-[10px] font-bold text-slate-300">Les décaissements de <span className="text-white">moins de 30 000 FCFA</span> sont validés automatiquement.</p>
                               </div>
                               <div className="flex items-start gap-3">
                                  <div className="w-1.5 h-1.5 bg-amber-400 rounded-full mt-1.5 shrink-0" />
-                                 <p className="text-[10px] font-bold text-slate-300">Seul le Patron peut approuver le décaissement.</p>
+                                 <p className="text-[10px] font-bold text-slate-300">Ceux de <span className="text-white">plus de 30 000 FCFA</span> nécessitent l&apos;approbation du Patron.</p>
                               </div>
                               <div className="flex items-start gap-3">
                                  <div className="w-1.5 h-1.5 bg-sky-400 rounded-full mt-1.5 shrink-0" />
@@ -1069,10 +1064,10 @@ export default function TresoreriePage() {
                         <ShieldCheck className="absolute bottom-0 right-0 text-white/5 -mb-6 -mr-6" size={140} />
                      </div>
 
-                    <div className="bg-emerald-50 border border-emerald-100 rounded-[2rem] p-8">
-                       <p className="text-[9px] font-black text-emerald-600 uppercase tracking-widest mb-2">Solde de Caisse (Estimé)</p>
-                       <p className="text-2xl font-black text-emerald-900 tabular-nums">482.500 <span className="text-sm">FCFA</span></p>
-                    </div>
+                     <div className="bg-emerald-50 border border-emerald-100 rounded-[2rem] p-8">
+                        <p className="text-[9px] font-black text-emerald-600 uppercase tracking-widest mb-2">Solde de Caisse (Estimé)</p>
+                        <p className="text-2xl font-black text-emerald-900 tabular-nums">{soldeEstime.toLocaleString()} <span className="text-sm">FCFA</span></p>
+                     </div>
                   </div>
                </div>
             </div>
@@ -1093,11 +1088,11 @@ export default function TresoreriePage() {
               <div className="flex items-center gap-8">
                 <div className="text-right">
                   <p className="text-[9px] font-black text-slate-400 uppercase mb-1">Total Journalier</p>
-                  <p className="text-xl font-black text-slate-900">{(journal.reduce((a, b) => a + (b.montant_total || 0), 0) || 0).toLocaleString()} FCFA</p>
+                  <p className="text-xl font-black text-slate-900">{(journal.reduce((a, b) => a + (parseFloat(b.montant_total) || 0), 0) || 0).toLocaleString()} FCFA</p>
                 </div>
                 <div className="text-right">
                   <p className="text-[9px] font-black text-slate-400 uppercase mb-1">Encaisse Réelle</p>
-                  <p className="text-xl font-black text-emerald-500">{(journal.reduce((a, b) => a + (b.montant_verse || 0), 0) || 0).toLocaleString()} FCFA</p>
+                  <p className="text-xl font-black text-emerald-500">{(journal.reduce((a, b) => a + (parseFloat(b.montant_verse) || 0), 0) || 0).toLocaleString()} FCFA</p>
                 </div>
               </div>
             </div>
@@ -1133,17 +1128,17 @@ export default function TresoreriePage() {
                           <p className="text-[10px] font-bold text-slate-600 line-clamp-1 max-w-xs">{tx.description}</p>
                         </td>
                         <td className="px-8 py-5 text-right text-xs font-black text-slate-900 tabular-nums">
-                          {(tx.montant_total || 0).toLocaleString()}
+                          {(parseFloat(tx.montant_total) || 0).toLocaleString()}
                         </td>
                         <td className="px-8 py-5 text-right text-xs font-black text-emerald-500 tabular-nums">
-                          {(tx.montant_verse || 0).toLocaleString()}
+                          {(parseFloat(tx.montant_verse) || 0).toLocaleString()}
                         </td>
                         <td className="px-8 py-5 text-right">
                           <span className={cn(
                             "text-xs font-black tabular-nums",
                             tx.reste_a_payer > 0 ? "text-riverside-red" : "text-slate-300"
                           )}>
-                            {(tx.reste_a_payer || 0).toLocaleString()}
+                            {(parseFloat(tx.reste_a_payer) || 0).toLocaleString()}
                           </span>
                         </td>
                       </tr>
@@ -1187,7 +1182,7 @@ export default function TresoreriePage() {
               </div>
               <div className="text-right">
                 <p className="text-[10px] font-black text-slate-400 uppercase mb-1">Encours Global</p>
-                <p className="text-3xl font-black text-riverside-red">{(dettes.reduce((acc, curr) => acc + (curr?.reste_a_payer || 0), 0) || 0).toLocaleString()} FCFA</p>
+                <p className="text-3xl font-black text-riverside-red">{(dettes.reduce((acc, curr) => acc + (parseFloat(curr?.reste_a_payer) || 0), 0) || 0).toLocaleString()} FCFA</p>
               </div>
             </div>
 
@@ -1240,10 +1235,10 @@ export default function TresoreriePage() {
                              <div className="flex items-center gap-6">
                                <div className="text-right">
                                  <p className="text-[8px] font-black text-slate-300 uppercase">Perçu</p>
-                                 <p className="text-[10px] font-bold text-emerald-500 tabular-nums">{(item.montant_verse || 0).toLocaleString()}</p>
+                                 <p className="text-[10px] font-bold text-emerald-500 tabular-nums">{(parseFloat(item.montant_verse) || 0).toLocaleString()}</p>
                                </div>
                                <div className="w-24 text-right flex flex-col items-end gap-2">
-                                 <span className="text-[10px] font-black text-riverside-red">{(item.reste_a_payer || 0).toLocaleString()} FCFA</span>
+                                 <span className="text-[10px] font-black text-riverside-red">{(parseFloat(item.reste_a_payer) || 0).toLocaleString()} FCFA</span>
                                  <button 
                                    onClick={(e) => {
                                      e.stopPropagation();
@@ -1454,11 +1449,11 @@ export default function TresoreriePage() {
                 <div className="p-6 bg-slate-50 rounded-2xl border border-slate-100">
                   <div className="flex justify-between mb-2">
                     <span className="text-[10px] font-black text-slate-400 uppercase">Reste total à payer</span>
-                    <span className="text-sm font-black text-riverside-red">{(debtToPay?.reste_a_payer || 0).toLocaleString()} FCFA</span>
+                    <span className="text-sm font-black text-riverside-red">{(parseFloat(debtToPay?.reste_a_payer) || 0).toLocaleString()} FCFA</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-[10px] font-black text-slate-400 uppercase">Facture d&apos;origine</span>
-                    <span className="text-[10px] font-bold text-slate-600">{(debtToPay?.montant_total || 0).toLocaleString()} FCFA</span>
+                    <span className="text-[10px] font-bold text-slate-600">{(parseFloat(debtToPay?.montant_total) || 0).toLocaleString()} FCFA</span>
                   </div>
                 </div>
 
